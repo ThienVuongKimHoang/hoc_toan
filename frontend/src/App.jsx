@@ -1,0 +1,627 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { ROLES } from './auth/mockUsers.js'
+import Header from './components/Header.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import CreateExamPage from './pages/CreateExamPage.jsx'
+import MyExamsPage from './pages/MyExamsPage.jsx'
+import ExamTakePage from './pages/ExamTakePage.jsx'
+import PracticeExamPage from './pages/PracticeExamPage.jsx'
+import ExamResultsPage from './pages/ExamResultsPage.jsx'
+import ExamLobbyPage from './pages/ExamLobbyPage.jsx'
+import ProfilePage from './pages/ProfilePage.jsx'
+import SuperAdminPage from './pages/SuperAdminPage.jsx'
+import StudyPage from './pages/StudyPage.jsx'
+import ClassManagementPage from './pages/ClassManagementPage.jsx'
+import MyClassesPage from './pages/MyClassesPage.jsx'
+import AssignmentPopup from './components/AssignmentPopup.jsx'
+import CreateExamChoiceModal from './components/CreateExamChoiceModal.jsx'
+import UploadZone from './components/UploadZone.jsx'
+import ProgressPanel from './components/ProgressPanel.jsx'
+import QuestionCard from './components/QuestionCard.jsx'
+import TeacherToolsModal from './components/TeacherToolsModal.jsx'
+import ExerciseSolver from './components/ExerciseSolver.jsx'
+import GeoViewerPage from './pages/GeoViewerPage.jsx'
+import MixExamModal from './components/MixExamModal.jsx'
+
+const SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III']
+const SECTION_LABELS = {
+  'PHẦN I': { label: 'Phần I – Trắc nghiệm', color: '#2563eb' },
+  'PHẦN II': { label: 'Phần II – Đúng / Sai', color: '#7c3aed' },
+  'PHẦN III': { label: 'Phần III – Trả lời ngắn', color: '#059669' },
+}
+const ENGLISH_SECTION = 'TIẾNG ANH'
+const ENGLISH_LABELS = {
+  'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm (40 câu)', color: '#0f766e' },
+}
+const USER_KEY = 'hoctoan_user'
+
+/* ── Hash-based routing ── */
+function parseHash() {
+  const hash = window.location.hash.slice(1)
+  if (hash.startsWith('take/')) {
+    const rest = hash.slice(5)
+    const slash = rest.indexOf('/')
+    if (slash !== -1) return { view: 'take-exam', examId: rest.slice(0, slash), classId: rest.slice(slash + 1) }
+    return { view: 'take-exam', examId: rest, classId: null }
+  }
+  if (hash.startsWith('join/')) return { view: 'my-classes', examId: null, classId: hash.slice(5) }
+  if (hash.startsWith('lobby/')) return { view: 'exam-lobby', examId: hash.slice(6) || null, classId: null }
+  if (hash === 'lobby') return { view: 'exam-lobby', examId: null, classId: null }
+  if (hash.startsWith('practice/')) return { view: 'practice-exam', examId: hash.slice(9), classId: null }
+  if (hash.startsWith('results/')) return { view: 'exam-results', examId: hash.slice(8), classId: null }
+  if (hash === 'admin') return { view: 'super-admin', examId: null, classId: null }
+  if (hash === 'study') return { view: 'study', examId: null, classId: null }
+  if (hash === 'classes') return { view: 'class-mgmt', examId: null, classId: null }
+  if (hash === 'my-classes') return { view: 'my-classes', examId: null, classId: null }
+  if (hash === 'tools/solver') return { view: 'solver-page', examId: null, classId: null }
+  if (hash === 'tools/geo3d') return { view: 'geo3d-page', examId: null, classId: null }
+  return { view: 'home', examId: null, classId: null }
+}
+
+function setHash(str) {
+  window.history.pushState(null, '', str ? `#${str}` : window.location.pathname)
+}
+
+export default function App() {
+  /* ── Auth ── */
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(USER_KEY)) } catch { return null }
+  })
+  // Lưu lại view cần redirect về sau khi đăng nhập thành công
+  const [loginRedirect, setLoginRedirect] = useState(null) // { view, examId, classId }
+
+  const handleUpdateUser = (updated) => {
+    setUser(updated)
+    localStorage.setItem(USER_KEY, JSON.stringify(updated))
+  }
+  useEffect(() => {
+    const handler = (e) => handleUpdateUser(e.detail)
+    window.addEventListener('hoctoan_user_updated', handler)
+    return () => window.removeEventListener('hoctoan_user_updated', handler)
+  }, [])
+
+
+
+
+  // ── Sync role khi F5 và polling 30s ──
+  useEffect(() => {
+    if (!user?.id) return
+
+    const syncRole = async () => {
+      try {
+        const r = await fetch(`/api/auth/me?userId=${user.id}`)
+        if (!r.ok) return
+        const fresh = await r.json()
+        if (fresh.error) return
+        if (
+          fresh.role !== user.role ||
+          fresh.name !== user.name ||
+          fresh.email !== user.email
+        ) {
+          const updated = { ...user, ...fresh }
+          setUser(updated)
+          localStorage.setItem(USER_KEY, JSON.stringify(updated))
+        }
+      } catch { }
+    }
+
+    syncRole() // chạy ngay khi mount/F5
+    const interval = setInterval(syncRole, 30_000)
+    return () => clearInterval(interval)
+  }, [user?.id]) // re-run khi login/logout
+
+
+
+  const handleLogin = (u) => {
+    setUser(u)
+    localStorage.setItem(USER_KEY, JSON.stringify(u))
+    if (loginRedirect) {
+      const { view: rv, examId: rid, classId: rcid } = loginRedirect
+      setLoginRedirect(null)
+      if (rv === 'take-exam') {
+        setHash(`take/${rid}`)
+        setExamId(rid)
+        setView('take-exam')
+      } else if (rv === 'create-exam') {
+        setHash('')
+        setShowCreateChoice(true)
+        setView('home')
+      } else if (rv === 'my-classes' && rcid) {
+        setHash(`join/${rcid}`)
+        setClassId(rcid)
+        setView('my-classes')
+      } else {
+        setHash('')
+        setView(rv)
+      }
+    } else {
+      setView('home')
+    }
+  }
+  const handleLogout = () => { setUser(null); localStorage.removeItem(USER_KEY); setView('home') }
+
+  /* ── Routing ── */
+  const [view, setView] = useState(() => parseHash().view)
+  const [examId, setExamId] = useState(() => parseHash().examId)
+  const [classId, setClassId] = useState(() => parseHash().classId ?? null)
+  const [editingExam, setEditingExam] = useState(null)
+  const [resultsExam, setResultsExam] = useState(null)
+  const [manualMode, setManualMode] = useState(false)
+  const [mixResult, setMixResult] = useState(null)
+  const [showMixStandalone, setShowMixStandalone] = useState(false)
+  const [showCreateChoice, setShowCreateChoice] = useState(false)
+  const [showTeacherTools, setShowTeacherTools] = useState(false)
+
+  useEffect(() => {
+    const onHash = () => {
+      const { view: v, examId: id, classId: cid } = parseHash()
+      setView(v); setExamId(id); setClassId(cid ?? null)
+    }
+    window.addEventListener('popstate', onHash)
+    window.addEventListener('hashchange', onHash)
+    onHash()
+    return () => {
+      window.removeEventListener('popstate', onHash)
+      window.removeEventListener('hashchange', onHash)
+    }
+  }, []) // eslint-disable-line
+
+  // Khi truy cập #join/<code> mà chưa đăng nhập → lưu redirect và chuyển sang login
+  const joinRedirectHandled = useRef(false)
+  useEffect(() => {
+    if (view === 'my-classes' && !user && classId && !joinRedirectHandled.current) {
+      joinRedirectHandled.current = true
+      setLoginRedirect({ view: 'my-classes', classId })
+      setView('login')
+    }
+  }, [view, user, classId])
+
+  const goHome = () => { setHash(''); setView('home') }
+  const goProfile = () => user ? (setHash(''), setView('profile')) : goLogin()
+  const goLogin = () => { setHash(''); setView('login') }
+  const goExam = () => user ? (setHash(''), setView('exam')) : goLogin()
+  const goMyExams = () => user ? (setHash(''), setView('my-exams')) : goLogin()
+  const goAdmin = () => user ? (setHash('admin'), setView('super-admin')) : goLogin()
+  const goStudy = () => user ? (setHash('study'), setView('study')) : goLogin()
+  const goClasses = () => user ? (setHash('classes'), setView('class-mgmt')) : goLogin()
+  const goMyClasses = () => user ? (setHash('my-classes'), setView('my-classes')) : goLogin()
+  const goTools = () => user ? setShowTeacherTools(true) : goLogin()
+
+  // Sảnh chờ thi — không yêu cầu đăng nhập (auth xử lý trong ExamTakePage)
+  const goExamLobby = () => {
+    setHash('lobby'); setExamId(null); setView('exam-lobby')
+  }
+
+  // Vào thi trực tiếp theo id (từ homepage featured exam)
+  const goTakeExamById = (id) => {
+    setHash(`take/${id}`); setExamId(id); setView('take-exam')
+  }
+
+  // "Thử ngay miễn phí" CTA — yêu cầu đăng nhập → tạo đề
+  const goCreateExamCTA = () => {
+    if (!user) {
+      setLoginRedirect({ view: 'create-exam' })
+      setHash(''); setView('login')
+      return
+    }
+    setShowCreateChoice(true)
+  }
+
+  // Hiện modal chọn cách tạo đề (từ header/my-exams)
+  const goCreateExam = () => {
+    if (!user) { goLogin(); return }
+    setShowCreateChoice(true)
+  }
+
+  const handleCreateChoice = (choice) => {
+    setShowCreateChoice(false)
+    if (choice === 'mix') {
+      setShowMixStandalone(true)
+      return
+    }
+    setManualMode(choice === 'manual')
+    setMixResult(null)
+    setEditingExam(null)
+    setHash('')
+    setView('create-exam')
+  }
+
+  const handleMixComplete = (questions) => {
+    const qs = questions.map((q, i) => ({
+      ...q,
+      question_number: i + 1,
+      section: 'PHẦN I',
+    }))
+    setMixResult({
+      source: 'Đề phối ngẫu nhiên',
+      total_questions: qs.length,
+      sections: {
+        'PHẦN I': { questions: qs, points_per_q: 0.25 },
+      },
+    })
+    setShowMixStandalone(false)
+    setManualMode(false)
+    setEditingExam(null)
+    setHash('')
+    setView('create-exam')
+  }
+
+  // Redirect về đề thi sau khi login
+  const goLoginFromExam = (id) => {
+    setLoginRedirect({ view: 'take-exam', examId: id })
+    setHash('')
+    setView('login')
+  }
+
+  const goPractice = (id) => {
+    setHash(`practice/${id}`)
+    setExamId(id)
+    setView('practice-exam')
+  }
+
+  const goEdit = (exam) => {
+    setEditingExam(exam)
+    setHash('')
+    setView('edit-exam')
+  }
+
+  const goResults = (exam) => {
+    setResultsExam(exam)
+    setHash(`results/${exam.id}`)
+    setView('exam-results')
+  }
+
+  const goLogin_redirect = () => {
+    // After login, go back to exam
+    const savedHash = window.location.hash
+    goLogin()
+    // Restore hash after login handled in handleLogin
+  }
+
+  /* ── Exam extract state (student direct upload) ── */
+  const [phase, setPhase] = useState('idle')
+  const [events, setEvents] = useState([])
+  const [result, setResult] = useState(null)
+  const [activeSection, setActiveSection] = useState('PHẦN I')
+
+  const handleUpload = useCallback(async (file) => {
+    setPhase('extracting'); setEvents([]); setResult(null)
+    const form = new FormData()
+    form.append('file', file)
+    let taskId
+    try {
+      const res = await fetch('/api/extract', { method: 'POST', body: form })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json(); taskId = data.task_id
+    } catch (e) {
+      setPhase('error')
+      setEvents([{ type: 'error', message: `Upload thất bại: ${e.message}` }]); return
+    }
+    const sse = new EventSource(`/api/progress/${taskId}`)
+    sse.onmessage = (e) => {
+      const evt = JSON.parse(e.data)
+      setEvents(prev => [...prev, evt])
+      if (evt.type === 'done') {
+        sse.close()
+        fetch(`/api/result/${taskId}`)
+          .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+          .then(data => {
+            setResult(data)
+            setPhase('done')
+            setActiveSection(data.subject === 'english' ? ENGLISH_SECTION : 'PHẦN I')
+          })
+          .catch(() => setPhase('error'))
+      }
+      if (evt.type === 'error') { sse.close(); setPhase('error') }
+    }
+    sse.onerror = () => {
+      sse.close(); setPhase('error')
+      setEvents(prev => [...prev, { type: 'error', message: 'Mất kết nối.' }])
+    }
+  }, [])
+
+  const resetExam = () => { setPhase('idle'); setEvents([]); setResult(null) }
+
+  const isEnglish = result?.subject === 'english'
+  const effectiveSecs = isEnglish ? [ENGLISH_SECTION] : SECTIONS
+  const effectiveLbls = isEnglish ? ENGLISH_LABELS : SECTION_LABELS
+  const questions = result?.sections?.[activeSection]?.questions ?? []
+
+  /* ── Shared header ── */
+  const header = (
+    <Header
+      user={user}
+      onGoHome={goHome}
+      onGoLogin={goLogin}
+      onGoLobby={goExamLobby}
+      onLogout={handleLogout}
+      onCreateExam={goCreateExam}
+      onMyExams={goMyExams}
+      onGoProfile={goProfile}
+      onGoAdmin={goAdmin}
+      onGoStudy={goStudy}
+      onGoClasses={goClasses}
+      onGoMyClasses={goMyClasses}
+      onGoTools={goTools}
+    />
+  )
+
+  const goSolverPage = () => { setHash('tools/solver'); setView('solver-page') }
+  const goGeo3dPage = () => { setHash('tools/geo3d'); setView('geo3d-page') }
+
+  /* ── Teacher tools modal (hiển thị mọi nơi) ── */
+  const teacherToolOverlays = showTeacherTools && (
+    <TeacherToolsModal
+      onSelectTool={id => {
+        setShowTeacherTools(false)
+        if (id === 'solver') goSolverPage()
+        if (id === 'geo3d') goGeo3dPage()
+      }}
+      onClose={() => setShowTeacherTools(false)}
+    />
+  )
+
+  /* ── Choice modal (có thể xuất hiện trên mọi view) ── */
+  const choiceModal = showCreateChoice && (
+    <CreateExamChoiceModal
+      onChoice={handleCreateChoice}
+      onClose={() => setShowCreateChoice(false)}
+    />
+  )
+
+  const mixStandaloneModal = showMixStandalone && (
+    <MixExamModal
+      standalone
+      onClose={() => setShowMixStandalone(false)}
+      onAddQuestions={handleMixComplete}
+    />
+  )
+
+  /* ── Views ── */
+  if (view === 'super-admin' && user) return (
+    <>
+      {header}
+      <SuperAdminPage user={user} onGoHome={goHome} />
+      {teacherToolOverlays}
+    </>
+  )
+
+  if (view === 'study') return (
+    <>
+      {header}
+      <StudyPage user={user} onGoHome={goHome} />
+      {teacherToolOverlays}
+    </>
+  )
+
+  if (view === 'class-mgmt' && user) return (
+    <>
+      {header}
+      <ClassManagementPage user={user} onGoHome={goHome} />
+      {teacherToolOverlays}
+    </>
+  )
+
+  if (view === 'my-classes' && user) {
+    if (user.role === ROLES.GUEST) return (
+      <>
+        {header}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 16, padding: '2rem', textAlign: 'center' }}>
+          <div style={{ fontSize: '3rem' }}>🔒</div>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>Bạn cần tài khoản thành viên</h2>
+          <p style={{ fontSize: '0.92rem', color: '#64748b', maxWidth: 380, margin: 0 }}>
+            Vai trò <strong>Khách</strong> không được phép tham gia lớp học. Liên hệ Super Admin để được nâng cấp quyền.
+          </p>
+          <button className="btn-primary" onClick={goHome}>← Về trang chủ</button>
+        </div>
+        {teacherToolOverlays}
+      </>
+    )
+    return (
+      <>
+        {header}
+        <MyClassesPage user={user} initialJoinCode={classId ?? ''} />
+        {teacherToolOverlays}
+      </>
+    )
+  }
+
+  if (view === 'profile' && user) return (
+    <>
+      {header}
+      <ProfilePage
+        user={user}
+        onUpdateUser={handleUpdateUser}
+        onGoMyExams={goMyExams}
+        onGoHome={goHome}
+      />
+      {teacherToolOverlays}
+    </>
+  )
+
+  if (view === 'login') return <LoginPage onLogin={handleLogin} onGoHome={goHome} />
+
+  if (view === 'exam-lobby') return (
+    <>
+      {header}
+      <ExamLobbyPage
+        initialCode={examId ?? ''}
+        onGoExam={(id) => { setHash(`take/${id}`); setExamId(id); setView('take-exam') }}
+        onGoPractice={(id) => { setHash(`practice/${id}`); setExamId(id); setView('practice-exam') }}
+        onGoHome={goHome}
+      />
+      {teacherToolOverlays}
+    </>
+  )
+
+  if (view === 'take-exam') return (
+    <ExamTakePage examId={examId} classId={classId} user={user} onGoHome={goHome} onGoLogin={() => goLoginFromExam(examId)} />
+  )
+
+  if (view === 'practice-exam') return (
+    <PracticeExamPage examId={examId} onGoHome={goHome} />
+  )
+
+  if (view === 'exam-results' && resultsExam) return (
+    <>
+      {header}
+      <ExamResultsPage
+        examId={resultsExam.id}
+        examTitle={resultsExam.title}
+        onGoBack={goMyExams}
+      />
+      {teacherToolOverlays}
+    </>
+  )
+
+  if (view === 'create-exam') return (
+    <>
+      {header}
+      <CreateExamPage
+        user={user}
+        onGoMyExams={() => { setMixResult(null); goMyExams() }}
+        manualMode={manualMode}
+        mixResult={mixResult}
+      />
+      {mixStandaloneModal}
+      {teacherToolOverlays}
+    </>
+  )
+
+  if (view === 'edit-exam' && editingExam) return (
+    <>
+      {header}
+      <CreateExamPage
+        user={user}
+        onGoMyExams={() => { setEditingExam(null); goMyExams() }}
+        editingExam={editingExam}
+      />
+      {teacherToolOverlays}
+    </>
+  )
+
+  if (view === 'solver-page') return (
+    <>
+      {header}
+      <ExerciseSolver onBack={() => { setHash(''); setView('home') }} />
+    </>
+  )
+
+  if (view === 'geo3d-page') return (
+    <>
+      {header}
+      <GeoViewerPage onBack={() => { setHash(''); setView('home') }} />
+    </>
+  )
+
+  if (view === 'my-exams') return (
+    <>
+      {header}
+      <MyExamsPage
+        user={user}
+        onCreateExam={goCreateExam}
+        onEdit={goEdit}
+        onResults={goResults}
+      />
+      {choiceModal}
+      {mixStandaloneModal}
+      {teacherToolOverlays}
+    </>
+  )
+
+  if (view === 'home') return (
+    <>
+      {header}
+      <HomePage onGoLobby={goExamLobby} onGoExam={goTakeExamById} onCreateExamCTA={goCreateExamCTA} user={user} />
+      {choiceModal}
+      {mixStandaloneModal}
+      {user?.role === 'hoc_sinh' && <AssignmentPopup user={user} onGoMyClasses={goMyClasses} />}
+      {teacherToolOverlays}
+    </>
+  )
+
+  /* ── view === 'exam' (direct upload mode) ── */
+  return (
+    <>
+      {header}
+      <div className="app">
+        <div className="exam-topbar">
+          <button className="back-btn" onClick={goHome}>← Trang chủ</button>
+          <h1 className="exam-title">
+            {isEnglish ? '📝 Luyện đề thi Tiếng Anh THPT' : '📐 Luyện đề thi Toán THPT'}
+          </h1>
+          <p className="exam-subtitle">Upload file PDF — AI tự động trích xuất câu hỏi</p>
+        </div>
+
+        <main className="app-main">
+          {(phase === 'idle' || phase === 'error') && (
+            <UploadZone onUpload={handleUpload} disabled={phase === 'extracting'} />
+          )}
+          {(phase === 'extracting' || phase === 'error') && (
+            <ProgressPanel events={events} status={phase} />
+          )}
+          {phase === 'done' && result && (
+            <section className="result-section">
+              <div className="result-meta">
+                <div className="result-title">
+                  <h2>📋 {result.source}</h2>
+                  <span className="total-badge">{result.total_questions} câu hỏi</span>
+                  {result.has_answer_key && (
+                    <span className="answer-key-badge">✓ Có đáp án</span>
+                  )}
+                  {result.has_answer_key === false && (
+                    <span className="no-answer-badge">— Không có đáp án</span>
+                  )}
+                </div>
+                <button className="reset-btn" onClick={resetExam}>↩ Upload đề khác</button>
+              </div>
+              {effectiveSecs.length > 1 && (
+                <div className="section-tabs">
+                  {effectiveSecs.map(sec => {
+                    const count = result.sections?.[sec]?.questions?.length ?? 0
+                    const meta = effectiveLbls[sec]
+                    if (!meta) return null
+                    return (
+                      <button key={sec}
+                        className={`tab-btn ${activeSection === sec ? 'active' : ''}`}
+                        style={{ '--tab-color': meta.color }}
+                        onClick={() => setActiveSection(sec)}
+                      >
+                        {meta.label}
+                        <span className="tab-count">{count}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {result.sections?.[activeSection] && (
+                <div className="section-desc">
+                  <span style={{ color: (effectiveLbls[activeSection] || {}).color }}>
+                    {(effectiveLbls[activeSection] || {}).label}
+                  </span>
+                  {' — '}{result.sections[activeSection].questions.length} câu ×{' '}
+                  {result.sections[activeSection].points_per_q}đ/câu
+                  {isEnglish && result.has_answer_key && (
+                    <span className="answers-filled-info">
+                      {' '}({result.answers_filled ?? 0}/{result.total_questions} đáp án)
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="question-list">
+                {questions.length === 0
+                  ? <p className="empty-msg">Không tìm thấy câu hỏi nào.</p>
+                  : questions.map((q, i) => (
+                    <QuestionCard key={`${q.section}-${q.question_number}-${i}`} q={q} index={i} />
+                  ))
+                }
+              </div>
+            </section>
+          )}
+        </main>
+      </div>
+      {teacherToolOverlays}
+    </>
+  )
+}

@@ -1,0 +1,55 @@
+import React, { useEffect, useState } from 'react'
+import AccountMenu from './AccountMenu.jsx'
+import NotificationBell from './NotificationBell.jsx'
+
+export default function Header({ user, onGoHome, onGoLogin, onGoLobby, onLogout, onCreateExam, onMyExams, onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onGoTools }) {
+  const [scrolled, setScrolled] = useState(false)
+
+  useEffect(() => {
+    const h = () => setScrolled(window.scrollY > 10)
+    window.addEventListener('scroll', h, { passive: true })
+    return () => window.removeEventListener('scroll', h)
+  }, [])
+
+  return (
+    <header className={`site-header ${scrolled ? 'scrolled' : ''}`}>
+      <div className="header-inner">
+        <button className="logo" onClick={onGoHome}>
+          <span className="logo-icon">📐</span>
+          <span className="logo-text">HocToan<span className="logo-dot">.AI</span></span>
+        </button>
+
+        <nav className="site-nav">
+          <a href="#features" onClick={onGoHome}>Tính năng</a>
+          <a href="#how-it-works" onClick={onGoHome}>Cách dùng</a>
+          <button className="site-nav-btn" onClick={onGoLobby}>Đề thi</button>
+        </nav>
+
+        <div className="header-right">
+          {user ? (
+            <>
+              <NotificationBell user={user} />
+              <AccountMenu
+                user={user}
+                onLogout={onLogout}
+                onGoHome={onGoHome}
+                onCreateExam={onCreateExam}
+                onMyExams={onMyExams}
+                onGoProfile={onGoProfile}
+                onGoAdmin={onGoAdmin}
+                onGoStudy={onGoStudy}
+                onGoClasses={onGoClasses}
+                onGoMyClasses={onGoMyClasses}
+                onGoTools={onGoTools}
+              />
+            </>
+          ) : (
+            <button className="header-cta" onClick={onGoLogin}>
+              Đăng nhập
+            </button>
+          )}
+        </div>
+      </div>
+    </header>
+  )
+}

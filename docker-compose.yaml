@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hoc_toan_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hoc_toan
+      POSTGRES_USER: hoc_toan
+      POSTGRES_PASSWORD: hoc_toan123
+    volumes:
+      - hoc_toan_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hoc_toan"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    container_name: hoc_toan_backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://hoc_toan:hoc_toan123@postgres:5432/hoc_toan
+    volumes:
+      - ./class_docs:/app/class_docs
+      - ./src/output:/app/src/output
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: hoc_toan_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  hoc_toan_pg_data:
