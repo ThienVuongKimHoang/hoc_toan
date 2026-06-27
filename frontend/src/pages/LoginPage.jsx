@@ -35,24 +35,38 @@ function LoginForm({ onLogin, onSwitchToRegister }) {
   const [loading, setLoading] = useState(false)
   const handleGoogleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
-      setLoading(true); setError('')
+      setLoading(true)
+      setError('')
+
       try {
         const res = await fetch('/api/auth/google', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ access_token: tokenResponse.access_token }),
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            id_token: tokenResponse.credential || tokenResponse.access_token
+          }),
         })
+
         const data = await res.json()
-        if (!res.ok) { setError(data.error || 'Đăng nhập Google thất bại.'); return }
+
+        if (!res.ok) {
+          setError(data.error || 'Đăng nhập Google thất bại.')
+          return
+        }
+
         onLogin(data)
-      } catch {
+      } catch (err) {
         setError('Không thể kết nối server.')
       } finally {
         setLoading(false)
       }
     },
+
     onError: () => setError('Google đăng nhập thất bại.'),
-    flow: 'implicit',  // trả về id_token thẳng, không cần code exchange
+
+    flow: 'implicit', // vẫn giữ
   })
   const handleSubmit = async (e) => {
     e.preventDefault()
