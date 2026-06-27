@@ -19,6 +19,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from groq import Groq
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
 
 SRC_DIR = Path(__file__).parent / "src"
 sys.path.insert(0, str(SRC_DIR))
@@ -585,6 +588,52 @@ async def api_login(request: Request):
     if not user or user.get("password") != password:
         return JSONResponse({"error": "Email hoặc mật khẩu không đúng."}, status_code=401)
     return {k: v for k, v in user.items() if k != "password"}
+
+
+GOOGLE_CLIENT_ID = "281468345667-tb1nqlo78f06blu5m1t7qapd08ruc916.apps.googleusercontent.com"  
+
+@app.post("/api/auth/google")
+async def api_auth_google(request: Request):
+    body = await request.json()
+    token = (body.get("id_token") or "").strip()
+
+    if not token:
+        return JSONResponse({"error": "Thiếu id_token."}, status_code=400)
+
+    # 1. Verify token với Google
+    try:
+        idinfo = id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID
+        )
+    except ValueError as e:
+        return JSONResponse({"error": f"Token không hợp lệ: {str(e)}"}, status_code=401)
+
+    # 2. Lấy thông tin user từ token đã verify
+    google_id = idinfo["sub"]          # unique ID của Google user
+    email     = idinfo["email"].lower()
+    name      = idinfo.get("name", "")
+    avatar    = idinfo.get("picture", "")
+
+    # 3. Tìm hoặc tạo user trong DB
+    user = db.get_user_by_email(email)
+    if not user:
+        user = db.create_user({
+            "email":     email,
+            "name":      name,
+            "avatar":    avatar,
+            "google_id": google_id,
+            "password":  None,  # Google user không có password
+        })
+    elif not user.get("google_id"):
+        # Email đã tồn tại nhưng chưa liên kết Google → liên kết
+        db.update_user(user["id"], {"google_id": google_id, "avatar": avatar})
+
+    # 4. Trả về user (bỏ password)
+    return {k: v for k, v in user.items() if k != "password"}
+
+
 
 
 @app.post("/api/auth/register")
