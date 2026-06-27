@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at    TIMESTAMPTZ  DEFAULT NOW()
 );
 
+
 CREATE TABLE IF NOT EXISTS exams (
     id                VARCHAR(100)  PRIMARY KEY,
     title             VARCHAR(1000) DEFAULT '',
@@ -139,9 +140,11 @@ def init_db():
     _migrate_classes()
     _migrate_notifs()
     _migrate_config()
+    _ensure_super_admin() 
 
 
 _BASE = Path(__file__).parent
+
 
 
 def _migrate_users():
@@ -301,7 +304,57 @@ def _migrate_config():
             conn.rollback()
             print(f"[DB] migrate_config error: {e}")
 
+def _ensure_super_admin() -> None:
+    """Tạo tài khoản super_admin mặc định nếu chưa có ai có role này."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM users WHERE role='super_admin'")
+            if cur.fetchone()[0] > 0:
+                return   # đã có super_admin rồi, bỏ qua
+        try:
+            uid = int(datetime.now(timezone.utc).timestamp() * 1000)
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO users(id,email,password,name,role,avatar,is_registered,created_at)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,NOW())
+                    ON CONFLICT(email) DO UPDATE SET role='super_admin'
+                """, (uid, 'admin@gmail.com', '123456', 'Super Admin', 'super_admin', 'S', True))
+            conn.commit()
+            print("[DB] Created default super_admin: admin@gmail.com / 123456")
+        except Exception as e:
+            conn.rollback()
+            print(f"[DB] _ensure_super_admin error: {e}")
 
+
+# ── Super admin ────────────────────────────────────────────────────────────────
+
+def get_super_admins() -> list:
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM users WHERE role='super_admin' ORDER BY id")
+            rows = cur.fetchall()
+    return [_user_from_row(dict(r)) for r in rows]
+
+
+def set_super_admin(uid: str, enable: bool) -> Optional[dict]:
+    new_role = "super_admin" if enable else "giao_vien"
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "UPDATE users SET role=%s WHERE id=%s RETURNING *",
+                (new_role, int(uid)),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    return _user_from_row(dict(row)) if row else None
+
+
+def is_super_admin(uid: str) -> bool:
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT role FROM users WHERE id=%s", (int(uid),))
+            row = cur.fetchone()
+    return row is not None and row[0] == "super_admin"
 # ── Exams ──────────────────────────────────────────────────────────────────────
 
 def _exam_from_row(row: dict) -> dict:

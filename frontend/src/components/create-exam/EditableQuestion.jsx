@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import MathText from '../MathText.jsx'
 import { DIFFICULTY_LEVELS, THPT_LABEL_GROUPS, THCS_LABEL_GROUPS } from '../../data/labels.js'
-
+import './EditableQuestion.css'
+const PASSAGE_SPLIT_THRESHOLD = 300
 /* ─── Convert plain text / old markers → HTML for display ─── */
 // Detects HTML produced by contenteditable (formatting/structural tags only)
 const CONTENT_EDITABLE_TAG = /<(strong|em|u|b|i|div|br|span|p)\b/i
@@ -23,9 +24,9 @@ export function toPassageHTML(text) {
 /* ─── Word-like WYSIWYG editor (B / I / U, contenteditable) ─── */
 function PassageEditor({ value, onChange }) {
   const [editing, setEditing] = useState(false)
-  const editorRef    = useRef(null)
+  const editorRef = useRef(null)
   const containerRef = useRef(null)
-  const onChangeRef  = useRef(onChange)
+  const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
 
   // Populate contenteditable when entering edit mode
@@ -95,13 +96,13 @@ function PassageEditor({ value, onChange }) {
 /* ─── Click-to-edit field with LaTeX preview ─── */
 function MathEditField({ value, onChange, placeholder, multiline = true }) {
   const [editing, setEditing] = useState(false)
-  const [draft,   setDraft]   = useState('')
-  const wrapRef     = useRef(null)
-  const inputRef    = useRef(null)
+  const [draft, setDraft] = useState('')
+  const wrapRef = useRef(null)
+  const inputRef = useRef(null)
   const onChangeRef = useRef(onChange)
-  const draftRef    = useRef(draft)
+  const draftRef = useRef(draft)
   onChangeRef.current = onChange
-  draftRef.current    = draft
+  draftRef.current = draft
 
   const startEdit = () => { setDraft(value || ''); setEditing(true) }
 
@@ -144,7 +145,7 @@ function MathEditField({ value, onChange, placeholder, multiline = true }) {
             onChange={e => setDraft(e.target.value)}
             placeholder={placeholder}
             onKeyDown={e => {
-              if (e.key === 'Enter') { setEditing(false); if (draft !== (value||'')) onChangeRef.current(draft) }
+              if (e.key === 'Enter') { setEditing(false); if (draft !== (value || '')) onChangeRef.current(draft) }
               if (e.key === 'Escape') setEditing(false)
             }}
           />
@@ -221,60 +222,60 @@ function ReportPopover({ onClose, onSubmit }) {
 
 /* ─── LaTeX toolbar ─── */
 const LATEX_SHORTCUTS = [
-  { label: '$…$',      snippet: '$ $',          tip: 'Inline math',       cursor: 1 },
-  { label: '$$…$$',    snippet: '$$ $$',         tip: 'Block math',        cursor: 3 },
-  { label: 'frac',     snippet: '\\frac{}{}',    tip: 'Phân số',           cursor: 6 },
-  { label: '√',        snippet: '\\sqrt{}',      tip: 'Căn bậc 2',         cursor: 6 },
-  { label: 'ⁿ√',      snippet: '\\sqrt[n]{}',   tip: 'Căn bậc n',         cursor: 8 },
-  { label: 'xⁿ',      snippet: '^{}',           tip: 'Lũy thừa',          cursor: 1 },
-  { label: 'xₙ',      snippet: '_{}',           tip: 'Chỉ số dưới',       cursor: 1 },
-  { label: '∫',        snippet: '\\int_{}^{}',   tip: 'Tích phân',         cursor: 5 },
-  { label: 'Σ',        snippet: '\\sum_{}^{}',   tip: 'Tổng sigma',        cursor: 5 },
-  { label: 'lim',      snippet: '\\lim_{}',      tip: 'Giới hạn',          cursor: 5 },
-  { label: '∞',        snippet: '\\infty',       tip: 'Vô cực',            cursor: 7 },
-  { label: 'π',        snippet: '\\pi',          tip: 'Pi',                cursor: 3 },
-  { label: '→',        snippet: '\\to',          tip: 'Mũi tên',           cursor: 3 },
-  { label: '≤',        snippet: '\\leq',         tip: '≤',                 cursor: 4 },
-  { label: '≥',        snippet: '\\geq',         tip: '≥',                 cursor: 4 },
-  { label: '≠',        snippet: '\\neq',         tip: '≠',                 cursor: 4 },
-  { label: '·',        snippet: '\\cdot',        tip: 'Nhân (·)',           cursor: 5 },
-  { label: '×',        snippet: '\\times',       tip: 'Nhân (×)',           cursor: 6 },
-  { label: 'vec',      snippet: '\\vec{}',       tip: 'Vector',            cursor: 5 },
-  { label: '|x|',      snippet: '\\left| \\right|', tip: 'Giá trị tuyệt đối', cursor: 7 },
-  { label: 'α',        snippet: '\\alpha',       tip: 'Alpha',             cursor: 6 },
-  { label: 'β',        snippet: '\\beta',        tip: 'Beta',              cursor: 5 },
-  { label: 'θ',        snippet: '\\theta',       tip: 'Theta',             cursor: 6 },
-  { label: '△',        snippet: '\\triangle',    tip: 'Tam giác',          cursor: 9 },
-  { label: '∈',        snippet: '\\in',          tip: 'Thuộc',             cursor: 3 },
-  { label: '⊂',        snippet: '\\subset',      tip: 'Tập con',           cursor: 7 },
-  { label: 'M(;;)',    snippet: 'M(; ; )',       tip: 'Toạ độ 3D',         cursor: 2 },
-  { label: 'M(;)',     snippet: 'M(; )',         tip: 'Toạ độ 2D',         cursor: 2 },
-  { label: '[a;b]',   snippet: '[;]',           tip: 'Đoạn [a;b]',        cursor: 1 },
-  { label: '(a;b)',   snippet: '(;)',           tip: 'Khoảng (a;b)',       cursor: 1 },
-  { label: 'overline',snippet: '\\overline{}',  tip: 'Gạch trên (cung)',   cursor: 10 },
-  { label: '≈',        snippet: '\\approx',     tip: 'Xấp xỉ ≈',          cursor: 7 },
-  { label: 'max',     snippet: '\\max',        tip: 'Maximum',            cursor: 4 },
-  { label: 'min',     snippet: '\\min',        tip: 'Minimum',            cursor: 4 },
-  { label: '\\\\',    snippet: '\\\\',         tip: 'Xuống dòng',         cursor: 2 },
+  { label: '$…$', snippet: '$ $', tip: 'Inline math', cursor: 1 },
+  { label: '$$…$$', snippet: '$$ $$', tip: 'Block math', cursor: 3 },
+  { label: 'frac', snippet: '\\frac{}{}', tip: 'Phân số', cursor: 6 },
+  { label: '√', snippet: '\\sqrt{}', tip: 'Căn bậc 2', cursor: 6 },
+  { label: 'ⁿ√', snippet: '\\sqrt[n]{}', tip: 'Căn bậc n', cursor: 8 },
+  { label: 'xⁿ', snippet: '^{}', tip: 'Lũy thừa', cursor: 1 },
+  { label: 'xₙ', snippet: '_{}', tip: 'Chỉ số dưới', cursor: 1 },
+  { label: '∫', snippet: '\\int_{}^{}', tip: 'Tích phân', cursor: 5 },
+  { label: 'Σ', snippet: '\\sum_{}^{}', tip: 'Tổng sigma', cursor: 5 },
+  { label: 'lim', snippet: '\\lim_{}', tip: 'Giới hạn', cursor: 5 },
+  { label: '∞', snippet: '\\infty', tip: 'Vô cực', cursor: 7 },
+  { label: 'π', snippet: '\\pi', tip: 'Pi', cursor: 3 },
+  { label: '→', snippet: '\\to', tip: 'Mũi tên', cursor: 3 },
+  { label: '≤', snippet: '\\leq', tip: '≤', cursor: 4 },
+  { label: '≥', snippet: '\\geq', tip: '≥', cursor: 4 },
+  { label: '≠', snippet: '\\neq', tip: '≠', cursor: 4 },
+  { label: '·', snippet: '\\cdot', tip: 'Nhân (·)', cursor: 5 },
+  { label: '×', snippet: '\\times', tip: 'Nhân (×)', cursor: 6 },
+  { label: 'vec', snippet: '\\vec{}', tip: 'Vector', cursor: 5 },
+  { label: '|x|', snippet: '\\left| \\right|', tip: 'Giá trị tuyệt đối', cursor: 7 },
+  { label: 'α', snippet: '\\alpha', tip: 'Alpha', cursor: 6 },
+  { label: 'β', snippet: '\\beta', tip: 'Beta', cursor: 5 },
+  { label: 'θ', snippet: '\\theta', tip: 'Theta', cursor: 6 },
+  { label: '△', snippet: '\\triangle', tip: 'Tam giác', cursor: 9 },
+  { label: '∈', snippet: '\\in', tip: 'Thuộc', cursor: 3 },
+  { label: '⊂', snippet: '\\subset', tip: 'Tập con', cursor: 7 },
+  { label: 'M(;;)', snippet: 'M(; ; )', tip: 'Toạ độ 3D', cursor: 2 },
+  { label: 'M(;)', snippet: 'M(; )', tip: 'Toạ độ 2D', cursor: 2 },
+  { label: '[a;b]', snippet: '[;]', tip: 'Đoạn [a;b]', cursor: 1 },
+  { label: '(a;b)', snippet: '(;)', tip: 'Khoảng (a;b)', cursor: 1 },
+  { label: 'overline', snippet: '\\overline{}', tip: 'Gạch trên (cung)', cursor: 10 },
+  { label: '≈', snippet: '\\approx', tip: 'Xấp xỉ ≈', cursor: 7 },
+  { label: 'max', snippet: '\\max', tip: 'Maximum', cursor: 4 },
+  { label: 'min', snippet: '\\min', tip: 'Minimum', cursor: 4 },
+  { label: '\\\\', snippet: '\\\\', tip: 'Xuống dòng', cursor: 2 },
   { label: 'begin{cases}', snippet: '\\begin{cases}\n \\\\\n \\end{cases}', tip: 'Hệ phương trình', cursor: 15 },
 ]
 
 function insertSnippet(el, value, onChange, snippet, cursorFromStart) {
   if (!el) { onChange(value + snippet); return }
-  const start  = el.selectionStart
-  const end    = el.selectionEnd
-  const sel    = value.slice(start, end)
+  const start = el.selectionStart
+  const end = el.selectionEnd
+  const sel = value.slice(start, end)
 
   let inserted, newCursor
   if (sel && snippet.includes('{}')) {
     // Wrap selection in first {}
-    inserted  = snippet.replace('{}', `{${sel}}`)
+    inserted = snippet.replace('{}', `{${sel}}`)
     newCursor = start + inserted.length
   } else if (snippet === '$ $' || snippet === '$$ $$') {
-    inserted  = sel ? `$${sel}$` : snippet
+    inserted = sel ? `$${sel}$` : snippet
     newCursor = start + (sel ? sel.length + 2 : cursorFromStart)
   } else {
-    inserted  = snippet
+    inserted = snippet
     newCursor = start + cursorFromStart
   }
 
@@ -381,7 +382,7 @@ function ImageGallery({ images, onAdd, onDelete, figurePath, onDeleteFigure }) {
         {totalCount < 5 && (
           <button type="button" className="eq-img-add-btn"
             onClick={() => fileRef.current?.click()}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
             Thêm ảnh
           </button>
         )}
@@ -467,7 +468,7 @@ function TopicDropdown({ groups, value, onChange, onClose }) {
 }
 
 function LabelRow({ q, grade, onChange, onAutoClassify, classifying }) {
-  const [topicOpen,  setTopicOpen]  = useState(false)
+  const [topicOpen, setTopicOpen] = useState(false)
   const [hoveredDiff, setHoveredDiff] = useState(null)
   const groups = grade === 'thcs' ? THCS_LABEL_GROUPS : THPT_LABEL_GROUPS
   const activeDiff = DIFFICULTY_LEVELS.find(d => d.id === (hoveredDiff ?? q.level_label))
@@ -618,7 +619,7 @@ function ShortEditor({ q, onChange }) {
 ═══════════════════════════════════════════ */
 function PointsBadge({ value, onChange }) {
   const [editing, setEditing] = useState(false)
-  const [draft,   setDraft]   = useState('')
+  const [draft, setDraft] = useState('')
   const inputRef = useRef(null)
 
   useEffect(() => {
@@ -662,33 +663,35 @@ function PointsBadge({ value, onChange }) {
    Main EditableQuestion
 ═══════════════════════════════════════════ */
 const SECTION_COLOR = {
-  'PHẦN I':    '#2563eb',
-  'PHẦN II':   '#7c3aed',
-  'PHẦN III':  '#059669',
+  'PHẦN I': '#2563eb',
+  'PHẦN II': '#7c3aed',
+  'PHẦN III': '#059669',
   'TIẾNG ANH': '#0f766e',
 }
 
 export default function EditableQuestion({
   q, index, pointsPerQ, onUpdate, onDelete, onReportSubmit, highlight, grade = 'thpt',
 }) {
-  const [editingText,   setEditingText]   = useState(() => hasSuspiciousLatex(q.question_text))
-  const [localText,     setLocalText]     = useState(q.question_text || '')
-  const [showPreview,   setShowPreview]   = useState(true)
-  const [showReport,    setShowReport]    = useState(false)
-  const [reported,      setReported]      = useState(false)
+  const [editingText, setEditingText] = useState(() => hasSuspiciousLatex(q.question_text))
+  const [localText, setLocalText] = useState(q.question_text || '')
+  const [showPreview, setShowPreview] = useState(true)
+  const [showReport, setShowReport] = useState(false)
+  const [reported, setReported] = useState(false)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
-  const [classifying,   setClassifying]   = useState(false)
+  const [classifying, setClassifying] = useState(false)
 
   /* ── AI inline assistant ── */
-  const [showAI,    setShowAI]    = useState(false)
-  const [aiPrompt,  setAiPrompt]  = useState('')
-  const [aiImage,   setAiImage]   = useState(null)   // { dataUrl, b64, mime, name }
+  const [showAI, setShowAI] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiImage, setAiImage] = useState(null)   // { dataUrl, b64, mime, name }
   const [aiLoading, setAiLoading] = useState(false)
-  const [aiResult,  setAiResult]  = useState(null)
-  const [aiError,   setAiError]   = useState(null)
-
-  const cardRef   = useRef(null)
-  const taRef     = useRef(null)
+  const [aiResult, setAiResult] = useState(null)
+  const [aiError, setAiError] = useState(null)
+  const [splitView, setSplitView] = useState(
+    () => (q.passage_text?.length ?? 0) >= PASSAGE_SPLIT_THRESHOLD
+  )
+  const cardRef = useRef(null)
+  const taRef = useRef(null)
   const aiFileRef = useRef(null)
 
   const autoClassify = async () => {
@@ -718,7 +721,7 @@ export default function EditableQuestion({
     const reader = new FileReader()
     reader.onload = (e) => {
       const dataUrl = e.target.result
-      const b64     = dataUrl.split(',')[1]
+      const b64 = dataUrl.split(',')[1]
       setAiImage({ dataUrl, b64, mime: file.type, name: file.name })
     }
     reader.readAsDataURL(file)
@@ -748,13 +751,13 @@ export default function EditableQuestion({
         : promptText
       const payload = { prompt: ctx, section: q.section, count: 1 }
       if (aiImage) {
-        payload.image_b64  = aiImage.b64
+        payload.image_b64 = aiImage.b64
         payload.image_mime = aiImage.mime
       }
-      const res  = await fetch('/api/generate-questions', {
-        method:  'POST',
+      const res = await fetch('/api/generate-questions', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`)
@@ -770,9 +773,9 @@ export default function EditableQuestion({
 
   const handleAIApply = () => {
     const patch = { question_text: aiResult.question_text ?? q.question_text }
-    if (aiResult.choices)              patch.choices       = aiResult.choices
-    if (aiResult.answer !== undefined) patch.answer        = aiResult.answer
-    if (aiResult.sub_questions)        patch.sub_questions = aiResult.sub_questions
+    if (aiResult.choices) patch.choices = aiResult.choices
+    if (aiResult.answer !== undefined) patch.answer = aiResult.answer
+    if (aiResult.sub_questions) patch.sub_questions = aiResult.sub_questions
     onUpdate({ ...q, ...patch })
     setShowAI(false)
     setAiResult(null)
@@ -794,14 +797,14 @@ export default function EditableQuestion({
   }, [highlight])
 
   const startEdit = () => { setEditingText(true); setLocalText(q.question_text || '') }
-  const saveText  = () => {
+  const saveText = () => {
     setEditingText(false)
     if (localText !== q.question_text) onUpdate({ ...q, question_text: localText })
   }
   const cancelEdit = () => { setEditingText(false); setLocalText(q.question_text || '') }
 
-  const handleAddImage    = (img) => onUpdate({ ...q, images: [...(q.images || []), img] })
-  const handleDeleteImage = (id)  => onUpdate({ ...q, images: (q.images || []).filter(i => i.id !== id) })
+  const handleAddImage = (img) => onUpdate({ ...q, images: [...(q.images || []), img] })
+  const handleDeleteImage = (id) => onUpdate({ ...q, images: (q.images || []).filter(i => i.id !== id) })
 
   // Thêm ảnh vào gallery VÀ chèn marker [img:id] ở CUỐI nội dung (luôn append)
   const addImageAndInsertMarker = (file) => {
@@ -839,17 +842,17 @@ export default function EditableQuestion({
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
     if (files[0]) addImageAndInsertMarker(files[0])
   }
-  const handleDragOver  = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setIsDraggingOver(true) }
-  const handleDragLeave = ()  => setIsDraggingOver(false)
+  const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setIsDraggingOver(true) }
+  const handleDragLeave = () => setIsDraggingOver(false)
 
   const handleReport = (type) => {
     setReported(true)
     onReportSubmit?.({ questionNum: q.question_number, section: q.section, type })
   }
 
-  const color      = SECTION_COLOR[q.section] || '#2563eb'
-  const images     = q.images || []
-  const totalImgs  = (q.figure_path ? 1 : 0) + images.length
+  const color = SECTION_COLOR[q.section] || '#2563eb'
+  const images = q.images || []
+  const totalImgs = (q.figure_path ? 1 : 0) + images.length
   const suspicious = hasSuspiciousLatex(q.question_text)
 
   return (
@@ -859,9 +862,9 @@ export default function EditableQuestion({
       <div className="eq-header">
         <div className="eq-drag-handle" data-drag-handle title="Kéo để thay đổi vị trí">
           <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
-            <circle cx="2.5" cy="2" r="1.5"/><circle cx="7.5" cy="2" r="1.5"/>
-            <circle cx="2.5" cy="8" r="1.5"/><circle cx="7.5" cy="8" r="1.5"/>
-            <circle cx="2.5" cy="14" r="1.5"/><circle cx="7.5" cy="14" r="1.5"/>
+            <circle cx="2.5" cy="2" r="1.5" /><circle cx="7.5" cy="2" r="1.5" />
+            <circle cx="2.5" cy="8" r="1.5" /><circle cx="7.5" cy="8" r="1.5" />
+            <circle cx="2.5" cy="14" r="1.5" /><circle cx="7.5" cy="14" r="1.5" />
           </svg>
         </div>
         <div className="eq-header-left">
@@ -901,7 +904,7 @@ export default function EditableQuestion({
             )}
           </div>
           <button className="eq-icon-btn delete" onClick={onDelete} title="Xoá câu hỏi" type="button">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
           </button>
         </div>
       </div>
@@ -1039,93 +1042,137 @@ export default function EditableQuestion({
         classifying={classifying}
       />
 
-      {/* ── Passage block (Tiếng Anh) ── */}
-      {q.section === 'TIẾNG ANH' && (q.passage_text || q.passage_title) && (
-        <div className="eq-passage-block">
-          <div className="eq-passage-label">
-            📄 Đoạn văn / Bài đọc
-            {q.passage_title && <span className="eq-passage-title-tag">{q.passage_title}</span>}
-          </div>
-          <PassageEditor
-            value={q.passage_text || ''}
-            onChange={val => onUpdate({ ...q, passage_text: val })}
-          />
-        </div>
-      )}
-
-      {/* ── Question text ── */}
-      <div className="eq-question-section">
-        <span className="eq-question-label">Nội dung câu hỏi</span>
-
-        {q.section === 'TIẾNG ANH' ? (
-          /* Tiếng Anh: chỉ B/U, không cần LaTeX */
-          <PassageEditor
-            value={q.question_text || ''}
-            onChange={val => onUpdate({ ...q, question_text: val })}
-          />
-        ) : (
-          /* Toán: giữ LaTeX editor đầy đủ */
+      {/* ── Tiếng Anh: passage + câu hỏi, có thể split 2 cột ── */}
+      {q.section === 'TIẾNG ANH' ? (() => {
+        const isLong = (q.passage_text?.length ?? 0) >= PASSAGE_SPLIT_THRESHOLD
+        const hasPassage = q.passage_text || q.passage_title
+        return (
           <>
-            {editingText ? (
-              <div
-                className={`eq-latex-editor ${isDraggingOver ? 'eq-drop-active' : ''}`}
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-              >
-                {suspicious && (
-                  <div className="eq-llm-fail-note">
-                    <span>🤖 AI có thể đọc sai LaTeX — Kiểm tra và nhập lại đúng cú pháp bên dưới. Dán ảnh bằng Ctrl+V hoặc kéo thả ảnh vào đây.</span>
+            {hasPassage && isLong && (
+              <div className="eq-split-togglebar">
+                <span className="eq-split-badge">📖 Bài đọc dài</span>
+                <button type="button"
+                  className={`eq-split-btn ${splitView ? 'active' : ''}`}
+                  onClick={() => setSplitView(true)}>
+                  ⊞ 2 cột
+                </button>
+                <button type="button"
+                  className={`eq-split-btn ${!splitView ? 'active' : ''}`}
+                  onClick={() => setSplitView(false)}>
+                  1 cột
+                </button>
+              </div>
+            )}
+
+            {splitView && hasPassage ? (
+              <div className="eq-split-layout">
+                <div className="eq-split-pane eq-split-pane--passage">
+                  <div className="eq-split-pane-label">
+                    📄 Đoạn văn / Bài đọc
+                    {q.passage_title && <span className="eq-passage-title-tag">{q.passage_title}</span>}
                   </div>
-                )}
-                {isDraggingOver && (
-                  <div className="eq-drop-overlay">🖼 Thả ảnh vào đây để chèn</div>
-                )}
-                <LatexToolbar taRef={taRef} value={localText} onChange={setLocalText} onImageFile={addImageAndInsertMarker} />
-                <div className={`eq-le-panes ${showPreview ? '' : 'no-preview'}`}>
-                  <div className="eq-le-left">
-                    <div className="eq-le-pane-label">Nhập LaTeX</div>
-                    <textarea
-                      ref={taRef}
-                      className="eq-le-raw"
-                      value={localText}
-                      onChange={e => setLocalText(e.target.value)}
-                      onPaste={handleRawPaste}
-                      placeholder={`Nhập nội dung. Bao công thức bằng $...$\nVí dụ: Cho hàm số $f(x)=\\frac{2x+1}{x}$\nToạ độ: $M(-500; 300; 500)$`}
-                      rows={6}
-                      spellCheck={false}
-                    />
-                  </div>
-                  {showPreview && (
-                    <div className="eq-le-right">
-                      <div className="eq-le-pane-label">Xem trước</div>
-                      <div className="eq-le-preview">
-                        <PreviewWithImages text={localText} images={q.images || []} />
-                      </div>
-                    </div>
-                  )}
+                  <PassageEditor
+                    value={q.passage_text || ''}
+                    onChange={val => onUpdate({ ...q, passage_text: val })}
+                  />
                 </div>
-                <div className="eq-edit-actions">
-                  <button type="button" className="eq-preview-toggle"
-                    onClick={() => setShowPreview(v => !v)}>
-                    {showPreview ? '⊟ Ẩn xem trước' : '⊞ Hiện xem trước'}
-                  </button>
-                  <span style={{ flex: 1 }} />
-                  <button className="eq-cancel-btn" onClick={cancelEdit} type="button">✕ Huỷ</button>
-                  <button className="eq-save-btn"   onClick={saveText}   type="button">✓ Lưu</button>
+                <div className="eq-split-divider" />
+                <div className="eq-split-pane eq-split-pane--question">
+                  <div className="eq-split-pane-label">❓ Câu hỏi</div>
+                  <PassageEditor
+                    value={q.question_text || ''}
+                    onChange={val => onUpdate({ ...q, question_text: val })}
+                  />
                 </div>
               </div>
             ) : (
-              <div className="eq-qtext-display" onClick={startEdit} title="Click để chỉnh sửa">
-                {q.question_text
-                  ? <MathText text={q.question_text} />
-                  : <span className="eq-placeholder">Click để nhập nội dung câu hỏi…</span>}
-                <span className="eq-edit-hint">✏️</span>
-              </div>
+              <>
+                {hasPassage && (
+                  <div className="eq-passage-block">
+                    <div className="eq-passage-label">
+                      📄 Đoạn văn / Bài đọc
+                      {q.passage_title && <span className="eq-passage-title-tag">{q.passage_title}</span>}
+                    </div>
+                    <PassageEditor
+                      value={q.passage_text || ''}
+                      onChange={val => onUpdate({ ...q, passage_text: val })}
+                    />
+                  </div>
+                )}
+                <div className="eq-question-section">
+                  <span className="eq-question-label">Nội dung câu hỏi</span>
+                  <PassageEditor
+                    value={q.question_text || ''}
+                    onChange={val => onUpdate({ ...q, question_text: val })}
+                  />
+                </div>
+              </>
             )}
           </>
-        )}
-      </div>
+        )
+      })() : (
+        /* ── Toán: LaTeX editor đầy đủ ── */
+        <div className="eq-question-section">
+          <span className="eq-question-label">Nội dung câu hỏi</span>
+          {editingText ? (
+            <div
+              className={`eq-latex-editor ${isDraggingOver ? 'eq-drop-active' : ''}`}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+            >
+              {suspicious && (
+                <div className="eq-llm-fail-note">
+                  <span>🤖 AI có thể đọc sai LaTeX — Kiểm tra và nhập lại đúng cú pháp bên dưới. Dán ảnh bằng Ctrl+V hoặc kéo thả ảnh vào đây.</span>
+                </div>
+              )}
+              {isDraggingOver && (
+                <div className="eq-drop-overlay">🖼 Thả ảnh vào đây để chèn</div>
+              )}
+              <LatexToolbar taRef={taRef} value={localText} onChange={setLocalText} onImageFile={addImageAndInsertMarker} />
+              <div className={`eq-le-panes ${showPreview ? '' : 'no-preview'}`}>
+                <div className="eq-le-left">
+                  <div className="eq-le-pane-label">Nhập LaTeX</div>
+                  <textarea
+                    ref={taRef}
+                    className="eq-le-raw"
+                    value={localText}
+                    onChange={e => setLocalText(e.target.value)}
+                    onPaste={handleRawPaste}
+                    placeholder={`Nhập nội dung. Bao công thức bằng $...$\nVí dụ: Cho hàm số $f(x)=\\frac{2x+1}{x}$\nToạ độ: $M(-500; 300; 500)$`}
+                    rows={6}
+                    spellCheck={false}
+                  />
+                </div>
+                {showPreview && (
+                  <div className="eq-le-right">
+                    <div className="eq-le-pane-label">Xem trước</div>
+                    <div className="eq-le-preview">
+                      <PreviewWithImages text={localText} images={q.images || []} />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="eq-edit-actions">
+                <button type="button" className="eq-preview-toggle"
+                  onClick={() => setShowPreview(v => !v)}>
+                  {showPreview ? '⊟ Ẩn xem trước' : '⊞ Hiện xem trước'}
+                </button>
+                <span style={{ flex: 1 }} />
+                <button className="eq-cancel-btn" onClick={cancelEdit} type="button">✕ Huỷ</button>
+                <button className="eq-save-btn" onClick={saveText} type="button">✓ Lưu</button>
+              </div>
+            </div>
+          ) : (
+            <div className="eq-qtext-display" onClick={startEdit} title="Click để chỉnh sửa">
+              {q.question_text
+                ? <MathText text={q.question_text} />
+                : <span className="eq-placeholder">Click để nhập nội dung câu hỏi…</span>}
+              <span className="eq-edit-hint">✏️</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Hình ảnh đính kèm (gồm cả ảnh AI parse + ảnh người dùng tải lên) ── */}
       <ImageGallery
@@ -1140,16 +1187,17 @@ export default function EditableQuestion({
       <div className="eq-answers-section">
         <div className="eq-question-label">
           {(q.section === 'PHẦN I' || q.section === 'TIẾNG ANH') && 'Đáp án (click chữ cái để đánh dấu đúng)'}
-          {q.section === 'PHẦN II'  && 'Các ý phụ (Đ = Đúng, S = Sai)'}
+          {q.section === 'PHẦN II' && 'Các ý phụ (Đ = Đúng, S = Sai)'}
           {q.section === 'PHẦN III' && 'Đáp án đúng'}
           {!q.answer && q.section === 'TIẾNG ANH' && (
             <span className="eq-no-answer-note"> — Chưa có đáp án từ đề</span>
           )}
         </div>
         {(q.section === 'PHẦN I' || q.section === 'TIẾNG ANH') && <MCQEditor q={q} onChange={onUpdate} />}
-        {q.section === 'PHẦN II'  && <TFEditor    q={q} onChange={onUpdate} />}
+        {q.section === 'PHẦN II' && <TFEditor q={q} onChange={onUpdate} />}
         {q.section === 'PHẦN III' && <ShortEditor q={q} onChange={onUpdate} />}
       </div>
     </div>
   )
 }
+

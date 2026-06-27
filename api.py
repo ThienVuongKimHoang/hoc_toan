@@ -572,6 +572,55 @@ async def admin_save_config(request: Request):
     db.save_config(cfg)
     return {"ok": True, "config": cfg}
 
+@app.post("/api/admin/super-admins")
+async def create_super_admin(request: Request):
+    """Tạo tài khoản super_admin mới hoặc nâng cấp user hiện có."""
+    body     = await request.json()
+    email    = (body.get("email") or "").strip().lower()
+    password = (body.get("password") or "").strip()
+    name     = (body.get("name") or "Super Admin").strip()
+
+    if not email or not password:
+        return JSONResponse({"error": "Thiếu email hoặc mật khẩu."}, status_code=400)
+    if len(password) < 6:
+        return JSONResponse({"error": "Mật khẩu tối thiểu 6 ký tự."}, status_code=400)
+
+    existing = db.get_user_by_email(email)
+    if existing:
+        # Nâng cấp user hiện có lên super_admin
+        updated = db.update_user_role(str(existing["id"]), "super_admin")
+        return {"ok": True, "action": "upgraded", "user": updated}
+
+    # Tạo mới
+    new_user = {
+        "id":           int(datetime.now(_tz.utc).timestamp() * 1000),
+        "email":        email,
+        "password":     password,
+        "name":         name,
+        "role":         "super_admin",
+        "avatar":       name[0].upper() if name else "S",
+        "isRegistered": True,
+    }
+    user = db.add_user(new_user)
+    return {"ok": True, "action": "created", "user": user}
+
+
+@app.get("/api/admin/super-admins")
+async def list_super_admins():
+    """Danh sách tất cả super_admin."""
+    return db.get_super_admins()
+
+
+@app.delete("/api/admin/super-admins/{user_id}")
+async def remove_super_admin(user_id: str):
+    """Hạ cấp super_admin xuống giao_vien."""
+    updated = db.set_super_admin(user_id, enable=False)
+    if not updated:
+        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
+    return {"ok": True, "user": updated}
+
+
+
 
 # ─── End Super Admin endpoints ────────────────────────────────────────────────
 
@@ -619,12 +668,11 @@ async def api_auth_google(request: Request):
     # 3. Tìm hoặc tạo user trong DB
     user = db.get_user_by_email(email)
     if not user:
-        user = db.create_user({
-            "email":     email,
-            "name":      name,
-            "avatar":    avatar,
-            "google_id": google_id,
-            "password":  None,  # Google user không có password
+        new_uid = int(datetime.now(_tz.utc).timestamp() * 1000)
+        user = db.add_user({
+            "id": new_uid, "email": email, "name": name,
+            "avatar": avatar[:20] if avatar else name[0].upper() if name else "?",
+            "password": "", "role": "khach", "isRegistered": True,
         })
     elif not user.get("google_id"):
         # Email đã tồn tại nhưng chưa liên kết Google → liên kết
