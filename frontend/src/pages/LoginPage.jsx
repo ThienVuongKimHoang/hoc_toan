@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { login, register, ROLE_META, ROLES } from '../auth/mockUsers.js'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 function GoogleLogo() {
@@ -34,46 +34,63 @@ function LoginForm({ onLogin, onSwitchToRegister }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   useEffect(() => {
-    /* global google */
+    let rendered = false
 
-    google.accounts.id.initialize({
-      client_id: "281468345667-tb1nqlo78f06blu5m1t7qapd08ruc916.apps.googleusercontent.com",
-      callback: async (response) => {
-        setLoading(true)
-        setError('')
+    const initGoogle = () => {
+      if (rendered) return
+      if (!window.google) return
 
-        try {
-          const res = await fetch('/api/auth/google', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              id_token: response.credential
-            }),
-          })
+      const btn = document.getElementById("googleBtn")
+      if (!btn) return
 
-          const data = await res.json()
+      window.google.accounts.id.initialize({
+        client_id: "281468345667-tb1nqlo78f06blu5m1t7qapd08ruc916.apps.googleusercontent.com",
+        callback: async (response) => {
+          setLoading(true)
+          setError('')
 
-          if (!res.ok) {
-            setError(data.error || 'Đăng nhập Google thất bại.')
-            return
+          try {
+            const res = await fetch('/api/auth/google', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id_token: response.credential
+              }),
+            })
+
+            const data = await res.json()
+
+            if (!res.ok) {
+              setError(data.error || 'Đăng nhập Google thất bại.')
+              return
+            }
+
+            onLogin(data)
+
+          } catch (err) {
+            setError('Không thể kết nối server.')
+          } finally {
+            setLoading(false)
           }
-
-          onLogin(data)
-
-        } catch (err) {
-          setError('Không thể kết nối server.')
-        } finally {
-          setLoading(false)
         }
-      }
-    })
+      })
 
-    google.accounts.id.renderButton(
-      document.getElementById("googleBtn"),
-      { theme: "outline", size: "large" }
-    )
+      window.google.accounts.id.renderButton(btn, {
+        theme: "outline",
+        size: "large"
+      })
+
+      rendered = true
+    }
+
+    const timer = setInterval(() => {
+      if (window.google && document.getElementById("googleBtn")) {
+        initGoogle()
+        clearInterval(timer)
+      }
+    }, 200)
+
+    return () => clearInterval(timer)
   }, [])
   const handleSubmit = async (e) => {
     e.preventDefault()
