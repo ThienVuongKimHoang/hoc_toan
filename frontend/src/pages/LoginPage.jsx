@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { login, register, ROLE_META, ROLES } from '../auth/mockUsers.js'
-import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google'
+import { GoogleOAuthProvider } from '@react-oauth/google'
 function GoogleLogo() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden>
@@ -33,41 +33,48 @@ function LoginForm({ onLogin, onSwitchToRegister }) {
   const [showPwd, setShowPwd] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const handleGoogleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      setLoading(true)
-      setError('')
+  useEffect(() => {
+    /* global google */
 
-      try {
-        const res = await fetch('/api/auth/google', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            id_token: tokenResponse.credential || tokenResponse.access_token
-          }),
-        })
+    google.accounts.id.initialize({
+      client_id: "281468345667-tb1nqlo78f06blu5m1t7qapd08ruc916.apps.googleusercontent.com",
+      callback: async (response) => {
+        setLoading(true)
+        setError('')
 
-        const data = await res.json()
+        try {
+          const res = await fetch('/api/auth/google', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              id_token: response.credential
+            }),
+          })
 
-        if (!res.ok) {
-          setError(data.error || 'Đăng nhập Google thất bại.')
-          return
+          const data = await res.json()
+
+          if (!res.ok) {
+            setError(data.error || 'Đăng nhập Google thất bại.')
+            return
+          }
+
+          onLogin(data)
+
+        } catch (err) {
+          setError('Không thể kết nối server.')
+        } finally {
+          setLoading(false)
         }
-
-        onLogin(data)
-      } catch (err) {
-        setError('Không thể kết nối server.')
-      } finally {
-        setLoading(false)
       }
-    },
+    })
 
-    onError: () => setError('Google đăng nhập thất bại.'),
-
-    flow: 'implicit', // vẫn giữ
-  })
+    google.accounts.id.renderButton(
+      document.getElementById("googleBtn"),
+      { theme: "outline", size: "large" }
+    )
+  }, [])
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!email.trim() || !password) { setError('Vui lòng nhập đầy đủ thông tin.'); return }
@@ -122,10 +129,7 @@ function LoginForm({ onLogin, onSwitchToRegister }) {
 
       <div className="lp-divider"><span>hoặc</span></div>
 
-      <button type="button" className="btn-google" onClick={() => handleGoogleLogin()}>
-        <GoogleLogo />
-        Đăng nhập với Google
-      </button>
+      <div id="googleBtn"></div>
     </>
   )
 }
