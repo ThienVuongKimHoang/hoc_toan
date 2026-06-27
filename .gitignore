@@ -21,6 +21,7 @@ notifications.json
 # Uploads / generated files
 class_docs/
 src/output/
+src/*.pdf
 
 # macOS
 .DS_Store
