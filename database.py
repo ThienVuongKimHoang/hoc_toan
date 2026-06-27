@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS users (
     is_registered BOOLEAN      DEFAULT FALSE,
     created_at    TIMESTAMPTZ  DEFAULT NOW()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) DEFAULT NULL;
+
 
 
 CREATE TABLE IF NOT EXISTS exams (
@@ -564,13 +566,13 @@ def _user_from_row(row: dict, pwd: bool = False) -> dict:
         "name":         r["name"] or "",
         "role":         r["role"],
         "avatar":       r["avatar"] or "",
+        "google_id":    r.get("google_id"),   # ADD THIS
         "isRegistered": bool(r["is_registered"]),
         "createdAt":    r["created_at"].isoformat() if r.get("created_at") else None,
     }
     if pwd:
         d["password"] = r["password"]
     return d
-
 
 def get_user_by_email(email: str, pwd: bool = False) -> Optional[dict]:
     with _C() as conn:
@@ -743,7 +745,31 @@ def delete_class(cid: str) -> bool:
         conn.commit()
     return found
 
+def update_user(uid: str, fields: dict) -> Optional[dict]:
+    """Update arbitrary user fields. Supported keys: name, avatar, role, password, google_id."""
+    _map = {
+        "name":      "name",
+        "avatar":    "avatar",
+        "role":      "role",
+        "password":  "password",
+        "google_id": "google_id",
+    }
+    allowed = {_map[k]: v for k, v in fields.items() if k in _map}
+    if not allowed:
+        return get_user_by_id(uid)
 
+    set_clause = ", ".join(f"{col}=%s" for col in allowed)
+    params = list(allowed.values()) + [int(uid)]
+
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                f"UPDATE users SET {set_clause} WHERE id=%s RETURNING *",
+                params,
+            )
+            row = cur.fetchone()
+        conn.commit()
+    return _user_from_row(dict(row)) if row else None
 # ── Notifications ──────────────────────────────────────────────────────────────
 
 def _notif_from_row(row: dict) -> dict:

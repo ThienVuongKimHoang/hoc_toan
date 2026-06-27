@@ -21,7 +21,9 @@ from fastapi.staticfiles import StaticFiles
 from groq import Groq
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-
+from datetime import datetime, timezone as _tz
+import random as _random
+import string as _string
 
 SRC_DIR = Path(__file__).parent / "src"
 sys.path.insert(0, str(SRC_DIR))
@@ -757,9 +759,6 @@ async def admin_reset_user_password(user_id: str, request: Request):
 
 
 # ─── Class management ─────────────────────────────────────────────────────────
-
-import random as _random, string as _string
-from datetime import datetime, timezone as _tz
 
 def _cls_id() -> str:
     return ''.join(_random.choices(_string.ascii_lowercase + _string.digits, k=8))
