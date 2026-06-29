@@ -40,6 +40,7 @@ DEFAULT_OUT = SRC_DIR / "output" / "english_questions.json"
 IMAGES_DIR  = SRC_DIR / "output" / "images"
 
 ENGLISH_SECTION_NAME    = "TIẾNG ANH"
+READING_SECTION_NAME    = "READING"
 ENGLISH_POINTS_PER_Q    = 0.25
 ENGLISH_TOTAL_QUESTIONS = 40
 
@@ -234,6 +235,10 @@ Rules:
 - "question_text": the question stem. For pronunciation/stress questions, include all options inline.
 - "passage_title": title of a reading/listening text ONLY for the FIRST question in a group. Null otherwise.
 - "passage_text": full passage text ONLY for the first question in the group. Null otherwise.
+  PRESERVE THE ORIGINAL LAYOUT: keep paragraph breaks as a blank line (\\n\\n) and put every
+  bullet / list item on its own line starting with "• " (use \\n between lines). Keep the
+  numbered blanks exactly as written (e.g. "(10) ______"). Do NOT collapse the passage into a
+  single line.
 - "choices": {{"A": "...", "B": "...", "C": "...", "D": "..."}}
 - "answer": always null.
 - "figure_index": 0 if the question has no image. If it references one of the images listed above, set to its 1-based position (1 = topmost image on page, etc.).
@@ -269,6 +274,10 @@ Rules:
 - "question_text": the question stem. For pronunciation/stress questions, this is the full line.
 - "passage_title": title of a reading text ONLY for the FIRST question in a group. Null otherwise.
 - "passage_text": full text of a reading passage ONLY for the FIRST question in the group. Null otherwise.
+  PRESERVE THE ORIGINAL LAYOUT: keep paragraph breaks as a blank line (\\n\\n) and put every
+  bullet / list item on its own line starting with "• " (use \\n between lines). Keep the
+  numbered blanks exactly as written (e.g. "(10) ______"). Do NOT collapse the passage into a
+  single line.
 - "choices": always {{"A": "...", "B": "...", "C": "...", "D": "..."}}
 - "answer": always null here.
 - "figure_index": 0 if no image. Set to 1-based position of the image on this page if question has a figure.
@@ -345,6 +354,352 @@ def _parse_response(raw: str, key: str):
         return json.loads(repaired).get(key, default)
     except json.JSONDecodeError:
         return default
+
+
+# ---------------------------------------------------------------------------
+# Khôi phục cấu trúc đoạn văn (xuống dòng) để dễ đọc
+# ---------------------------------------------------------------------------
+
+# Các từ mở đầu đoạn thường gặp trong bài đọc THPT → tách đoạn mới
+_PARA_CUES = (
+    "Firstly", "Secondly", "Thirdly", "Fourthly", "Finally",
+    "Additionally", "Moreover", "Furthermore", "However",
+    "In conclusion", "In addition", "On the other hand", "Therefore",
+)
+_PARA_RE = re.compile(
+    r"(?<=[.!?\"”])\s+(?=(?:" + "|".join(_PARA_CUES) + r")\b)"
+)
+
+
+def _format_passage_text(text: str) -> str:
+    """
+    Khôi phục cấu trúc gốc của đoạn văn để dễ đọc:
+      - Mỗi gạch đầu dòng "•" nằm trên một dòng riêng.
+      - Tách đoạn mới trước các từ chuyển đoạn (Firstly, Secondly, However...).
+    Nếu đoạn văn (sau khi model trích) đã có sẵn xuống dòng thì giữ nguyên.
+    """
+    if not text or not text.strip():
+        return text
+    # Đã có cấu trúc xuống dòng (model hoặc người dùng) → chỉ chuẩn hoá nhẹ.
+    if "\n" in text or "<br" in text.lower() or "<div" in text.lower():
+        return text
+
+    t = re.sub(r"[ \t]+", " ", text).strip()
+
+    # Mỗi bullet "•" xuống dòng riêng.
+    if "•" in t:
+        t = re.sub(r"\s*•\s*", "\n• ", t).strip()
+        return t
+
+    # Văn xuôi: tách đoạn trước các từ chuyển đoạn (giúp dễ đọc, đúng bố cục gốc).
+    t = _PARA_RE.sub("\n\n", t)
+    return t
+
+
+# ---------------------------------------------------------------------------
+# Phân loại phần: Trắc nghiệm rời  vs  Bài đọc (Reading)
+# ---------------------------------------------------------------------------
+
+READING_DETECT_PROMPT = """\
+You are analyzing the questions of a Vietnamese THPT English exam (môn Tiếng Anh).
+Below is the ordered list of questions. A line tagged [PASSAGE START: "..."] means a
+shared reading text / cloze-test passage begins at that question.
+
+{listing}
+
+TASK: Identify the READING groups. A reading group is a set of consecutive questions that
+all refer to the SAME shared text. This covers:
+  - Cloze test (điền từ vào đoạn văn): one passage with several numbered blanks.
+  - Reading comprehension (đọc hiểu): a passage followed by questions about it.
+
+Standalone questions are NOT reading groups, e.g. pronunciation, stress, word choice,
+grammar, sentence transformation/combination, communication, error identification.
+
+Rules:
+- Each reading group begins at a question tagged [PASSAGE START].
+- A group = its anchor question + all following CONSECUTIVE questions about that same text,
+  up to (but excluding) the next [PASSAGE START] or the next standalone question.
+- "anchor" = the question number where the passage begins.
+- Only include questions that genuinely share one reading text.
+
+Return ONLY valid JSON, no other text:
+{{
+  "reading_groups": [
+    {{"anchor": 25, "questions": [25, 26, 27, 28, 29]}},
+    {{"anchor": 30, "questions": [30, 31, 32, 33, 34, 35]}}
+  ]
+}}
+If there are no reading passages at all, return {{"reading_groups": []}}."""
+
+
+def _detect_reading_groups(client: Groq, questions: list, fallback_clients: list = None):
+    """
+    Dùng Groq phân loại câu hỏi Tiếng Anh thành các nhóm bài đọc (reading).
+
+    Trả về:
+      - list các nhóm [{"anchor": int, "questions": [int, ...]}, ...] nếu thành công.
+      - None nếu gọi Groq / parse thất bại (caller dùng phương án dự phòng).
+    """
+    if not questions:
+        return []
+
+    lines = []
+    for q in questions:
+        num   = q.get("question_number")
+        stem  = (q.get("question_text") or "").replace("\n", " ").strip()[:110]
+        title = (q.get("passage_title") or "").strip()[:60]
+        tag   = f' [PASSAGE START: "{title}"]' if q.get("passage_text") else ""
+        lines.append(f"Q{num}{tag}: {stem}")
+
+    prompt = READING_DETECT_PROMPT.format(listing="\n".join(lines))
+    try:
+        raw = _call_groq_text(client, prompt, 1500, fallback_clients)
+    except Exception:
+        return None
+
+    groups_raw = _parse_response(raw, "reading_groups")
+    if not isinstance(groups_raw, list):
+        return None
+
+    valid_nums = {q.get("question_number") for q in questions}
+    out = []
+    for g in groups_raw:
+        try:
+            nums = sorted({int(x) for x in g.get("questions", []) if int(x) in valid_nums})
+        except (ValueError, TypeError):
+            continue
+        if not nums:
+            continue
+        anchor = g.get("anchor")
+        anchor = int(anchor) if isinstance(anchor, (int, str)) and str(anchor).isdigit() else nums[0]
+        out.append({"anchor": anchor, "questions": nums})
+    return out
+
+
+def _fallback_reading_groups(questions: list) -> list:
+    """
+    Phương án dự phòng (không gọi Groq): gom nhóm theo passage_text đã trích.
+    Mỗi câu có passage_text mở một nhóm; các câu phía sau (đến anchor kế tiếp) thuộc nhóm đó.
+    """
+    anchors = sorted(
+        q.get("question_number") for q in questions
+        if q.get("passage_text") and isinstance(q.get("question_number"), int)
+    )
+    if not anchors:
+        return []
+    nums = sorted(
+        q.get("question_number") for q in questions
+        if isinstance(q.get("question_number"), int)
+    )
+    groups = []
+    for i, a in enumerate(anchors):
+        nxt = anchors[i + 1] if i + 1 < len(anchors) else None
+        grp = [n for n in nums if n >= a and (nxt is None or n < nxt)]
+        groups.append({"anchor": a, "questions": grp})
+    return groups
+
+
+READING_PARSE_PROMPT = """\
+You are parsing the READING parts of a Vietnamese THPT English exam (môn Tiếng Anh).
+Below is the full text of the exam (questions section only) and the list of question
+numbers that have already been extracted.
+
+QUESTION NUMBERS PRESENT: {qnums}
+
+FULL EXAM TEXT:
+\"\"\"
+{full_text}
+\"\"\"
+
+TASK: Find EVERY reading passage. There are two kinds:
+  - Cloze / gap-fill (điền từ): an ad, announcement, letter or passage containing numbered
+    blanks like "(10) ______". Each blank is one question.
+  - Reading comprehension (đọc hiểu): a passage followed by questions asking about it.
+
+These are NOT reading passages (ignore them): pronunciation, primary stress, single-sentence
+grammar / word-choice questions, sentence transformation or combination, communication /
+conversation, error identification, and sentence-ordering (arrange a-b-c-d-e) questions.
+
+For EACH reading passage, return an object with:
+  - "title": ONLY a short real heading printed above the passage — usually a few words,
+    often in ALL CAPS (e.g. "JOIN OUR CREATIVE WRITING WORKSHOP!"). If the passage simply
+    starts with an ordinary sentence and has no heading, set "title" to null. NEVER use a
+    full sentence from the passage, and NEVER use an answer option (A./B./C./D.) as the title.
+  - "passage_text": the FULL, CLEAN passage, well structured:
+      * Keep every numbered blank EXACTLY as "(10) ______".
+      * Preserve the layout — separate paragraphs with a blank line, and put each bullet /
+        list item on its OWN line starting with "• ".
+      * Do NOT include: the title, the section instruction line ("Mark the letter A, B, C..."),
+        the answer options (A./B./C./D.), or the word "Question N".
+  - "questions": the list of question numbers (integers) that belong to this passage, in order.
+
+Return ONLY valid JSON, no other text:
+{{
+  "passages": [
+    {{"title": "JOIN OUR CREATIVE WRITING WORKSHOP!", "passage_text": "Do you have a passion...\\n• (10) ______ experience required\\n• ...", "questions": [10, 11, 12]}},
+    {{"title": null, "passage_text": "Sylvia Earle is an underwater explorer...", "questions": [29, 30, 31, 32, 33]}}
+  ]
+}}
+If there are no reading passages at all, return {{"passages": []}}."""
+
+
+def _parse_reading_passages(client: Groq, full_text: str, questions: list,
+                            fallback_clients: list = None):
+    """
+    Dùng Groq parse TOÀN BỘ phần bài đọc từ text gốc của đề (có đầy đủ ngữ cảnh):
+    trả về danh sách passage kèm tiêu đề, nội dung đầy đủ (có cấu trúc) và các câu thuộc về nó.
+
+    Trả về:
+      - list [{"title": str|None, "passage_text": str|None, "questions": [int,...]}, ...]
+      - None nếu gọi Groq / parse thất bại (caller dùng phương án dự phòng).
+    """
+    if not questions or not full_text or not full_text.strip():
+        return None
+
+    valid_nums = {q.get("question_number") for q in questions if isinstance(q.get("question_number"), int)}
+    qnums = ", ".join(str(n) for n in sorted(valid_nums))
+    text = full_text.strip()
+    if len(text) > 14000:                      # giới hạn token đầu vào
+        text = text[:14000]
+
+    prompt = READING_PARSE_PROMPT.format(qnums=qnums, full_text=text)
+    try:
+        raw = _call_groq_text(client, prompt, 4096, fallback_clients)
+    except Exception:
+        return None
+
+    passages_raw = _parse_response(raw, "passages")
+    if not isinstance(passages_raw, list):
+        return None
+
+    out = []
+    for p in passages_raw:
+        if not isinstance(p, dict):
+            continue
+        try:
+            nums = sorted({int(x) for x in p.get("questions", []) if int(x) in valid_nums})
+        except (ValueError, TypeError):
+            continue
+        if not nums:
+            continue
+        ptext = p.get("passage_text")
+        ptext = ptext.strip() if isinstance(ptext, str) and ptext.strip() else None
+
+        title = p.get("title")
+        title = title.strip() if isinstance(title, str) and title.strip() else None
+        if title and not _is_valid_passage_title(title, ptext):
+            title = None
+
+        out.append({"title": title, "passage_text": ptext, "questions": nums})
+    return out
+
+
+def _is_valid_passage_title(title, passage_text):
+    """Loại tiêu đề rác: câu đầy đủ, phương án trả lời, hoặc trùng đầu đoạn văn."""
+    t = title.strip()
+    if len(t) > 80:                                  # quá dài → là câu, không phải tiêu đề
+        return False
+    if re.match(r"^[A-D][.)]\s", t):                 # "A. ...", "B) ..." → phương án trả lời
+        return False
+    if t.endswith((".", "?", "!")) and " " in t and not t.isupper():
+        return False                                 # câu hoàn chỉnh thường, không phải tiêu đề
+    if passage_text:
+        head = passage_text.lstrip()[:len(t)].strip().lower()
+        if head and head == t.lower():               # trùng phần đầu đoạn văn
+            return False
+    return True
+
+
+def split_english_sections(questions: list, client: Groq, fallback_clients: list = None,
+                           raw_text: str = None) -> dict:
+    """
+    Chia danh sách câu hỏi Tiếng Anh thành (tối đa) 2 phần:
+      - "TIẾNG ANH": trắc nghiệm rời (giữ nguyên cấu trúc cũ).
+      - "READING":   các câu thuộc bài đọc, kèm `passage_group` để gom theo đoạn văn.
+
+    Nếu có `raw_text` (text gốc của đề), ưu tiên cho Groq parse trọn vẹn các bài đọc
+    (tiêu đề + nội dung đầy đủ có cấu trúc). Nếu không, lùi về phương án phát hiện nhóm
+    dựa trên passage_text trích từng trang.
+
+    Passage được giữ trên câu ĐẦU của mỗi nhóm (anchor), khớp với cách hiển thị phía client.
+    """
+    # group: {"questions": [int], "passage_text": str|None, "passage_title": str|None}
+    groups: list[dict] = []
+
+    parsed = _parse_reading_passages(client, raw_text, questions, fallback_clients) if raw_text else None
+    if parsed:
+        for p in parsed:
+            groups.append({
+                "questions":     p["questions"],
+                "passage_text":  p.get("passage_text"),
+                "passage_title": p.get("title"),
+            })
+    else:
+        # Phương án dự phòng: phát hiện nhóm rồi lấy passage từ câu đã trích.
+        detected = _detect_reading_groups(client, questions, fallback_clients)
+        has_anchors = any(q.get("passage_text") for q in questions)
+        if not detected and has_anchors:
+            detected = _fallback_reading_groups(questions)
+        for g in (detected or []):
+            groups.append({
+                "questions":     g["questions"],
+                "passage_text":  None,
+                "passage_title": None,
+            })
+
+    qnum_to_group: dict[int, int] = {}
+    group_passage: dict[int, tuple] = {}
+    for gi, g in enumerate(groups, start=1):
+        for n in g["questions"]:
+            qnum_to_group[n] = gi
+        group_passage[gi] = (g.get("passage_text"), g.get("passage_title"))
+
+    mcq_qs, reading_qs = [], []
+    for q in questions:
+        num = q.get("question_number")
+        if num in qnum_to_group:
+            rq = dict(q)
+            rq["section"] = READING_SECTION_NAME
+            rq["passage_group"] = qnum_to_group[num]
+            reading_qs.append(rq)
+        else:
+            mq = dict(q)
+            mq["section"] = ENGLISH_SECTION_NAME
+            mq.pop("passage_group", None)
+            mcq_qs.append(mq)
+
+    # Re-anchor: mỗi nhóm reading chỉ giữ passage trên câu có số thứ tự nhỏ nhất.
+    # Ưu tiên passage do Groq parse trọn vẹn; nếu thiếu thì lấy passage trích từng trang.
+    reading_qs.sort(key=lambda q: q.get("question_number", 0))
+    by_group: dict[int, list] = {}
+    for q in reading_qs:
+        by_group.setdefault(q["passage_group"], []).append(q)
+    for gi, qs in by_group.items():
+        gp_text, gp_title = group_passage.get(gi, (None, None))
+        ptext  = gp_text  or next((q.get("passage_text")  for q in qs if q.get("passage_text")),  None)
+        ptitle = gp_title or next((q.get("passage_title") for q in qs if q.get("passage_title")), None)
+        ptext  = _format_passage_text(ptext) if ptext else ptext
+        for i, q in enumerate(qs):
+            q["passage_text"]  = ptext  if i == 0 else None
+            q["passage_title"] = ptitle if i == 0 else None
+
+    def _sec(qs, sec_type):
+        return {
+            "type":         sec_type,
+            "points_per_q": ENGLISH_POINTS_PER_Q,
+            "count":        len(qs),
+            "total":        round(len(qs) * ENGLISH_POINTS_PER_Q, 2),
+            "questions":    qs,
+        }
+
+    sections: dict = {}
+    if mcq_qs:
+        sections[ENGLISH_SECTION_NAME] = _sec(mcq_qs, "multiple_choice")
+    if reading_qs:
+        sections[READING_SECTION_NAME] = _sec(reading_qs, "reading")
+    if not sections:
+        sections[ENGLISH_SECTION_NAME] = _sec([], "multiple_choice")
+    return sections
 
 
 # ---------------------------------------------------------------------------
@@ -514,9 +869,13 @@ def run_english(
     # ── Pass 1: trích câu hỏi ────────────────────────────────────────────────
     all_questions: list[dict] = []
     seen_q_nums: set[int] = set()
+    q_pages_text: list[str] = []          # text gốc để parse bài đọc trọn vẹn
 
     for pg in q_pages:
         page = doc[pg]
+        page_text = page.get_text().strip()
+        if page_text:
+            q_pages_text.append(page_text)
         new_qs = _extract_questions_from_page(
             client, page, pg + 1, seen_q_nums, fb,
             doc=doc, page_idx=pg, images_dir=imgs_dir,
@@ -564,8 +923,14 @@ def run_english(
             deduped[num] = q
 
     questions_final  = sorted(deduped.values(), key=lambda q: q.get("question_number", 0))
-    detected_count   = max(deduped.keys(), default=ENGLISH_TOTAL_QUESTIONS)
     answers_count    = sum(1 for q in questions_final if q.get("answer"))
+
+    # Groq tự phát hiện từng phần: trắc nghiệm rời  vs  bài đọc (reading),
+    # đồng thời parse trọn vẹn nội dung từng bài đọc từ text gốc của đề.
+    if progress_cb:
+        progress_cb({"type": "detecting_parts", "total": len(questions_final)})
+    raw_text = "\n\n".join(q_pages_text)
+    sections = split_english_sections(questions_final, client, fb, raw_text=raw_text)
 
     return {
         "source":        pdf_path.name,
@@ -573,15 +938,7 @@ def run_english(
         "total_questions": len(questions_final),
         "has_answer_key":  has_answer_key,
         "answers_filled":  answers_count,
-        "sections": {
-            ENGLISH_SECTION_NAME: {
-                "type":          "multiple_choice",
-                "points_per_q":  ENGLISH_POINTS_PER_Q,
-                "total":         round(detected_count * ENGLISH_POINTS_PER_Q, 2),
-                "count":         detected_count,
-                "questions":     questions_final,
-            }
-        },
+        "sections":        sections,
     }
 
 
@@ -617,9 +974,10 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    qs = result["sections"][ENGLISH_SECTION_NAME]["questions"]
+    qs = [q for sec in result["sections"].values() for q in sec["questions"]]
     answered = sum(1 for q in qs if q.get("answer"))
-    print(f"\nTổng kết: {len(qs)} câu — {answered} có đáp án")
+    parts = ", ".join(f"{name}: {sec['count']}" for name, sec in result["sections"].items())
+    print(f"\nTổng kết: {len(qs)} câu — {answered} có đáp án  ({parts})")
     print(f"Đã lưu → {args.out}")
 
 

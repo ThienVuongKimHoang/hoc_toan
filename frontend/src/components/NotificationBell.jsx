@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { getNotifications, markAllRead, markRead } from '../store/notificationStore.js'
 
-export default function NotificationBell({ user }) {
+export default function NotificationBell({ user, onOpenClass }) {
   const [notifs,  setNotifs]  = useState([])
   const [open,    setOpen]    = useState(false)
   const ref = useRef(null)
@@ -39,6 +39,11 @@ export default function NotificationBell({ user }) {
     if (!n.read) {
       await markRead(n.id)
       setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))
+    }
+    // Thông báo bài tập/đề → mở thẳng lớp tương ứng
+    if (n.classId && onOpenClass) {
+      setOpen(false)
+      onOpenClass(n.classId)
     }
   }
 
@@ -78,13 +83,17 @@ export default function NotificationBell({ user }) {
             ) : (
               notifs.map(n => (
                 <div key={n.id}
-                  className={`notif-item ${!n.read ? 'notif-item--unread' : ''}`}
-                  onClick={() => handleClickNotif(n)}>
+                  className={`notif-item ${!n.read ? 'notif-item--unread' : ''} ${n.classId ? 'notif-item--link' : ''}`}
+                  onClick={() => handleClickNotif(n)}
+                  title={n.classId ? 'Bấm để mở lớp & bài tập' : undefined}>
                   <div className="notif-icon">📝</div>
                   <div className="notif-content">
                     <div className="notif-title">{n.title}</div>
                     <div className="notif-msg">{n.message}</div>
-                    <div className="notif-time">{formatDt(n.createdAt)}</div>
+                    <div className="notif-time">
+                      {formatDt(n.createdAt)}
+                      {n.classId && <span className="notif-go"> · Xem bài →</span>}
+                    </div>
                   </div>
                   {!n.read && <div className="notif-dot" />}
                 </div>

@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { fetchExamById, getPracticeInfo, verifyPracticePassword } from '../store/examStore.js'
 import QuestionCard from '../components/QuestionCard.jsx'
+import ReadingTakeView from '../components/ReadingTakeView.jsx'
 
 const SECTION_LABELS = {
   'PHẦN I':    { label: 'Phần I – Trắc nghiệm',    color: '#2563eb' },
   'PHẦN II':   { label: 'Phần II – Đúng / Sai',     color: '#7c3aed' },
   'PHẦN III':  { label: 'Phần III – Trả lời ngắn',  color: '#059669' },
   'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm', color: '#0f766e' },
+  'READING':   { label: 'Reading – Bài đọc',       color: '#0e7490' },
 }
 
 function getSectionList(exam) {
@@ -342,15 +344,18 @@ export default function PracticeExamPage({ examId, onGoHome }) {
         )}
 
         <div className="question-list">
-          {questions.length === 0
-            ? <p className="empty-msg">Không có câu hỏi nào trong phần này.</p>
-            : questions.map((q, i) => (
+          {questions.length === 0 ? (
+            <p className="empty-msg">Không có câu hỏi nào trong phần này.</p>
+          ) : curSection === 'READING' ? (
+            <ReadingTakeView questions={questions} examMode={false} />
+          ) : (
+            questions.map((q, i) => (
               <QuestionCard
                 key={`${q.section}-${q.question_number}-${i}`}
                 q={q} index={i} examMode={false}
               />
             ))
-          }
+          )}
         </div>
 
         <SectionNav

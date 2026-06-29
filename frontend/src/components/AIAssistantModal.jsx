@@ -6,11 +6,12 @@ const SECTION_META = {
   'PHẦN II':   { label: 'Đúng / Sai',   color: '#7c3aed' },
   'PHẦN III':  { label: 'Trả lời ngắn', color: '#059669' },
   'TIẾNG ANH': { label: 'Tiếng Anh',    color: '#0f766e' },
+  'READING':   { label: 'Reading',      color: '#0e7490' },
 }
 
 function QuestionPreview({ q, checked, onToggle }) {
   const sec   = q.section || 'PHẦN I'
-  const isMCQ = sec === 'PHẦN I' || sec === 'TIẾNG ANH'
+  const isMCQ = sec === 'PHẦN I' || sec === 'TIẾNG ANH' || sec === 'READING'
   const isTF  = sec === 'PHẦN II'
 
   return (

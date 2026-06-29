@@ -317,12 +317,49 @@ async def get_exam(exam_id: str):
     return exam
 
 
+def _exam_assignment(cls_id, exam_id):
+    """Lấy assignment (đề thi) phù hợp nhất của một lớp cho đề exam_id."""
+    cls = db.get_class(cls_id) if cls_id else None
+    if not cls:
+        return None, None
+    cands = [a for a in cls.get("assignments", []) if a.get("examId") == exam_id]
+    if not cands:
+        return cls, None
+    cands.sort(key=lambda a: a.get("createdAt") or "", reverse=True)
+    return cls, cands[0]
+
+
 @app.post("/api/exams/{exam_id}/submit")
 async def submit_exam(exam_id: str, request: Request):
     """Học sinh nộp bài thi."""
     body = await request.json()
     if not db.get_exam(exam_id):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+
+    # Nếu nộp qua LỚP: kiểm tra cửa sổ thời gian & số lần làm tối đa.
+    cls_id = body.get("classId")
+    if cls_id:
+        _, asgn = _exam_assignment(cls_id, exam_id)
+        if asgn:
+            now = datetime.now(_tz.utc)
+            close = asgn.get("closeTime") or asgn.get("dueDate")
+            try:
+                if close and now > datetime.fromisoformat(str(close).replace("Z", "+00:00")):
+                    return JSONResponse({"error": "Đã quá thời hạn làm bài."}, status_code=403)
+            except Exception:
+                pass
+            max_attempts = asgn.get("maxAttempts")
+            if max_attempts:
+                used = sum(
+                    1 for s in db.get_submissions(exam_id)
+                    if str(s.get("studentId")) == str(body.get("studentId"))
+                    and str(s.get("classId")) == str(cls_id)
+                )
+                if used >= int(max_attempts):
+                    return JSONResponse(
+                        {"error": f"Bạn đã làm đủ {max_attempts} lần cho phép."},
+                        status_code=403)
+
     submission = {
         "submittedAt": body.get("submittedAt"),
         "studentName":  body.get("studentName", "Ẩn danh"),
@@ -673,7 +710,7 @@ async def api_auth_google(request: Request):
         new_uid = int(datetime.now(_tz.utc).timestamp() * 1000)
         user = db.add_user({
             "id": new_uid, "email": email, "name": name,
-            "avatar": avatar[:20] if avatar else name[0].upper() if name else "?",
+            "avatar": avatar if avatar else (name[0].upper() if name else "?"),
             "password": "", "role": "khach", "isRegistered": True,
         })
     elif not user.get("google_id"):
@@ -787,12 +824,63 @@ async def create_class_endpoint(request: Request):
 
 
 @app.get("/api/classes")
-async def list_classes(teacherId: str = None, studentId: str = None):
+async def list_classes(teacherId: str = None, studentId: str = None, email: str = None):
     if teacherId:
         return db.list_classes_by_teacher(teacherId)
     if studentId:
-        return db.list_classes_by_student(studentId)
+        return db.list_classes_by_student(studentId, email)
     return []
+
+
+@app.get("/api/students/pending")
+async def student_pending(studentId: str = None, email: str = None):
+    """
+    Danh sách bài/đề HỌC SINH CHƯA HOÀN THÀNH, tính trực tiếp từ DB:
+      - Bài tập nộp file: chưa nộp & chưa quá hạn.
+      - Đề thi: chưa làm lần nào (đếm bài nộp của ĐỀ theo lớp) & chưa đóng.
+    """
+    if not studentId:
+        return {"count": 0, "items": []}
+
+    now = datetime.now(_tz.utc)
+
+    def _parse(iso):
+        try:
+            return datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    items = []
+    for cls in db.list_classes_by_student(studentId, email):
+        cid = cls.get("id")
+        for a in cls.get("assignments", []):
+            close = _parse(a.get("closeTime") or a.get("dueDate"))
+            if a.get("examId"):
+                if close and now > close:
+                    continue                                  # đã đóng
+                used = sum(
+                    1 for s in db.get_submissions(a["examId"])
+                    if str(s.get("studentId")) == str(studentId)
+                    and str(s.get("classId")) == str(cid)
+                )
+                if used > 0:
+                    continue                                  # đã làm rồi
+            else:
+                if any(str(s.get("studentId")) == str(studentId) for s in a.get("submissions", [])):
+                    continue                                  # đã nộp file
+                if close and now > close:
+                    continue                                  # quá hạn
+            items.append({
+                "classId": cid, "className": cls.get("name", ""),
+                "assignmentId": a.get("id"), "title": a.get("title", ""),
+                "kind": "exam" if a.get("examId") else "homework",
+                "examId": a.get("examId"),
+                "dueDate": a.get("closeTime") or a.get("dueDate"),
+                "openTime": a.get("openTime"),
+            })
+
+    items.sort(key=lambda x: x.get("dueDate") or "")
+    return {"count": len(items), "items": items}
 
 
 # Must come before /{cls_id} to avoid ambiguity
@@ -872,10 +960,28 @@ async def add_assignment_endpoint(cls_id: str, request: Request):
     body = await request.json()
     cls = db.get_class(cls_id)
     if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    exam_id   = body.get("examId") or None
+    open_time = body.get("openTime")
+    close_time = body.get("closeTime") or body.get("dueDate")
+    try:
+        max_attempts = int(body.get("maxAttempts")) if body.get("maxAttempts") else None
+        if max_attempts is not None and max_attempts < 1:
+            max_attempts = None
+    except (TypeError, ValueError):
+        max_attempts = None
+    score_mode = body.get("scoreMode") if body.get("scoreMode") in ("highest", "average", "latest") else "highest"
     asgn = {
         "id": _cls_id(), "title": body.get("title", ""),
         "description": body.get("description", ""),
-        "dueDate": body.get("dueDate"), "examId": body.get("examId") or None,
+        # dueDate giữ cho tương thích cũ; với đề thi nó = closeTime
+        "dueDate": close_time or body.get("dueDate"),
+        "examId": exam_id,
+        "kind": "exam" if exam_id else "homework",
+        "openTime": open_time,
+        "closeTime": close_time,
+        "duration": body.get("duration"),
+        "maxAttempts": max_attempts,     # số lần làm tối đa (None = không giới hạn)
+        "scoreMode": score_mode,         # highest | average | latest
         "attachments": body.get("attachments", []),
         "createdAt": _now_iso(), "submissions": [],
     }
@@ -893,6 +999,80 @@ async def add_assignment_endpoint(cls_id: str, request: Request):
     return asgn
 
 
+@app.get("/api/classes/{cls_id}/exam-window/{exam_id}")
+async def get_class_exam_window(cls_id: str, exam_id: str, studentId: str = None, email: str = None):
+    """
+    Trả về cửa sổ thời gian (mở/đóng) của một ĐỀ THI được giao trong lớp,
+    để trang làm bài giới hạn theo lớp thay vì theo link công khai.
+    """
+    cls = db.get_class(cls_id)
+    if not cls:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+
+    if studentId is not None and not email:
+        u = db.get_user_by_id(str(studentId))
+        email = (u or {}).get("email")
+    em = (email or "").strip().lower()
+    is_member = any(
+        str(m.get("userId")) == str(studentId)
+        or (em and (m.get("email") or "").strip().lower() == em)
+        for m in cls.get("members", [])
+    ) if studentId is not None else None
+
+    # Có thể có nhiều lần giao cùng một đề → chọn lần phù hợp nhất:
+    #   đang mở > sắp mở (gần nhất) > đã đóng (mới nhất).
+    now = datetime.now(_tz.utc)
+
+    def _parse(iso):
+        try:
+            return datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    def _rank(a):
+        op = _parse(a.get("openTime"))
+        cl = _parse(a.get("closeTime") or a.get("dueDate"))
+        created = a.get("createdAt") or ""
+        if (op is None or op <= now) and (cl is None or now <= cl):
+            return (3, created)                       # đang mở
+        if op is not None and now < op:
+            return (2, -(op.timestamp()))             # sắp mở (gần nhất)
+        return (1, created)                           # đã đóng (mới nhất)
+
+    candidates = [a for a in cls.get("assignments", []) if a.get("examId") == exam_id]
+    asgn = max(candidates, key=_rank) if candidates else None
+    if not asgn:
+        return JSONResponse({"assigned": False, "isMember": is_member,
+                             "className": cls.get("name", "")}, status_code=200)
+
+    # Số lần học sinh đã làm (mỗi bài nộp = 1 lần) trong lớp này
+    attempts_used = 0
+    if studentId is not None:
+        try:
+            attempts_used = sum(
+                1 for s in db.get_submissions(exam_id)
+                if str(s.get("studentId")) == str(studentId)
+                and str(s.get("classId")) == str(cls_id)
+            )
+        except Exception:
+            attempts_used = 0
+
+    return {
+        "assigned":   True,
+        "isMember":   is_member,
+        "classId":    cls_id,
+        "className":  cls.get("name", ""),
+        "assignmentId": asgn.get("id"),
+        "title":      asgn.get("title") or "",
+        "openTime":   asgn.get("openTime"),
+        "closeTime":  asgn.get("closeTime") or asgn.get("dueDate"),
+        "duration":   asgn.get("duration"),
+        "maxAttempts": asgn.get("maxAttempts"),
+        "scoreMode":   asgn.get("scoreMode") or "highest",
+        "attemptsUsed": attempts_used,
+    }
+
+
 @app.delete("/api/classes/{cls_id}/assignments/{asgn_id}")
 async def delete_assignment_endpoint(cls_id: str, asgn_id: str):
     cls = db.get_class(cls_id)
@@ -908,6 +1088,15 @@ async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request
     cls = db.get_class(cls_id)
     if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     asgns = cls.get("assignments", [])
+    # Quá hạn nộp → không cho nộp file nữa
+    target = next((a for a in asgns if a["id"] == asgn_id), None)
+    if target:
+        due = target.get("closeTime") or target.get("dueDate")
+        try:
+            if due and datetime.now(_tz.utc) > datetime.fromisoformat(str(due).replace("Z", "+00:00")):
+                return JSONResponse({"error": "Đã quá thời hạn nộp bài."}, status_code=403)
+        except Exception:
+            pass
     for i, a in enumerate(asgns):
         if a["id"] == asgn_id:
             subs = a.get("submissions", [])
@@ -1342,6 +1531,16 @@ _GEN_SECTION_PROMPTS = {
             f'{{"question_number":1,"section":"TIẾNG ANH","question_text":"...","choices":{{"A":"...","B":"...","C":"...","D":"..."}},"answer":"A","has_figure":false,"points":0.25}}'
         ),
     ),
+    "READING": (
+        "multiple_choice",
+        lambda sec, n: (
+            f'Tạo đúng {n} câu trắc nghiệm đọc hiểu (reading comprehension) Tiếng Anh THPT '
+            'bám sát đoạn văn bài đọc đang cho. '
+            'Mỗi câu có 4 đáp án A/B/C/D và 1 đáp án đúng. Nội dung hoàn toàn bằng Tiếng Anh.\n'
+            f'Cấu trúc mỗi phần tử:\n'
+            f'{{"question_number":1,"section":"READING","question_text":"...","choices":{{"A":"...","B":"...","C":"...","D":"..."}},"answer":"A","has_figure":false,"points":0.25}}'
+        ),
+    ),
 }
 
 
@@ -1368,7 +1567,7 @@ async def generate_questions_api(request: Request):
     _, fmt_fn = _GEN_SECTION_PROMPTS.get(section, _GEN_SECTION_PROMPTS["PHẦN I"])
     fmt_desc  = fmt_fn(section, count)
 
-    is_english = section == "TIẾNG ANH"
+    is_english = section in ("TIẾNG ANH", "READING")
     latex_rule = (
         "" if is_english else
         "- LATEX bắt buộc: mọi ký hiệu toán phải trong $...$, ví dụ $x^2+1$, $\\frac{a}{b}$, $\\int_0^1 f(x)\\,dx$\n"

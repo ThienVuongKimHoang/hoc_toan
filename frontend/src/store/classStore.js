@@ -7,8 +7,10 @@ export async function getClassesByTeacher(teacherId) {
   return res.json()
 }
 
-export async function getClassesByStudent(studentId) {
-  const res = await fetch(`${API}?studentId=${studentId}`)
+export async function getClassesByStudent(studentId, email) {
+  const qs = new URLSearchParams({ studentId: String(studentId) })
+  if (email) qs.set('email', email)
+  const res = await fetch(`${API}?${qs}`)
   if (!res.ok) return []
   return res.json()
 }
@@ -70,13 +72,40 @@ export async function removeMemberFromClass(classId, userId) {
   return res.json()
 }
 
-export async function addAssignment(classId, { title, description, examId, dueDate, attachments }) {
+export async function addAssignment(classId, { title, description, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, attachments }) {
   const res = await fetch(`${API}/${classId}/assignments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, description, examId: examId || null, dueDate, attachments: attachments || [] }),
+    body: JSON.stringify({
+      title, description, examId: examId || null,
+      dueDate, openTime: openTime || null, closeTime: closeTime || null,
+      duration: duration ?? null,
+      maxAttempts: maxAttempts ?? null,
+      scoreMode: scoreMode || 'highest',
+      attachments: attachments || [],
+    }),
   })
   if (!res.ok) throw new Error('Giao bài thất bại')
+  return res.json()
+}
+
+/** Bài/đề học sinh CHƯA hoàn thành (tính từ DB, đề thi xét theo bài nộp của đề). */
+export async function getPendingForStudent(studentId, email) {
+  const qs = new URLSearchParams({ studentId: String(studentId) })
+  if (email) qs.set('email', email)
+  const res = await fetch(`/api/students/pending?${qs}`)
+  if (!res.ok) return { count: 0, items: [] }
+  return res.json()
+}
+
+/** Cửa sổ thời gian của một đề thi được giao trong lớp (cho trang làm bài). */
+export async function getExamWindow(classId, examId, studentId, email) {
+  const qs = new URLSearchParams()
+  if (studentId != null) qs.set('studentId', String(studentId))
+  if (email) qs.set('email', email)
+  const s = qs.toString()
+  const res = await fetch(`${API}/${classId}/exam-window/${examId}${s ? `?${s}` : ''}`)
+  if (!res.ok) return null
   return res.json()
 }
 

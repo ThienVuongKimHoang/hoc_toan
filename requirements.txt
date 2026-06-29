@@ -1,9 +1,22 @@
+# ─── Web framework + ASGI server ───
 fastapi==0.128.8
 uvicorn==0.39.0
+python-multipart==0.0.20          # FastAPI: upload file / form data
+
+# ─── Database ───
+psycopg2-binary==2.9.9            # PostgreSQL driver
+
+# ─── Trích xuất PDF ───
+pymupdf==1.26.5                   # import fitz
+
+# ─── AI (Groq LLM Vision/Text) ───
 groq==1.0.0
-psycopg2-binary==2.9.9
-pymupdf==1.26.5
-python-multipart==0.0.20
-python-dotenv==1.0.1
-google-auth==2.40.3
-httpx==0.28.1
+httpx==0.28.1                     # HTTP client (groq SDK dùng)
+
+# ─── Đăng nhập Google OAuth ───
+google-auth==2.39.0               # google.oauth2.id_token, google.auth.transport
+requests==2.32.3                  # google.auth.transport.requests cần
+
+# ─── Tiện ích ───
+python-dotenv==1.2.1              # đọc .env
+psutil==7.0.0                     # /api/admin/stats (CPU/RAM/disk)

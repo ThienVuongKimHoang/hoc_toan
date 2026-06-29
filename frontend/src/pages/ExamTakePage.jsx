@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { calcMaxScore, calcScore, examStatus, fetchExamById, submitResult } from '../store/examStore.js'
+import { getExamWindow } from '../store/classStore.js'
 import QuestionCard from '../components/QuestionCard.jsx'
+import ReadingTakeView from '../components/ReadingTakeView.jsx'
 import NameSelectModal from '../components/NameSelectModal.jsx'
 
 const SECTION_LABELS = {
@@ -8,6 +10,7 @@ const SECTION_LABELS = {
   'PHẦN II':   { label: 'Phần II – Đúng / Sai',          color: '#7c3aed' },
   'PHẦN III':  { label: 'Phần III – Trả lời ngắn',       color: '#059669' },
   'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm',      color: '#0f766e' },
+  'READING':   { label: 'Reading – Bài đọc',            color: '#0e7490' },
 }
 
 function getSectionList(exam) {
@@ -218,7 +221,7 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
       setFinalMax(maxScore)
       setSubmitted(true)
     } catch (e) {
-      setSubmitErr('Nộp bài thất bại. Vui lòng thử lại.')
+      setSubmitErr(e?.message || 'Nộp bài thất bại. Vui lòng thử lại.')
     } finally {
       setSubmitting(false)
     }
@@ -305,9 +308,16 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
         )}
 
         <div className="question-list">
-          {questions.length === 0
-            ? <p className="empty-msg">Không có câu hỏi nào trong phần này.</p>
-            : questions.map((q, i) => (
+          {questions.length === 0 ? (
+            <p className="empty-msg">Không có câu hỏi nào trong phần này.</p>
+          ) : activeSection === 'READING' ? (
+            <ReadingTakeView
+              questions={questions}
+              examMode={true}
+              onAnswerChange={handleAnswerChange}
+            />
+          ) : (
+            questions.map((q, i) => (
               <QuestionCard
                 key={`${q.section}-${q.question_number}-${i}`}
                 q={q} index={i}
@@ -315,7 +325,7 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
                 onAnswerChange={handleAnswerChange}
               />
             ))
-          }
+          )}
         </div>
 
         {/* Section navigation at bottom */}
@@ -348,12 +358,46 @@ export default function ExamTakePage({ examId, classId, user, onGoHome, onGoLogi
   const [studentName, setStudentName] = useState(null)
 
   useEffect(() => {
-    fetchExamById(examId).then(e => {
-      if (!e || !e.published) { setNotFound(true); return }
+    let cancelled = false
+    ;(async () => {
+      const e = await fetchExamById(examId)
+      if (cancelled) return
+      if (!e) { setNotFound(true); return }
+
+      // Làm bài qua LỚP: dùng cửa sổ thời gian của bài được giao, không cần link công khai.
+      if (classId) {
+        const win = await getExamWindow(classId, examId, user?.id, user?.email)
+        if (cancelled) return
+        if (win && win.assigned) {
+          const merged = {
+            ...e,
+            published: true,
+            settings: {
+              ...e.settings,
+              openTime:  win.openTime  || e.settings?.openTime,
+              closeTime: win.closeTime || e.settings?.closeTime,
+              duration:  win.duration  ?? e.settings?.duration,
+              password:  null,   // lớp học là cổng vào — không cần mật khẩu công khai
+            },
+            _classGated:   true,
+            _className:    win.className,
+            _maxAttempts:  win.maxAttempts ?? null,
+            _attemptsUsed: win.attemptsUsed ?? 0,
+            _scoreMode:    win.scoreMode || 'highest',
+          }
+          setExam(merged)
+          setStatus(examStatus(merged))
+          return
+        }
+      }
+
+      // Link công khai (như cũ): cần đề đã xuất bản.
+      if (!e.published) { setNotFound(true); return }
       setExam(e)
       setStatus(examStatus(e))
-    })
-  }, [examId])
+    })()
+    return () => { cancelled = true }
+  }, [examId, classId, user?.id])
 
   useEffect(() => {
     if (!exam) return
@@ -425,6 +469,23 @@ export default function ExamTakePage({ examId, classId, user, onGoHome, onGoLogi
   if (status === 'expired') return <ExpiredView exam={exam} onGoHome={onGoHome} />
   if (status === 'pending') return <LockedView  exam={exam} onGoHome={onGoHome} />
 
+  // Hết lượt làm (giao theo lớp có giới hạn số lần)
+  if (exam._classGated && exam._maxAttempts && exam._attemptsUsed >= exam._maxAttempts) {
+    return (
+      <div className="et-locked">
+        <div className="etl-card">
+          <div className="etl-icon">🔒</div>
+          <h1 className="etl-title">{exam.title}</h1>
+          <div className="etl-expired-msg">Bạn đã làm đủ {exam._maxAttempts} lần cho phép.</div>
+          <p style={{ color: '#64748b', marginTop: 8 }}>
+            Đề này giới hạn số lần làm. Liên hệ giáo viên nếu cần thêm lượt.
+          </p>
+          <button className="btn-primary" style={{ marginTop: 20 }} onClick={onGoHome}>← Trang chủ</button>
+        </div>
+      </div>
+    )
+  }
+
   if (exam.settings?.password && !pwdUnlocked) {
     return <PasswordGate exam={exam} onCorrect={() => setPwdUnlocked(true)} />
   }
@@ -442,7 +503,7 @@ export default function ExamTakePage({ examId, classId, user, onGoHome, onGoLogi
   const classInfo = classId && exam?.classes?.length
     ? (exam.classes.find(c => c.id === classId) || null)
     : null
-  const resolvedClassName = classInfo?.name || null
+  const resolvedClassName = classInfo?.name || exam?._className || null
 
   return (
     <ExamView

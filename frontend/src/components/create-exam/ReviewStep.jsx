@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import EditableQuestion from './EditableQuestion.jsx'
+import ReadingSection from './ReadingSection.jsx'
 import MixExamModal from '../MixExamModal.jsx'
 
 function isUnanswered(q, sec) {
-  if (sec === 'PHẦN I' || sec === 'TIẾNG ANH') return q.answer === null || q.answer === undefined
+  if (sec === 'PHẦN I' || sec === 'TIẾNG ANH' || sec === 'READING') return q.answer === null || q.answer === undefined
   if (sec === 'PHẦN III') return !q.answer || !q.answer.toString().trim()
   return false
 }
@@ -14,6 +15,7 @@ const SECTION_META = {
   'PHẦN II':   { label: 'Đúng / Sai',    color: '#7c3aed', shortLabel: 'Phần II' },
   'PHẦN III':  { label: 'Trả lời ngắn',  color: '#059669', shortLabel: 'Phần III' },
   'TIẾNG ANH': { label: 'Trắc nghiệm',   color: '#0f766e', shortLabel: 'Tiếng Anh' },
+  'READING':   { label: 'Bài đọc',       color: '#0e7490', shortLabel: 'Reading' },
 }
 
 let _uidSeq = Date.now()
@@ -43,6 +45,7 @@ const EMPTY_FN = {
   'PHẦN II':   emptyTF,
   'PHẦN III':  emptyShort,
   'TIẾNG ANH': (n) => emptyMCQ(n, 'TIẾNG ANH'),
+  'READING':   (n) => ({ ...emptyMCQ(n, 'READING'), passage_group: 1 }),
 }
 
 /* ── Insert-between button ── */
@@ -363,7 +366,18 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
           </span>
         </div>
 
-        {questions.length === 0 ? (
+        {activeSection === 'READING' ? (
+          <ReadingSection
+            questions={questions}
+            grade={grade}
+            pointsPerQ={sections[activeSection]?.points_per_q}
+            onReport={handleReport}
+            onChange={(newQs) => setSections(prev => ({
+              ...prev,
+              READING: { ...prev.READING, questions: newQs },
+            }))}
+          />
+        ) : questions.length === 0 ? (
           <div className="rs-empty">
             <div className="rs-empty-icon">📭</div>
             <p>Chưa có câu hỏi nào trong phần này</p>

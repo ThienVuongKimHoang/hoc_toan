@@ -31,8 +31,10 @@ const SECTION_LABELS = {
   'PHẦN III': { label: 'Phần III – Trả lời ngắn', color: '#059669' },
 }
 const ENGLISH_SECTION = 'TIẾNG ANH'
+const READING_SECTION = 'READING'
 const ENGLISH_LABELS = {
-  'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm (40 câu)', color: '#0f766e' },
+  'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm', color: '#0f766e' },
+  'READING':   { label: 'Reading – Bài đọc',       color: '#0e7490' },
 }
 const USER_KEY = 'hoctoan_user'
 
@@ -46,6 +48,7 @@ function parseHash() {
     return { view: 'take-exam', examId: rest, classId: null }
   }
   if (hash.startsWith('join/')) return { view: 'my-classes', examId: null, classId: hash.slice(5) }
+  if (hash.startsWith('class/')) return { view: 'my-classes', examId: null, classId: null, openClassId: hash.slice(6) }
   if (hash.startsWith('lobby/')) return { view: 'exam-lobby', examId: hash.slice(6) || null, classId: null }
   if (hash === 'lobby') return { view: 'exam-lobby', examId: null, classId: null }
   if (hash.startsWith('practice/')) return { view: 'practice-exam', examId: hash.slice(9), classId: null }
@@ -145,6 +148,7 @@ export default function App() {
   const [view, setView] = useState(() => parseHash().view)
   const [examId, setExamId] = useState(() => parseHash().examId)
   const [classId, setClassId] = useState(() => parseHash().classId ?? null)
+  const [openClassId, setOpenClassId] = useState(() => parseHash().openClassId ?? null)
   const [editingExam, setEditingExam] = useState(null)
   const [resultsExam, setResultsExam] = useState(null)
   const [manualMode, setManualMode] = useState(false)
@@ -155,8 +159,8 @@ export default function App() {
 
   useEffect(() => {
     const onHash = () => {
-      const { view: v, examId: id, classId: cid } = parseHash()
-      setView(v); setExamId(id); setClassId(cid ?? null)
+      const { view: v, examId: id, classId: cid, openClassId: ocid } = parseHash()
+      setView(v); setExamId(id); setClassId(cid ?? null); setOpenClassId(ocid ?? null)
     }
     window.addEventListener('popstate', onHash)
     window.addEventListener('hashchange', onHash)
@@ -185,7 +189,8 @@ export default function App() {
   const goAdmin = () => user ? (setHash('admin'), setView('super-admin')) : goLogin()
   const goStudy = () => user ? (setHash('study'), setView('study')) : goLogin()
   const goClasses = () => user ? (setHash('classes'), setView('class-mgmt')) : goLogin()
-  const goMyClasses = () => user ? (setHash('my-classes'), setView('my-classes')) : goLogin()
+  const goMyClasses = () => user ? (setClassId(null), setOpenClassId(null), setHash('my-classes'), setView('my-classes')) : goLogin()
+  const openClass = (cid) => user ? (setClassId(null), setOpenClassId(cid), setHash(`class/${cid}`), setView('my-classes')) : goLogin()
   const goTools = () => user ? setShowTeacherTools(true) : goLogin()
 
   // Sảnh chờ thi — không yêu cầu đăng nhập (auth xử lý trong ExamTakePage)
@@ -324,7 +329,9 @@ export default function App() {
   const resetExam = () => { setPhase('idle'); setEvents([]); setResult(null) }
 
   const isEnglish = result?.subject === 'english'
-  const effectiveSecs = isEnglish ? [ENGLISH_SECTION] : SECTIONS
+  const effectiveSecs = isEnglish
+    ? [ENGLISH_SECTION, READING_SECTION].filter(s => result.sections?.[s])
+    : SECTIONS
   const effectiveLbls = isEnglish ? ENGLISH_LABELS : SECTION_LABELS
   const questions = result?.sections?.[activeSection]?.questions ?? []
 
@@ -343,6 +350,7 @@ export default function App() {
       onGoStudy={goStudy}
       onGoClasses={goClasses}
       onGoMyClasses={goMyClasses}
+      onOpenClass={openClass}
       onGoTools={goTools}
     />
   )
@@ -421,7 +429,7 @@ export default function App() {
     return (
       <>
         {header}
-        <MyClassesPage user={user} initialJoinCode={classId ?? ''} />
+        <MyClassesPage user={user} initialJoinCode={classId ?? ''} initialClassId={openClassId} />
         {teacherToolOverlays}
       </>
     )

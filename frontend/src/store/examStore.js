@@ -156,7 +156,11 @@ export async function submitResult(examId, { studentName, studentId, answers, sc
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify(body),
   })
-  if (!res.ok) throw new Error('Nộp bài thất bại')
+  if (!res.ok) {
+    let msg = 'Nộp bài thất bại'
+    try { const e = await res.json(); if (e?.error) msg = e.error } catch {}
+    throw new Error(msg)
+  }
   return res.json()
 }
 
@@ -289,6 +293,15 @@ export function calcScore(exam, answers) {
     })
   }
 
+  // READING — trắc nghiệm bài đọc (key: RD_N)
+  const rd = secs['READING']
+  if (rd) {
+    const ppq = rd.points_per_q || 0.25
+    ;(rd.questions || []).forEach(q => {
+      if (q.answer && answers[`RD_${q.question_number}`] === q.answer) score += ppq
+    })
+  }
+
   return Math.round(score * 100) / 100
 }
 
@@ -310,6 +323,13 @@ export function calcMaxScore(exam) {
   if (en) {
     const ppq = en.points_per_q || 0.25
     const answered = (en.questions || []).filter(q => q.answer)
+    max += answered.length * ppq
+  }
+
+  const rd = secs['READING']
+  if (rd) {
+    const ppq = rd.points_per_q || 0.25
+    const answered = (rd.questions || []).filter(q => q.answer)
     max += answered.length * ppq
   }
 

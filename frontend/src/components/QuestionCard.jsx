@@ -13,7 +13,6 @@ function toPassageHTML(text) {
   return text
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/__([^_]+)__/g, '<u>$1</u>')
     .replace(/\n\n+/g, '<div class="passage-para-break"></div>')
     .replace(/\n/g, '<br>')
 }
@@ -46,7 +45,7 @@ function PassageBlock({ title, text }) {
 }
 
 /* ── Trắc nghiệm 1 đáp án (PHẦN I Toán + Tiếng Anh) ── */
-function MultipleChoiceCard({ q, examMode, onAnswerChange }) {
+function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false }) {
   const [selected, setSelected] = useState(null)
   const correct = q.answer  // null nếu không có đáp án
 
@@ -73,7 +72,7 @@ function MultipleChoiceCard({ q, examMode, onAnswerChange }) {
 
   return (
     <div className="q-body">
-      <PassageBlock title={q.passage_title} text={q.passage_text} />
+      {!hidePassage && <PassageBlock title={q.passage_title} text={q.passage_text} />}
       <p className="q-text"><MathText text={q.question_text} /></p>
       <FigureImages path={q.figure_path} />
       <div className="choices">
@@ -219,19 +218,21 @@ const SECTION_CLASS = {
   'PHẦN II':   'phan-2',
   'PHẦN III':  'phan-3',
   'TIẾNG ANH': 'phan-english',
+  'READING':   'phan-english',
 }
 const SECTION_PREFIX = {
   'PHẦN I':    'I',
   'PHẦN II':   'II',
   'PHẦN III':  'III',
   'TIẾNG ANH': 'EN',
+  'READING':   'RD',
 }
 
 function _isMultipleChoice(q) {
-  return q.section === 'PHẦN I' || q.section === 'TIẾNG ANH'
+  return q.section === 'PHẦN I' || q.section === 'TIẾNG ANH' || q.section === 'READING'
 }
 
-export default function QuestionCard({ q, index, examMode = false, onAnswerChange }) {
+export default function QuestionCard({ q, index, examMode = false, onAnswerChange, hidePassage = false }) {
   const [expanded, setExpanded] = useState(true)
   const points   = q.points ? `${q.points}đ` : ''
   const secClass = SECTION_CLASS[q.section] || 'phan-1'
@@ -241,7 +242,7 @@ export default function QuestionCard({ q, index, examMode = false, onAnswerChang
   const handleChange = (ans) => onAnswerChange?.(qKey, ans)
 
   const hasAnswer = q.answer != null
-  const isEnglish = q.section === 'TIẾNG ANH'
+  const isEnglish = q.section === 'TIẾNG ANH' || q.section === 'READING'
 
   return (
     <div className={`question-card ${secClass}`}>
@@ -257,7 +258,7 @@ export default function QuestionCard({ q, index, examMode = false, onAnswerChang
 
       {expanded && (
         _isMultipleChoice(q) ? (
-          <MultipleChoiceCard q={q} examMode={examMode} onAnswerChange={handleChange} />
+          <MultipleChoiceCard q={q} examMode={examMode} onAnswerChange={handleChange} hidePassage={hidePassage} />
         ) : q.section === 'PHẦN II' ? (
           <TrueFalseCard q={q} examMode={examMode} onAnswerChange={handleChange} />
         ) : (

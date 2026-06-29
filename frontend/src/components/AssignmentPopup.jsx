@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { getClassesByStudent } from '../store/classStore.js'
+import { getPendingForStudent } from '../store/classStore.js'
 
 export default function AssignmentPopup({ user, onGoMyClasses }) {
   const [pending, setPending] = useState([])
@@ -7,20 +7,9 @@ export default function AssignmentPopup({ user, onGoMyClasses }) {
 
   useEffect(() => {
     if (!user) return
-    getClassesByStudent(String(user.id)).then(classes => {
-      const now = new Date()
-      const found = []
-      for (const cls of classes) {
-        for (const a of cls.assignments || []) {
-          const mine = (a.submissions || []).find(s => String(s.studentId) === String(user.id))
-          if (!mine && a.dueDate && new Date(a.dueDate) > now) {
-            found.push({ ...a, className: cls.name, classId: cls.id })
-          }
-        }
-      }
-      if (found.length > 0) {
-        found.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
-        setPending(found)
+    getPendingForStudent(String(user.id), user.email).then(({ items }) => {
+      if (items && items.length > 0) {
+        setPending(items)
         setOpen(true)
       }
     }).catch(() => {})

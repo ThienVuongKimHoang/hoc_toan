@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { getExamsByTeacher } from '../store/examStore.js'
+import { getExamsByTeacher, getSubmissions as getExamSubmissions, fetchExamById } from '../store/examStore.js'
+import QuestionStats from '../components/QuestionStats.jsx'
 import {
   addAssignment, addDocument, addMemberToClass, createClass,
   deleteClass, getClassById, getClassesByTeacher, getSubmissions,
@@ -166,12 +167,48 @@ function FileChip({ file, onRemove, onView }) {
 function SubmissionsPanel({ classId, assignment, members, onClose }) {
   const [data, setData] = useState(null)
   const [viewing, setViewing] = useState(null)
+  const isExam = !!assignment.examId
 
   useEffect(() => {
-    getSubmissions(classId, assignment.id)
-      .then(setData)
-      .catch(() => setData({ submissions: [], members: members || [] }))
-  }, [classId, assignment.id])
+    if (isExam) {
+      // Đề thi: kết quả nằm ở bài nộp của ĐỀ, lọc theo lớp; gộp nhiều lần làm theo cách tính điểm.
+      const mode = assignment.scoreMode || 'highest'
+      Promise.all([
+        getExamSubmissions(assignment.examId),
+        fetchExamById(assignment.examId),
+      ])
+        .then(([d, examObj]) => {
+          const all = (d.submissions || []).filter(s => String(s.classId) === String(classId))
+          const byStudent = new Map()
+          all.forEach(s => {
+            const k = String(s.studentId)
+            if (!byStudent.has(k)) byStudent.set(k, [])
+            byStudent.get(k).push(s)
+          })
+          const rows = [...byStudent.values()].map(list => {
+            list.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt))
+            const last   = list[list.length - 1]
+            const scores = list.map(s => s.score ?? 0)
+            let score
+            if (mode === 'average')     score = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
+            else if (mode === 'latest') score = last.score
+            else                        score = Math.max(...scores)   // highest
+            return {
+              studentId: last.studentId, studentName: last.studentName,
+              score, maxScore: last.maxScore, attempts: list.length,
+              submittedAt: last.submittedAt,
+            }
+          })
+          // rawSubs: giữ từng lần làm để thống kê theo câu (gộp "Tên ×N" nếu sai nhiều lần)
+          setData({ submissions: rows, rawSubs: all, examObj, mode })
+        })
+        .catch(() => setData({ submissions: [], rawSubs: [], examObj: null, mode }))
+    } else {
+      getSubmissions(classId, assignment.id)
+        .then(setData)
+        .catch(() => setData({ submissions: [], members: members || [] }))
+    }
+  }, [classId, assignment.id, isExam])
 
   if (!data) return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -192,10 +229,19 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
       <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
         <div className="modal-box" style={{maxWidth:680,maxHeight:'90vh',overflowY:'auto'}}>
           <div className="modal-header">
-            <h2>📊 Bài nộp — {assignment.title}</h2>
+            <h2>📊 {isExam ? 'Kết quả' : 'Bài nộp'} — {assignment.title}</h2>
             <button className="modal-close" onClick={onClose}>✕</button>
           </div>
           <div style={{padding:'0 24px 24px'}}>
+            {isExam && (
+              <div className="cm-info-note" style={{marginBottom:12}}>
+                🏆 Cách tính điểm: <strong>{
+                  data.mode === 'average' ? 'Trung bình các lần' :
+                  data.mode === 'latest' ? 'Lần làm gần nhất' : 'Điểm cao nhất'
+                }</strong>
+                {assignment.maxAttempts ? ` · Tối đa ${assignment.maxAttempts} lần` : ' · Không giới hạn số lần'}
+              </div>
+            )}
             <div className="sub-stats-row">
               <div className="sub-stat sub-stat--done">
                 {IC.check(18)}<span>{submissions.length}/{members.length}</span><small>Đã nộp</small>
@@ -216,7 +262,10 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
                     <div className="sub-avatar">{s.studentName?.[0] ?? '?'}</div>
                     <div className="sub-info">
                       <div className="sub-name">{s.studentName}</div>
-                      <div className="sub-time">{IC.clock(11)} {formatDt(s.submittedAt)}</div>
+                      <div className="sub-time">
+                        {IC.clock(11)} {formatDt(s.submittedAt)}
+                        {isExam && s.attempts > 1 && <span> · {s.attempts} lần làm</span>}
+                      </div>
                       {s.note && <div className="sub-note">"{s.note}"</div>}
                       {s.files?.length > 0 && (
                         <div className="file-chip-list" style={{marginTop:6}}>
@@ -226,10 +275,22 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
                         </div>
                       )}
                     </div>
-                    <span className="sub-badge sub-badge--done">{IC.check(11)} Đã nộp</span>
+                    {isExam && s.score != null ? (
+                      <span className="sub-badge sub-badge--done">
+                        {s.score}/{s.maxScore ?? '—'} điểm
+                      </span>
+                    ) : (
+                      <span className="sub-badge sub-badge--done">{IC.check(11)} Đã nộp</span>
+                    )}
                   </div>
                 ))}
               </>
+            )}
+
+            {isExam && data.examObj && (data.rawSubs?.length ?? 0) > 0 && (
+              <div style={{marginTop:16}}>
+                <QuestionStats exam={data.examObj} subs={data.rawSubs} />
+              </div>
             )}
 
             {notSubmitted.length > 0 && (
@@ -366,11 +427,23 @@ function AddStudentModal({ classMembers, onClose, onAdd }) {
 /* ─── Assignment form modal ─── */
 function AssignmentModal({ teacherId, onClose, onSave }) {
   const exams = getExamsByTeacher(teacherId).filter(e => e.published)
+  const today = new Date().toISOString().slice(0, 10)
+  const weekLater = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10)
+
+  const [mode, setMode] = useState('exam')   // 'exam' | 'homework'
   const [title,       setTitle]       = useState('')
   const [desc,        setDesc]        = useState('')
+  const [examId,      setExamId]      = useState('')
+  // Homework deadline
   const [dueDate,     setDueDate]     = useState('')
   const [dueTime,     setDueTime]     = useState('23:59')
-  const [examId,      setExamId]      = useState('')
+  // Exam window (mở / đóng)
+  const [openDate,    setOpenDate]    = useState(today)
+  const [openTime,    setOpenTime]    = useState('08:00')
+  const [closeDate,   setCloseDate]   = useState(weekLater)
+  const [closeTime,   setCloseTime]   = useState('23:59')
+  const [maxAttempts, setMaxAttempts] = useState('')        // '' = không giới hạn
+  const [scoreMode,   setScoreMode]   = useState('highest') // highest | average | latest
   const [attachments, setAttachments] = useState([])
   const [uploading,   setUploading]   = useState(false)
   const [viewing,     setViewing]     = useState(null)
@@ -379,72 +452,160 @@ function AssignmentModal({ teacherId, onClose, onSave }) {
   const handleUploaded = (files) => setAttachments(prev => [...prev, ...files])
   const removeAttach   = (id) => setAttachments(prev => prev.filter(f => f.id !== id))
 
-  const submit = () => {
-    if (!title.trim()) { setErr('Vui lòng nhập tiêu đề bài tập.'); return }
-    if (!dueDate)      { setErr('Vui lòng chọn ngày hạn nộp.');    return }
-    if (!dueTime)      { setErr('Vui lòng chọn giờ hạn nộp.');     return }
-    const iso = new Date(`${dueDate}T${dueTime}`).toISOString()
-    onSave({ title: title.trim(), description: desc.trim(), examId: examId || null, dueDate: iso, attachments })
+  const pickExam = (id) => {
+    setExamId(id)
+    const ex = exams.find(e => e.id === id)
+    if (ex && !title.trim()) setTitle(ex.title)
   }
 
-  const minDate = new Date().toISOString().slice(0, 10)
+  const submit = () => {
+    if (mode === 'exam') {
+      if (!examId)    { setErr('Vui lòng chọn đề thi để giao.'); return }
+      if (!openDate || !closeDate) { setErr('Vui lòng chọn thời gian mở và đóng.'); return }
+      const openIso  = new Date(`${openDate}T${openTime}`).toISOString()
+      const closeIso = new Date(`${closeDate}T${closeTime}`).toISOString()
+      if (new Date(closeIso) <= new Date(openIso)) { setErr('Thời gian đóng phải sau thời gian mở.'); return }
+      const ex = exams.find(e => e.id === examId)
+      onSave({
+        title: (title.trim() || ex?.title || 'Đề thi'),
+        description: desc.trim(), examId,
+        openTime: openIso, closeTime: closeIso,
+        dueDate: closeIso, duration: ex?.settings?.duration ?? null,
+        maxAttempts: maxAttempts ? Math.max(1, parseInt(maxAttempts, 10) || 1) : null,
+        scoreMode,
+        attachments: [],
+      })
+      return
+    }
+    // homework
+    if (!title.trim()) { setErr('Vui lòng nhập tiêu đề bài tập.'); return }
+    if (!dueDate)      { setErr('Vui lòng chọn ngày hạn nộp.');    return }
+    const iso = new Date(`${dueDate}T${dueTime}`).toISOString()
+    onSave({ title: title.trim(), description: desc.trim(), examId: null, dueDate: iso, attachments })
+  }
+
+  const selectedExam = exams.find(e => e.id === examId)
 
   return (
     <>
       <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
         <div className="modal-box" style={{maxWidth:560,maxHeight:'92vh',overflowY:'auto'}}>
           <div className="modal-header">
-            <h2>📝 Giao bài tập</h2>
+            <h2>{mode === 'exam' ? '📋 Giao đề thi' : '📝 Giao bài tập'}</h2>
             <button className="modal-close" onClick={onClose}>✕</button>
           </div>
           <div style={{padding:'0 24px 24px'}}>
-            <label className="cm-label">Tiêu đề *</label>
-            <input className="cm-input" placeholder="VD: Bài tập về nhà số 3"
-              value={title} onChange={e => setTitle(e.target.value)} autoFocus />
-
-            <label className="cm-label" style={{marginTop:14}}>Mô tả / Hướng dẫn</label>
-            <textarea className="cm-input cm-textarea" rows={3}
-              placeholder="Hướng dẫn làm bài (tuỳ chọn)"
-              value={desc} onChange={e => setDesc(e.target.value)} />
-
-            <label className="cm-label" style={{marginTop:14}}>⏰ Hạn nộp *</label>
-            <div style={{display:'flex',gap:10}}>
-              <input type="date" className="cm-input" style={{flex:2}}
-                value={dueDate} min={minDate} onChange={e => setDueDate(e.target.value)} />
-              <input type="time" className="cm-input" style={{flex:1}}
-                value={dueTime} onChange={e => setDueTime(e.target.value)} />
+            {/* Mode switch */}
+            <div className="cm-mode-tabs">
+              <button className={`cm-mode-tab ${mode === 'exam' ? 'active' : ''}`}
+                onClick={() => { setMode('exam'); setErr('') }}>📋 Giao đề thi</button>
+              <button className={`cm-mode-tab ${mode === 'homework' ? 'active' : ''}`}
+                onClick={() => { setMode('homework'); setErr('') }}>📝 Bài tập / nộp file</button>
             </div>
 
-            {exams.length > 0 && (
+            {mode === 'exam' ? (
               <>
+                <label className="cm-label">Chọn đề thi *</label>
+                {exams.length === 0 ? (
+                  <div className="cm-info-note">Bạn chưa có đề thi nào đã xuất bản. Hãy tạo & xuất bản đề trước.</div>
+                ) : (
+                  <select className="cm-input cm-select" value={examId} onChange={e => pickExam(e.target.value)} autoFocus>
+                    <option value="">— Chọn đề —</option>
+                    {exams.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
+                  </select>
+                )}
+                {selectedExam && (
+                  <div className="cm-info-note">
+                    📊 {selectedExam.totalQuestions} câu · ⏱ {selectedExam.settings?.duration ?? '—'} phút làm bài
+                  </div>
+                )}
+
+                <label className="cm-label" style={{marginTop:14}}>🟢 Mở đề *</label>
+                <div style={{display:'flex',gap:10}}>
+                  <input type="date" className="cm-input" style={{flex:2}}
+                    value={openDate} onChange={e => setOpenDate(e.target.value)} />
+                  <input type="time" className="cm-input" style={{flex:1}}
+                    value={openTime} onChange={e => setOpenTime(e.target.value)} />
+                </div>
+
+                <label className="cm-label" style={{marginTop:14}}>🔴 Đóng đề *</label>
+                <div style={{display:'flex',gap:10}}>
+                  <input type="date" className="cm-input" style={{flex:2}}
+                    value={closeDate} onChange={e => setCloseDate(e.target.value)} />
+                  <input type="time" className="cm-input" style={{flex:1}}
+                    value={closeTime} onChange={e => setCloseTime(e.target.value)} />
+                </div>
+
+                <div style={{display:'flex',gap:12,marginTop:14}}>
+                  <div style={{flex:1}}>
+                    <label className="cm-label">🔁 Số lần làm tối đa</label>
+                    <input type="number" min="1" className="cm-input"
+                      placeholder="Không giới hạn"
+                      value={maxAttempts} onChange={e => setMaxAttempts(e.target.value)} />
+                  </div>
+                  <div style={{flex:1.4}}>
+                    <label className="cm-label">🏆 Cách tính điểm</label>
+                    <select className="cm-input cm-select" value={scoreMode} onChange={e => setScoreMode(e.target.value)}>
+                      <option value="highest">Lấy điểm cao nhất</option>
+                      <option value="average">Lấy điểm trung bình</option>
+                      <option value="latest">Lấy lần làm gần nhất</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="cm-info-note" style={{marginTop:8}}>
+                  {scoreMode === 'highest' && '🏆 Điểm ghi nhận = lần làm CAO NHẤT.'}
+                  {scoreMode === 'average' && '➗ Điểm ghi nhận = TRUNG BÌNH các lần làm.'}
+                  {scoreMode === 'latest'  && '🕒 Điểm ghi nhận = lần làm GẦN NHẤT.'}
+                  {maxAttempts ? ` Tối đa ${maxAttempts} lần làm.` : ' Không giới hạn số lần làm.'}
+                </div>
+
+                <label className="cm-label" style={{marginTop:14}}>Ghi chú cho học sinh <span style={{color:'#94a3b8',fontWeight:400}}>(tuỳ chọn)</span></label>
+                <textarea className="cm-input cm-textarea" rows={2}
+                  placeholder="VD: Làm nghiêm túc, không trao đổi…"
+                  value={desc} onChange={e => setDesc(e.target.value)} />
+
+                <div className="cm-info-note" style={{marginTop:12}}>
+                  📌 Học sinh trong lớp vào mục <strong>Lớp của tôi</strong> → bấm <strong>Làm bài</strong> để thi trực tiếp, không cần link công khai.
+                </div>
+              </>
+            ) : (
+              <>
+                <label className="cm-label">Tiêu đề *</label>
+                <input className="cm-input" placeholder="VD: Bài tập về nhà số 3"
+                  value={title} onChange={e => setTitle(e.target.value)} autoFocus />
+
+                <label className="cm-label" style={{marginTop:14}}>Mô tả / Hướng dẫn</label>
+                <textarea className="cm-input cm-textarea" rows={3}
+                  placeholder="Hướng dẫn làm bài (tuỳ chọn)"
+                  value={desc} onChange={e => setDesc(e.target.value)} />
+
+                <label className="cm-label" style={{marginTop:14}}>⏰ Hạn nộp *</label>
+                <div style={{display:'flex',gap:10}}>
+                  <input type="date" className="cm-input" style={{flex:2}}
+                    value={dueDate} min={today} onChange={e => setDueDate(e.target.value)} />
+                  <input type="time" className="cm-input" style={{flex:1}}
+                    value={dueTime} onChange={e => setDueTime(e.target.value)} />
+                </div>
+
                 <label className="cm-label" style={{marginTop:14}}>
-                  🔗 Liên kết đề thi <span style={{color:'#94a3b8',fontWeight:400}}>(tuỳ chọn)</span>
+                  📎 Tài liệu đính kèm <span style={{color:'#94a3b8',fontWeight:400}}>(tuỳ chọn)</span>
                 </label>
-                <select className="cm-input cm-select" value={examId} onChange={e => setExamId(e.target.value)}>
-                  <option value="">— Không liên kết —</option>
-                  {exams.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
-                </select>
-                {examId && <div className="cm-info-note">📌 Học sinh sẽ làm trực tiếp đề thi, không cần nộp file.</div>}
+                {attachments.length > 0 && (
+                  <div className="file-chip-list">
+                    {attachments.map(f => (
+                      <FileChip key={f.id} file={f} onRemove={removeAttach} onView={setViewing} />
+                    ))}
+                  </div>
+                )}
+                <FileDropZone onUploaded={handleUploaded} uploading={uploading} setUploading={setUploading} />
               </>
             )}
-
-            <label className="cm-label" style={{marginTop:14}}>
-              📎 Tài liệu đính kèm <span style={{color:'#94a3b8',fontWeight:400}}>(tuỳ chọn)</span>
-            </label>
-            {attachments.length > 0 && (
-              <div className="file-chip-list">
-                {attachments.map(f => (
-                  <FileChip key={f.id} file={f} onRemove={removeAttach} onView={setViewing} />
-                ))}
-              </div>
-            )}
-            <FileDropZone onUploaded={handleUploaded} uploading={uploading} setUploading={setUploading} />
 
             {err && <div className="cm-error">{err}</div>}
             <div className="cm-footer">
               <button className="pm-cancel" onClick={onClose}>Huỷ</button>
               <button className="btn-primary cm-submit" onClick={submit} disabled={uploading}>
-                📝 Giao bài
+                {mode === 'exam' ? '📋 Giao đề' : '📝 Giao bài'}
               </button>
             </div>
           </div>
@@ -611,16 +772,33 @@ function ClassDetail({ cls, teacherId, onBack, onUpdated }) {
                   const past = a.dueDate && new Date(a.dueDate) < new Date()
                   const subCount = a.submissions?.length ?? 0
                   const total = cls.members?.length ?? 0
+                  const isExam = !!a.examId
+                  const now = Date.now()
+                  const winOpen  = a.openTime ? new Date(a.openTime).getTime() : null
+                  const winClose = (a.closeTime || a.dueDate) ? new Date(a.closeTime || a.dueDate).getTime() : null
+                  const winSt = isExam
+                    ? (winOpen && now < winOpen ? 'pending' : (winClose && now > winClose ? 'closed' : 'open'))
+                    : null
                   return (
-                    <div key={a.id} className={`cm-assignment-card ${past ? 'cm-assignment-card--past' : ''}`}>
+                    <div key={a.id} className={`cm-assignment-card ${past && !isExam ? 'cm-assignment-card--past' : ''}`}>
                       <div className="cm-asgn-left">
-                        <div className="cm-asgn-title">{a.title}</div>
+                        <div className="cm-asgn-title">{isExam ? '📋 ' : ''}{a.title}</div>
                         {a.description && <div className="cm-asgn-desc">{a.description}</div>}
                         <div className="cm-asgn-meta">
-                          <span className={`cm-due-chip ${past ? 'cm-due-chip--past' : ''}`}>
-                            {IC.clock(12)} {formatDt(a.dueDate)}{past && ' (Hết hạn)'}
-                          </span>
-                          {a.examId && <span className="cm-exam-chip">{IC.link(12)} Có đề thi</span>}
+                          {isExam ? (
+                            <>
+                              <span className="cm-exam-chip">{IC.link(12)} Đề thi</span>
+                              <span className={`cm-window-chip cm-window-chip--${winSt}`}>
+                                {IC.clock(12)} {winSt === 'pending' ? `Mở ${formatDt(a.openTime)}`
+                                  : winSt === 'closed' ? `Đã đóng ${formatDt(a.closeTime || a.dueDate)}`
+                                  : `Đang mở · đóng ${formatDt(a.closeTime || a.dueDate)}`}
+                              </span>
+                            </>
+                          ) : (
+                            <span className={`cm-due-chip ${past ? 'cm-due-chip--past' : ''}`}>
+                              {IC.clock(12)} {formatDt(a.dueDate)}{past && ' (Hết hạn)'}
+                            </span>
+                          )}
                           {a.attachments?.length > 0 && <span className="cm-exam-chip">{IC.clip(12)} {a.attachments.length} file</span>}
                         </div>
                         {a.attachments?.length > 0 && (
@@ -633,7 +811,7 @@ function ClassDetail({ cls, teacherId, onBack, onUpdated }) {
                       </div>
                       <div className="cm-asgn-right">
                         <button className="mec-btn mec-btn--results" onClick={() => setViewSubs(a)}>
-                          {IC.chart(14)} {subCount}/{total} nộp
+                          {IC.chart(14)} {isExam ? 'Xem điểm' : `${subCount}/${total} nộp`}
                         </button>
                         <button className="cm-remove-btn" onClick={() => handleRemoveAssignment(a.id)}>{IC.trash(14)}</button>
                       </div>

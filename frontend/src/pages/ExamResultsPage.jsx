@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fetchExamById, getSubmissions, hideResultsToggle, revealResults } from '../store/examStore.js'
+import QuestionStats from '../components/QuestionStats.jsx'
 
 function fmtDate(iso) {
   if (!iso) return '—'
@@ -120,118 +121,6 @@ function Histogram({ subs, maxScore }) {
   )
 }
 
-const SECTION_PREFIXES = {
-  'PHẦN I':    'I',
-  'PHẦN II':   'II',
-  'PHẦN III':  'III',
-  'TIẾNG ANH': 'EN',
-}
-
-/* ── Per-question statistics ── */
-function QuestionStats({ exam, subs }) {
-  const [expanded, setExpanded] = useState({})
-  const [showSection, setShowSection] = useState({})
-
-  if (!exam?.sections || !subs.length) return null
-
-  const sectionKeys = Object.keys(exam.sections).filter(
-    s => s in SECTION_PREFIXES && exam.sections[s]?.questions?.length
-  )
-  if (!sectionKeys.length) return null
-
-  const buildStats = (sec) => {
-    const questions = exam.sections[sec]?.questions || []
-    const prefix    = SECTION_PREFIXES[sec]
-    return questions.map(q => {
-      const key          = `${prefix}_${q.question_number}`
-      let correctCount   = 0
-      const wrongStudents = []
-
-      subs.forEach(sub => {
-        const ans = sub.answers?.[key]
-        let ok = false
-        if (sec === 'PHẦN I' || sec === 'TIẾNG ANH') {
-          ok = q.answer && ans === q.answer
-        } else if (sec === 'PHẦN II') {
-          const sqs = q.sub_questions || []
-          ok = sqs.length > 0 && sqs.every(sq => ans?.[sq.label] === sq.correct_answer)
-        } else if (sec === 'PHẦN III') {
-          const ua = (ans || '').toString().trim().toLowerCase()
-          const ca = (q.answer || '').toString().trim().toLowerCase()
-          ok = !!ua && !!ca && ua === ca
-        }
-        if (ok) correctCount++
-        else wrongStudents.push(sub.studentName || 'Ẩn danh')
-      })
-
-      return { num: q.question_number, key, correctCount, total: subs.length, wrongStudents }
-    })
-  }
-
-  const toggle = (key) => setExpanded(p => ({ ...p, [key]: !p[key] }))
-  const toggleSec = (sec) => setShowSection(p => ({ ...p, [sec]: !p[sec] }))
-
-  return (
-    <div className="er-qstats">
-      <h3 className="er-qstats-title">📋 Thống kê chi tiết theo câu</h3>
-      {sectionKeys.map(sec => {
-        const stats   = buildStats(sec)
-        const isOpen  = showSection[sec] !== false
-        return (
-          <div key={sec} className="er-qstats-section">
-            <button className="er-qstats-sec-header" onClick={() => toggleSec(sec)}>
-              <span>{sec}</span>
-              <span className="er-qstats-sec-count">{stats.length} câu</span>
-              <span className="er-qstats-sec-arrow">{isOpen ? '▲' : '▼'}</span>
-            </button>
-            {isOpen && (
-              <div className="er-qstats-body">
-                {stats.map(s => {
-                  const pct   = s.total > 0 ? Math.round(s.correctCount / s.total * 100) : 0
-                  const color = pct >= 70 ? '#22c55e' : pct >= 40 ? '#f59e0b' : '#ef4444'
-                  const isExp = expanded[s.key]
-                  return (
-                    <div key={s.key} className="er-qstat-row">
-                      <div className="er-qstat-main">
-                        <span className="er-qstat-num">Câu {s.num}</span>
-                        <div className="er-qstat-bar-track">
-                          <div className="er-qstat-bar-fill" style={{ width: `${pct}%`, background: color }} />
-                        </div>
-                        <span className="er-qstat-fraction" style={{ color }}>
-                          {s.correctCount}/{s.total}
-                        </span>
-                        <span className="er-qstat-pct" style={{ color }}>({pct}%)</span>
-                        {s.wrongStudents.length > 0 && (
-                          <button className="er-qstat-toggle" onClick={() => toggle(s.key)}>
-                            {isExp ? '▲' : '▼'} {s.wrongStudents.length} sai
-                          </button>
-                        )}
-                        {s.wrongStudents.length === 0 && (
-                          <span className="er-qstat-all-correct">✓ Tất cả đúng</span>
-                        )}
-                      </div>
-                      {isExp && s.wrongStudents.length > 0 && (
-                        <div className="er-qstat-wrong-wrap">
-                          <span className="er-qstat-wrong-label">Trả lời sai:</span>
-                          <div className="er-qstat-wrong-names">
-                            {s.wrongStudents.map((name, i) => (
-                              <span key={i} className="er-qstat-wrong-chip">{name}</span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 /* ── Root ── */
 export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
   const [data,        setData]        = useState(null)
@@ -239,7 +128,6 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
   const [loading,     setLoading]     = useState(true)
   const [toggling,    setToggling]    = useState(false)
   const [err,         setErr]         = useState('')
-  const [activeClass, setActiveClass] = useState('all')
 
   const load = () => {
     setLoading(true)
@@ -275,16 +163,13 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
     </div>
   )
 
-  const allSubs  = data?.submissions || []
-  const classes  = data?.classes     || []
+  // Chỉ hiển thị bài nộp qua link chung của đề (không thuộc lớp học).
+  // Điểm của bài nộp theo lớp được xem riêng trong trang quản lý lớp.
+  const subs     = (data?.submissions || []).filter(s => !s.classId)
   const revealed = data?.resultsRevealed || false
   const hideMode = data?.hideResults || false
 
-  const subs = activeClass === 'all'
-    ? allSubs
-    : allSubs.filter(s => s.classId === activeClass)
-
-  const maxScore = allSubs[0]?.maxScore || 0
+  const maxScore = subs[0]?.maxScore || 0
 
   const scores   = subs.map(s => s.score ?? 0)
   const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 100) / 100 : 0
@@ -318,30 +203,6 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
           <button className="mec-btn" onClick={onGoBack}>← Quay lại</button>
         </div>
       </div>
-
-      {/* Class tabs */}
-      {classes.length > 0 && (
-        <div className="er-class-tabs">
-          <button
-            className={`er-class-tab ${activeClass === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveClass('all')}
-          >
-            Tất cả <span className="er-cls-count">{allSubs.length}</span>
-          </button>
-          {classes.map(cls => {
-            const count = allSubs.filter(s => s.classId === cls.id).length
-            return (
-              <button
-                key={cls.id}
-                className={`er-class-tab ${activeClass === cls.id ? 'active' : ''}`}
-                onClick={() => setActiveClass(cls.id)}
-              >
-                🏫 {cls.name} <span className="er-cls-count">{count}</span>
-              </button>
-            )
-          })}
-        </div>
-      )}
 
       {/* Summary stats */}
       <div className="er-summary">

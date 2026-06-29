@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { getClassesByStudent, joinClassByCode, submitAssignment, uploadFile } from '../store/classStore.js'
+import { getClassesByStudent, getExamWindow, getPendingForStudent, joinClassByCode, submitAssignment, uploadFile } from '../store/classStore.js'
 
 /* ─── SVG icons ─── */
 function Svg({ size = 16, children }) {
@@ -235,11 +235,85 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
   )
 }
 
+const formatDt = iso => iso ? new Date(iso).toLocaleString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
+
+/* Trạng thái cửa sổ thời gian của một đề thi được giao */
+function examWindowStatus(a) {
+  const now = Date.now()
+  const open  = a.openTime ? new Date(a.openTime).getTime() : null
+  const close = (a.closeTime || a.dueDate) ? new Date(a.closeTime || a.dueDate).getTime() : null
+  if (open && now < open)  return 'pending'
+  if (close && now > close) return 'closed'
+  return 'open'
+}
+
+const SCORE_MODE_LABEL = {
+  highest: '🏆 Tính điểm cao nhất',
+  average: '➗ Tính điểm trung bình',
+  latest:  '🕒 Tính lần làm gần nhất',
+}
+
+/* ─── Exam assignment card (đề thi được giao) ─── */
+function ExamAssignmentCard({ assignment, cls, user }) {
+  const st = examWindowStatus(assignment)
+  const openIso  = assignment.openTime
+  const closeIso = assignment.closeTime || assignment.dueDate
+  const maxAttempts = assignment.maxAttempts || null
+  const scoreMode   = assignment.scoreMode || 'highest'
+
+  const [used, setUsed] = useState(null)   // số lần đã làm
+  useEffect(() => {
+    let alive = true
+    getExamWindow(cls.id, assignment.examId, user?.id, user?.email)
+      .then(w => { if (alive && w) setUsed(w.attemptsUsed ?? 0) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [cls.id, assignment.examId, user?.id])
+
+  const exhausted = maxAttempts != null && used != null && used >= maxAttempts
+
+  const statusMeta = {
+    pending: { cls: 'cm-window-chip--pending', label: `Mở lúc ${formatDt(openIso)}` },
+    open:    { cls: 'cm-window-chip--open',    label: `Đang mở · đóng ${formatDt(closeIso)}` },
+    closed:  { cls: 'cm-window-chip--closed',  label: `Đã đóng (${formatDt(closeIso)})` },
+  }[st]
+
+  return (
+    <div className={`mc-asgn-card mc-asgn-card--exam ${st === 'closed' ? 'mc-asgn-card--overdue' : ''}`}>
+      <div className="mc-asgn-main">
+        <div className="mc-asgn-title">📋 {assignment.title}</div>
+        {assignment.description && <div className="mc-asgn-desc">{assignment.description}</div>}
+        <div className="mc-asgn-meta">
+          <span className="cm-exam-chip">{IC.play(12)} Đề thi</span>
+          {assignment.duration ? <span className="cm-exam-chip">⏱ {assignment.duration} phút</span> : null}
+          <span className={`cm-window-chip ${statusMeta.cls}`}>{IC.clock(12)} {statusMeta.label}</span>
+        </div>
+        <div className="mc-asgn-meta" style={{marginTop:4}}>
+          <span className="cm-exam-chip">{SCORE_MODE_LABEL[scoreMode]}</span>
+          <span className="cm-exam-chip">
+            🔁 {maxAttempts ? `${used ?? '…'}/${maxAttempts} lần` : (used != null ? `${used} lần · không giới hạn` : 'Không giới hạn')}
+          </span>
+        </div>
+      </div>
+      {st === 'open' && !exhausted ? (
+        <a className="btn-primary mc-submit-btn" href={`#take/${assignment.examId}/${cls.id}`}>
+          {IC.play(14)} {used > 0 ? 'Làm lại' : 'Làm bài'}
+        </a>
+      ) : (
+        <button className="btn-primary mc-submit-btn" disabled>
+          {exhausted ? '🔒 Hết lượt' : st === 'pending' ? '🔒 Chưa mở' : 'Đã đóng'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 /* ─── Assignment card for student ─── */
 function AssignmentCard({ assignment, cls, user, onSubmit }) {
+  if (assignment.examId) return <ExamAssignmentCard assignment={assignment} cls={cls} user={user} />
+
   const mySubmission = assignment.submissions?.find(s => String(s.studentId) === String(user.id))
   const isDuePast   = assignment.dueDate && new Date(assignment.dueDate) < new Date()
-  const formatDt    = iso => iso ? new Date(iso).toLocaleString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
 
   return (
     <div className={`mc-asgn-card ${isDuePast && !mySubmission ? 'mc-asgn-card--overdue' : ''} ${mySubmission ? 'mc-asgn-card--done' : ''}`}>
@@ -250,7 +324,6 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
           <span className={`cm-due-chip ${isDuePast ? 'cm-due-chip--past' : ''}`}>
             {IC.clock(12)} Hạn: {formatDt(assignment.dueDate)}{isDuePast && ' (Hết hạn)'}
           </span>
-          {assignment.examId  && <span className="cm-exam-chip">{IC.play(12)} Đề thi</span>}
           {assignment.attachments?.length > 0 && <span className="cm-exam-chip">{IC.clip(12)} {assignment.attachments.length} file đính kèm</span>}
         </div>
         {mySubmission && (
@@ -263,16 +336,18 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
       <button
         className={`btn-primary mc-submit-btn ${mySubmission ? 'mc-submit-btn--resubmit' : ''}`}
         onClick={() => onSubmit(assignment)}
-        disabled={isDuePast && !mySubmission}
+        disabled={isDuePast}
       >
-        {mySubmission ? '✏️ Nộp lại' : isDuePast ? 'Đã hết hạn' : '📤 Nộp bài'}
+        {isDuePast
+          ? (mySubmission ? '✅ Đã nộp (hết hạn)' : '🔒 Đã hết hạn')
+          : (mySubmission ? '✏️ Nộp lại' : '📤 Nộp bài')}
       </button>
     </div>
   )
 }
 
 /* ─── Class view (student inside a class) ─── */
-function ClassView({ cls, user, onBack }) {
+function ClassView({ cls, user, pendingCount = 0, onBack }) {
   const [submitting, setSubmitting] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [localCls,   setLocalCls]   = useState(cls)
@@ -284,11 +359,6 @@ function ClassView({ cls, user, onBack }) {
     })
   }, [cls.id, refreshKey])
 
-  const pending = (localCls.assignments || []).filter(a => {
-    const mine = a.submissions?.find(s => String(s.studentId) === String(user.id))
-    return !mine && a.dueDate && new Date(a.dueDate) > new Date()
-  })
-
   return (
     <div className="cm-detail">
       <div className="cm-detail-header">
@@ -299,9 +369,9 @@ function ClassView({ cls, user, onBack }) {
           {localCls.teacherName && <p className="cm-detail-desc">Giáo viên: <strong>{localCls.teacherName}</strong></p>}
         </div>
         <div className="cm-detail-stats">
-          {pending.length > 0 && (
+          {pendingCount > 0 && (
             <span className="cm-stat-chip" style={{background:'#fef3c7',color:'#92400e'}}>
-              {IC.clock(14)} {pending.length} cần nộp
+              {IC.clock(14)} {pendingCount} cần làm
             </span>
           )}
         </div>
@@ -380,7 +450,7 @@ function JoinModal({ initialCode, user, onClose, onJoined }) {
 }
 
 /* ─── Main student page ─── */
-export default function MyClassesPage({ user, initialJoinCode }) {
+export default function MyClassesPage({ user, initialJoinCode, initialClassId }) {
   const [classes,     setClasses]     = useState([])
   const [selected,    setSelected]    = useState(null)
   const [showJoin,    setShowJoin]    = useState(false)
@@ -388,16 +458,28 @@ export default function MyClassesPage({ user, initialJoinCode }) {
   const [loading,     setLoading]     = useState(true)
   const [autoJoining, setAutoJoining] = useState(!!initialJoinCode)
   const [toast,       setToast]       = useState(null)
+  const [pendingItems, setPendingItems] = useState([])
 
   const reload = async () => {
     setLoading(true)
-    const list = await getClassesByStudent(String(user.id))
+    const [list, pend] = await Promise.all([
+      getClassesByStudent(String(user.id), user.email),
+      getPendingForStudent(String(user.id), user.email).catch(() => ({ items: [] })),
+    ])
     setClasses(list)
+    setPendingItems(pend.items || [])
     if (selected) setSelected(list.find(c => c.id === selected.id) || null)
     setLoading(false)
   }
 
   useEffect(() => { reload() }, []) // eslint-disable-line
+
+  // Mở thẳng một lớp khi điều hướng từ thông báo (#class/<id>)
+  useEffect(() => {
+    if (!initialClassId || loading) return
+    const c = classes.find(c => c.id === initialClassId)
+    if (c) setSelected(c)
+  }, [initialClassId, loading, classes])
 
   // Tự động tham gia lớp khi truy cập qua link #join/<code>
   useEffect(() => {
@@ -428,10 +510,7 @@ export default function MyClassesPage({ user, initialJoinCode }) {
     reload()
   }
 
-  const countPending = (cls) => (cls.assignments || []).filter(a => {
-    const mine = a.submissions?.find(s => String(s.studentId) === String(user.id))
-    return !mine && a.dueDate && new Date(a.dueDate) > new Date()
-  }).length
+  const countPending = (cls) => pendingItems.filter(i => i.classId === cls.id).length
 
   if (autoJoining) return (
     <div className="app">
@@ -448,7 +527,7 @@ export default function MyClassesPage({ user, initialJoinCode }) {
       <div className="create-topbar">
         <h1 className="exam-title" style={{display:'flex',alignItems:'center',gap:10}}>{IC.users(24)} Lớp của tôi</h1>
       </div>
-      <ClassView cls={selected} user={user} onBack={() => setSelected(null)} />
+      <ClassView cls={selected} user={user} pendingCount={countPending(selected)} onBack={() => setSelected(null)} />
     </div>
   )
 

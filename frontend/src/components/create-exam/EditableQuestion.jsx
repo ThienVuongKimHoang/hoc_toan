@@ -14,15 +14,15 @@ export function toPassageHTML(text) {
     return text.replace(/\n/g, '<br>')
   }
   // Plain text (from AI or old markers): escape, convert markers, convert \n
+  // LƯU Ý: KHÔNG đổi "__..__" thành gạch chân — sẽ phá các chỗ trống "____" của bài điền từ.
   return text
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/__([^_]+)__/g, '<u>$1</u>')
     .replace(/\n/g, '<br>')
 }
 
 /* ─── Word-like WYSIWYG editor (B / I / U, contenteditable) ─── */
-function PassageEditor({ value, onChange }) {
+export function PassageEditor({ value, onChange }) {
   const [editing, setEditing] = useState(false)
   const editorRef = useRef(null)
   const containerRef = useRef(null)
@@ -667,10 +667,12 @@ const SECTION_COLOR = {
   'PHẦN II': '#7c3aed',
   'PHẦN III': '#059669',
   'TIẾNG ANH': '#0f766e',
+  'READING': '#0e7490',
 }
 
 export default function EditableQuestion({
   q, index, pointsPerQ, onUpdate, onDelete, onReportSubmit, highlight, grade = 'thpt',
+  readingMode = false, clozeMode = false,
 }) {
   const [editingText, setEditingText] = useState(() => hasSuspiciousLatex(q.question_text))
   const [localText, setLocalText] = useState(q.question_text || '')
@@ -851,6 +853,7 @@ export default function EditableQuestion({
   }
 
   const color = SECTION_COLOR[q.section] || '#2563eb'
+  const isEnglishLike = q.section === 'TIẾNG ANH' || q.section === 'READING'
   const images = q.images || []
   const totalImgs = (q.figure_path ? 1 : 0) + images.length
   const suspicious = hasSuspiciousLatex(q.question_text)
@@ -869,14 +872,14 @@ export default function EditableQuestion({
         </div>
         <div className="eq-header-left">
           <span className="eq-num" style={{ background: color }}>
-            {q.section === 'TIẾNG ANH' ? `Question ${q.question_number}` : `Câu ${q.question_number}`}
+            {isEnglishLike ? `Question ${q.question_number}` : `Câu ${q.question_number}`}
           </span>
           <PointsBadge
             value={q.points ?? pointsPerQ}
             onChange={pts => onUpdate({ ...q, points: pts })}
           />
           {totalImgs > 0 && <span className="eq-badge img">{totalImgs} ảnh{q.figure_path ? ' (AI)' : ''}</span>}
-          {suspicious && !editingText && q.section !== 'TIẾNG ANH' && (
+          {suspicious && !editingText && !isEnglishLike && (
             <button type="button" className="eq-latex-warn-inline" onClick={startEdit}
               title="Phát hiện nội dung có thể có lỗi LaTeX từ AI. Click để chỉnh sửa.">
               ⚠ LaTeX lỗi
@@ -1033,17 +1036,52 @@ export default function EditableQuestion({
         </div>
       )}
 
-      {/* ── Labels ── */}
-      <LabelRow
-        q={q}
-        grade={grade}
-        onChange={onUpdate}
-        onAutoClassify={autoClassify}
-        classifying={classifying}
-      />
+      {/* ── Labels (ẩn trong chế độ bài đọc — cột phải gọn gàng) ── */}
+      {!readingMode && (
+        <LabelRow
+          q={q}
+          grade={grade}
+          onChange={onUpdate}
+          onAutoClassify={autoClassify}
+          classifying={classifying}
+        />
+      )}
 
-      {/* ── Tiếng Anh: passage + câu hỏi, có thể split 2 cột ── */}
-      {q.section === 'TIẾNG ANH' ? (() => {
+      {/* ── Chế độ bài đọc (READING): chỉ nội dung câu hỏi + đáp án, không đoạn văn ── */}
+      {readingMode ? (
+        <>
+          {clozeMode ? (
+            <div className="eq-cloze-note">
+              ✍️ Câu điền từ — đáp án sẽ điền vào chỗ trống <strong>({q.question_number})</strong> trong đoạn văn.
+              Chỉ cần chọn đáp án đúng bên dưới.
+            </div>
+          ) : (
+            <div className="eq-question-section" style={{ paddingTop: 0 }}>
+              <span className="eq-question-label">Nội dung câu hỏi</span>
+              <PassageEditor
+                value={q.question_text || ''}
+                onChange={val => onUpdate({ ...q, question_text: val })}
+              />
+            </div>
+          )}
+
+          <ImageGallery
+            images={images}
+            onAdd={handleAddImage}
+            onDelete={handleDeleteImage}
+            figurePath={q.figure_path}
+            onDeleteFigure={() => onUpdate({ ...q, figure_path: undefined, has_figure: false })}
+          />
+
+          <div className="eq-answers-section">
+            <div className="eq-question-label">
+              Đáp án (click chữ cái để đánh dấu đúng)
+              {!q.answer && <span className="eq-no-answer-note"> — Chưa có đáp án từ đề</span>}
+            </div>
+            <MCQEditor q={q} onChange={onUpdate} />
+          </div>
+        </>
+      ) : isEnglishLike ? (() => {
         const isLong = (q.passage_text?.length ?? 0) >= PASSAGE_SPLIT_THRESHOLD
         const hasPassage = q.passage_text || q.passage_title
         return (
@@ -1065,7 +1103,9 @@ export default function EditableQuestion({
             )}
 
             {splitView && hasPassage ? (
+              /* ── Layout 2 cột ── */
               <div className="eq-split-layout">
+                {/* Trái: bài đọc cố định */}
                 <div className="eq-split-pane eq-split-pane--passage">
                   <div className="eq-split-pane-label">
                     📄 Đoạn văn / Bài đọc
@@ -1076,16 +1116,40 @@ export default function EditableQuestion({
                     onChange={val => onUpdate({ ...q, passage_text: val })}
                   />
                 </div>
+
                 <div className="eq-split-divider" />
+
+                {/* Phải: câu hỏi + đáp án cuộn */}
                 <div className="eq-split-pane eq-split-pane--question">
-                  <div className="eq-split-pane-label">❓ Câu hỏi</div>
-                  <PassageEditor
-                    value={q.question_text || ''}
-                    onChange={val => onUpdate({ ...q, question_text: val })}
+                  <div className="eq-split-pane-label">❓ Câu hỏi & Đáp án</div>
+
+                  <div className="eq-question-section" style={{ paddingTop: 0 }}>
+                    <span className="eq-question-label">Nội dung câu hỏi</span>
+                    <PassageEditor
+                      value={q.question_text || ''}
+                      onChange={val => onUpdate({ ...q, question_text: val })}
+                    />
+                  </div>
+
+                  <ImageGallery
+                    images={images}
+                    onAdd={handleAddImage}
+                    onDelete={handleDeleteImage}
+                    figurePath={q.figure_path}
+                    onDeleteFigure={() => onUpdate({ ...q, figure_path: undefined, has_figure: false })}
                   />
+
+                  <div className="eq-answers-section">
+                    <div className="eq-question-label">
+                      Đáp án (click chữ cái để đánh dấu đúng)
+                      {!q.answer && <span className="eq-no-answer-note"> — Chưa có đáp án từ đề</span>}
+                    </div>
+                    <MCQEditor q={q} onChange={onUpdate} />
+                  </div>
                 </div>
               </div>
             ) : (
+              /* ── Layout 1 cột ── */
               <>
                 {hasPassage && (
                   <div className="eq-passage-block">
@@ -1099,6 +1163,7 @@ export default function EditableQuestion({
                     />
                   </div>
                 )}
+
                 <div className="eq-question-section">
                   <span className="eq-question-label">Nội dung câu hỏi</span>
                   <PassageEditor
@@ -1106,98 +1171,110 @@ export default function EditableQuestion({
                     onChange={val => onUpdate({ ...q, question_text: val })}
                   />
                 </div>
+
+                <ImageGallery
+                  images={images}
+                  onAdd={handleAddImage}
+                  onDelete={handleDeleteImage}
+                  figurePath={q.figure_path}
+                  onDeleteFigure={() => onUpdate({ ...q, figure_path: undefined, has_figure: false })}
+                />
+
+                <div className="eq-answers-section">
+                  <div className="eq-question-label">
+                    Đáp án (click chữ cái để đánh dấu đúng)
+                    {!q.answer && <span className="eq-no-answer-note"> — Chưa có đáp án từ đề</span>}
+                  </div>
+                  <MCQEditor q={q} onChange={onUpdate} />
+                </div>
               </>
             )}
           </>
         )
       })() : (
         /* ── Toán: LaTeX editor đầy đủ ── */
-        <div className="eq-question-section">
-          <span className="eq-question-label">Nội dung câu hỏi</span>
-          {editingText ? (
-            <div
-              className={`eq-latex-editor ${isDraggingOver ? 'eq-drop-active' : ''}`}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-            >
-              {suspicious && (
-                <div className="eq-llm-fail-note">
-                  <span>🤖 AI có thể đọc sai LaTeX — Kiểm tra và nhập lại đúng cú pháp bên dưới. Dán ảnh bằng Ctrl+V hoặc kéo thả ảnh vào đây.</span>
-                </div>
-              )}
-              {isDraggingOver && (
-                <div className="eq-drop-overlay">🖼 Thả ảnh vào đây để chèn</div>
-              )}
-              <LatexToolbar taRef={taRef} value={localText} onChange={setLocalText} onImageFile={addImageAndInsertMarker} />
-              <div className={`eq-le-panes ${showPreview ? '' : 'no-preview'}`}>
-                <div className="eq-le-left">
-                  <div className="eq-le-pane-label">Nhập LaTeX</div>
-                  <textarea
-                    ref={taRef}
-                    className="eq-le-raw"
-                    value={localText}
-                    onChange={e => setLocalText(e.target.value)}
-                    onPaste={handleRawPaste}
-                    placeholder={`Nhập nội dung. Bao công thức bằng $...$\nVí dụ: Cho hàm số $f(x)=\\frac{2x+1}{x}$\nToạ độ: $M(-500; 300; 500)$`}
-                    rows={6}
-                    spellCheck={false}
-                  />
-                </div>
-                {showPreview && (
-                  <div className="eq-le-right">
-                    <div className="eq-le-pane-label">Xem trước</div>
-                    <div className="eq-le-preview">
-                      <PreviewWithImages text={localText} images={q.images || []} />
-                    </div>
+        <>
+          <div className="eq-question-section">
+            <span className="eq-question-label">Nội dung câu hỏi</span>
+            {editingText ? (
+              <div
+                className={`eq-latex-editor ${isDraggingOver ? 'eq-drop-active' : ''}`}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+              >
+                {suspicious && (
+                  <div className="eq-llm-fail-note">
+                    <span>🤖 AI có thể đọc sai LaTeX — Kiểm tra và nhập lại đúng cú pháp bên dưới. Dán ảnh bằng Ctrl+V hoặc kéo thả ảnh vào đây.</span>
                   </div>
                 )}
+                {isDraggingOver && (
+                  <div className="eq-drop-overlay">🖼 Thả ảnh vào đây để chèn</div>
+                )}
+                <LatexToolbar taRef={taRef} value={localText} onChange={setLocalText} onImageFile={addImageAndInsertMarker} />
+                <div className={`eq-le-panes ${showPreview ? '' : 'no-preview'}`}>
+                  <div className="eq-le-left">
+                    <div className="eq-le-pane-label">Nhập LaTeX</div>
+                    <textarea
+                      ref={taRef}
+                      className="eq-le-raw"
+                      value={localText}
+                      onChange={e => setLocalText(e.target.value)}
+                      onPaste={handleRawPaste}
+                      placeholder={`Nhập nội dung. Bao công thức bằng $...$\nVí dụ: Cho hàm số $f(x)=\\frac{2x+1}{x}$\nToạ độ: $M(-500; 300; 500)$`}
+                      rows={6}
+                      spellCheck={false}
+                    />
+                  </div>
+                  {showPreview && (
+                    <div className="eq-le-right">
+                      <div className="eq-le-pane-label">Xem trước</div>
+                      <div className="eq-le-preview">
+                        <PreviewWithImages text={localText} images={q.images || []} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="eq-edit-actions">
+                  <button type="button" className="eq-preview-toggle"
+                    onClick={() => setShowPreview(v => !v)}>
+                    {showPreview ? '⊟ Ẩn xem trước' : '⊞ Hiện xem trước'}
+                  </button>
+                  <span style={{ flex: 1 }} />
+                  <button className="eq-cancel-btn" onClick={cancelEdit} type="button">✕ Huỷ</button>
+                  <button className="eq-save-btn" onClick={saveText} type="button">✓ Lưu</button>
+                </div>
               </div>
-              <div className="eq-edit-actions">
-                <button type="button" className="eq-preview-toggle"
-                  onClick={() => setShowPreview(v => !v)}>
-                  {showPreview ? '⊟ Ẩn xem trước' : '⊞ Hiện xem trước'}
-                </button>
-                <span style={{ flex: 1 }} />
-                <button className="eq-cancel-btn" onClick={cancelEdit} type="button">✕ Huỷ</button>
-                <button className="eq-save-btn" onClick={saveText} type="button">✓ Lưu</button>
+            ) : (
+              <div className="eq-qtext-display" onClick={startEdit} title="Click để chỉnh sửa">
+                {q.question_text
+                  ? <MathText text={q.question_text} />
+                  : <span className="eq-placeholder">Click để nhập nội dung câu hỏi…</span>}
+                <span className="eq-edit-hint">✏️</span>
               </div>
+            )}
+          </div>
+
+          <ImageGallery
+            images={images}
+            onAdd={handleAddImage}
+            onDelete={handleDeleteImage}
+            figurePath={q.figure_path}
+            onDeleteFigure={() => onUpdate({ ...q, figure_path: undefined, has_figure: false })}
+          />
+
+          <div className="eq-answers-section">
+            <div className="eq-question-label">
+              {q.section === 'PHẦN I' && 'Đáp án (click chữ cái để đánh dấu đúng)'}
+              {q.section === 'PHẦN II' && 'Các ý phụ (Đ = Đúng, S = Sai)'}
+              {q.section === 'PHẦN III' && 'Đáp án đúng'}
             </div>
-          ) : (
-            <div className="eq-qtext-display" onClick={startEdit} title="Click để chỉnh sửa">
-              {q.question_text
-                ? <MathText text={q.question_text} />
-                : <span className="eq-placeholder">Click để nhập nội dung câu hỏi…</span>}
-              <span className="eq-edit-hint">✏️</span>
-            </div>
-          )}
-        </div>
+            {q.section === 'PHẦN I' && <MCQEditor q={q} onChange={onUpdate} />}
+            {q.section === 'PHẦN II' && <TFEditor q={q} onChange={onUpdate} />}
+            {q.section === 'PHẦN III' && <ShortEditor q={q} onChange={onUpdate} />}
+          </div>
+        </>
       )}
-
-      {/* ── Hình ảnh đính kèm (gồm cả ảnh AI parse + ảnh người dùng tải lên) ── */}
-      <ImageGallery
-        images={images}
-        onAdd={handleAddImage}
-        onDelete={handleDeleteImage}
-        figurePath={q.figure_path}
-        onDeleteFigure={() => onUpdate({ ...q, figure_path: undefined, has_figure: false })}
-      />
-
-      {/* ── Answers ── */}
-      <div className="eq-answers-section">
-        <div className="eq-question-label">
-          {(q.section === 'PHẦN I' || q.section === 'TIẾNG ANH') && 'Đáp án (click chữ cái để đánh dấu đúng)'}
-          {q.section === 'PHẦN II' && 'Các ý phụ (Đ = Đúng, S = Sai)'}
-          {q.section === 'PHẦN III' && 'Đáp án đúng'}
-          {!q.answer && q.section === 'TIẾNG ANH' && (
-            <span className="eq-no-answer-note"> — Chưa có đáp án từ đề</span>
-          )}
-        </div>
-        {(q.section === 'PHẦN I' || q.section === 'TIẾNG ANH') && <MCQEditor q={q} onChange={onUpdate} />}
-        {q.section === 'PHẦN II' && <TFEditor q={q} onChange={onUpdate} />}
-        {q.section === 'PHẦN III' && <ShortEditor q={q} onChange={onUpdate} />}
-      </div>
     </div>
   )
 }
-

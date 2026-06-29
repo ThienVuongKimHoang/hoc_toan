@@ -701,16 +701,56 @@ def list_classes_by_teacher(teacher_id: str) -> list:
     return [_cls_from_row(dict(r)) for r in rows]
 
 
-def list_classes_by_student(student_id: str) -> list:
+def list_classes_by_student(student_id: str, email: str = None) -> list:
+    """
+    Lớp mà học sinh thuộc về. Khớp theo userId HOẶC email (email là định danh
+    ổn định — phòng khi id tài khoản thay đổi). Nếu khớp bằng email nhưng userId
+    đã lệch thì TỰ SỬA userId của thành viên về id hiện tại để đồng bộ về sau.
+    """
+    sid = str(student_id)
+    if not email:
+        u = get_user_by_id(sid)
+        email = (u or {}).get("email")
+    em = (email or "").strip().lower()
+
     with _C() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM classes ORDER BY created_at DESC")
             rows = cur.fetchall()
-    sid = str(student_id)
-    return [
-        _cls_from_row(dict(r)) for r in rows
-        if any(str(m.get("userId")) == sid for m in (r["members"] or []))
-    ]
+
+    out = []
+    old_ids = set()
+    for r in rows:
+        members = r["members"] or []
+        matched = healed = False
+        for m in members:
+            mid = str(m.get("userId"))
+            memail = (m.get("email") or "").strip().lower()
+            if mid == sid:
+                matched = True
+            elif em and memail and memail == em:
+                matched = True
+                if mid != sid:
+                    old_ids.add(mid)             # nhớ id cũ để chuyển thông báo
+                m["userId"] = student_id          # đồng bộ lại id
+                healed = True
+        if matched:
+            cls = _cls_from_row(dict(r))
+            if healed:
+                cls["members"] = members
+                try:
+                    upsert_class(cls["id"], cls)
+                except Exception:
+                    pass
+            out.append(cls)
+
+    # Chuyển thông báo cũ sang id hiện tại để chuông hiển thị đúng
+    for oid in old_ids:
+        try:
+            retarget_notifs(oid, student_id)
+        except Exception:
+            pass
+    return out
 
 
 def upsert_class(cid: str, cls: dict) -> None:
@@ -826,6 +866,19 @@ def mark_all_notifs_read(uid: str) -> None:
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute("UPDATE notifications SET read=TRUE WHERE target_user_id=%s", (str(uid),))
+        conn.commit()
+
+
+def retarget_notifs(old_uid: str, new_uid: str) -> None:
+    """Chuyển thông báo từ id cũ sang id mới (khi học sinh bị lệch id, đã đồng bộ lại)."""
+    if str(old_uid) == str(new_uid):
+        return
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE notifications SET target_user_id=%s WHERE target_user_id=%s",
+                (str(new_uid), str(old_uid)),
+            )
         conn.commit()
 
 

@@ -462,6 +462,29 @@ function ResetPasswordModal({ user, onSave, onClose }) {
   )
 }
 
+/* Avatar người dùng: hiển thị ảnh nếu là URL/data-URI (vd. đăng nhập Google),
+   nếu không (hoặc ảnh lỗi) thì hiển thị chữ cái đầu. */
+function UserAvatar({ user, meta }) {
+  const [failed, setFailed] = useState(false)
+  const src     = user.avatarUrl || user.avatar
+  const isImg   = typeof src === 'string' && (/^https?:\/\//.test(src) || src.startsWith('data:'))
+  const initial = (user.name || user.email || '?')[0].toUpperCase()
+
+  if (isImg && !failed) {
+    return (
+      <div className="sa-user-avatar sa-user-avatar--img">
+        <img src={src} alt="" onError={() => setFailed(true)} />
+      </div>
+    )
+  }
+  return (
+    <div className="sa-user-avatar" style={{ background: (meta?.color || '#888') + '22', color: meta?.color || '#888' }}>
+      {/* tránh đổ nguyên URL dài ra màn hình nếu avatar là URL lỗi */}
+      {isImg ? initial : (user.avatar || initial)}
+    </div>
+  )
+}
+
 function UsersTab() {
   const [users,    setUsers]    = useState([])
   const [loading,  setLoading]  = useState(true)
@@ -603,9 +626,7 @@ function UsersTab() {
                       <td><code className="sa-code">#{u.id}</code></td>
                       <td>
                         <div className="sa-user-name">
-                          <div className="sa-user-avatar" style={{ background: (meta?.color || '#888') + '22', color: meta?.color || '#888' }}>
-                            {u.avatar || (u.name || '?')[0].toUpperCase()}
-                          </div>
+                          <UserAvatar user={u} meta={meta} />
                           <span>{u.name}</span>
                           {isSelf && <span className="sa-badge sa-badge--self">Bạn</span>}
                           {u.isRegistered && <span className="sa-badge" style={{background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0'}}>Tự đăng ký</span>}
