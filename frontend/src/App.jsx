@@ -103,12 +103,19 @@ export default function App() {
     const onStorage = (e) => {
       if (e.key !== USER_KEY) return
       if (!e.newValue) {
+        // Tab khác logout → logout tab này
         setUser(null)
         setView('home')
       } else {
         try {
           const fresh = JSON.parse(e.newValue)
-          setUser(fresh)
+          // Chỉ sync nếu là CÙNG user (cập nhật role/tên)
+          // Không cho phép tab khác tự động switch sang user khác
+          setUser(prev => {
+            if (!prev) return fresh           // tab này chưa login → nhận user mới
+            if (prev.id === fresh.id) return fresh  // cùng user → cập nhật role/tên
+            return prev                       // khác user → giữ nguyên
+          })
         } catch { }
       }
     }
@@ -129,6 +136,8 @@ export default function App() {
         if (!r.ok) return
         const fresh = await r.json()
         if (fresh.error) return
+        // Bỏ qua nếu server trả về user khác ID (không nên xảy ra nhưng phòng thủ)
+        if (String(fresh.id) !== String(user.id)) return
         if (
           fresh.role !== user.role ||
           fresh.name !== user.name ||

@@ -45,6 +45,8 @@ function LoginForm({ onLogin, onSwitchToRegister }) {
 
       window.google.accounts.id.initialize({
         client_id: "281468345667-tb1nqlo78f06blu5m1t7qapd08ruc916.apps.googleusercontent.com",
+        auto_select: false,
+        cancel_on_tap_outside: true,
         callback: async (response) => {
           setLoading(true)
           setError('')
