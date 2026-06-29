@@ -372,11 +372,24 @@ function ImageGallery({ images, onAdd, onDelete, figurePath, onDeleteFigure }) {
     reader.readAsDataURL(file)
   }
 
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault()
+        handleFile(item.getAsFile())
+        return
+      }
+    }
+  }
+
   const figSrc = figurePath ? `/images/${figurePath.replace('images/', '')}` : null
   const totalCount = (figSrc ? 1 : 0) + images.length
 
   return (
-    <div className="eq-img-section">
+    <div className="eq-img-section" tabIndex={0} onPaste={handlePaste}
+      title="Ctrl+V để dán ảnh từ clipboard">
       <div className="eq-img-header">
         <span className="eq-question-label">Hình ảnh đính kèm</span>
         {totalCount < 5 && (
@@ -797,6 +810,27 @@ export default function EditableQuestion({
     if (highlight && cardRef.current)
       cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [highlight])
+
+  // Paste ảnh toàn card khi đang edit mode (bất kể focus ở đâu trong card)
+  useEffect(() => {
+    if (!editingText) return
+    const onDocPaste = (e) => {
+      // Chỉ xử lý nếu focus đang trong card này (hoặc không focus ở textarea — textarea tự handle rồi)
+      if (taRef.current && document.activeElement === taRef.current) return
+      if (cardRef.current && !cardRef.current.contains(document.activeElement)) return
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault()
+          addImageAndInsertMarker(item.getAsFile())
+          return
+        }
+      }
+    }
+    document.addEventListener('paste', onDocPaste)
+    return () => document.removeEventListener('paste', onDocPaste)
+  }, [editingText])
 
   const startEdit = () => { setEditingText(true); setLocalText(q.question_text || '') }
   const saveText = () => {
