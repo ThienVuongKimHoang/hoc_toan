@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ROLES } from './auth/mockUsers.js'
+import { ROLES, hasAdminAccess, hasTeacherAccess, hasMemberAccess } from './auth/mockUsers.js'
 import Header from './components/Header.jsx'
 import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
@@ -66,6 +66,20 @@ function setHash(str) {
   window.history.pushState(null, '', str ? `#${str}` : window.location.pathname)
 }
 
+function AccessDenied({ message, onGoHome, onGoLogin, isLoggedIn }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 16, padding: '2rem', textAlign: 'center' }}>
+      <div style={{ fontSize: '3rem' }}>🔒</div>
+      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>Không có quyền truy cập</h2>
+      <p style={{ fontSize: '0.92rem', color: '#64748b', maxWidth: 400, margin: 0 }}>{message}</p>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button className="btn-primary" onClick={onGoHome}>← Về trang chủ</button>
+        {!isLoggedIn && <button className="btn-secondary" onClick={onGoLogin}>Đăng nhập</button>}
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   /* ── Auth ── */
   const [user, setUser] = useState(() => {
@@ -82,6 +96,24 @@ export default function App() {
     const handler = (e) => handleUpdateUser(e.detail)
     window.addEventListener('hoctoan_user_updated', handler)
     return () => window.removeEventListener('hoctoan_user_updated', handler)
+  }, [])
+
+  // Sync trạng thái đăng nhập giữa các tab
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key !== USER_KEY) return
+      if (!e.newValue) {
+        setUser(null)
+        setView('home')
+      } else {
+        try {
+          const fresh = JSON.parse(e.newValue)
+          setUser(fresh)
+        } catch { }
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
   }, [])
 
 
@@ -186,9 +218,17 @@ export default function App() {
   const goLogin = () => { setHash(''); setView('login') }
   const goExam = () => user ? (setHash(''), setView('exam')) : goLogin()
   const goMyExams = () => user ? (setHash(''), setView('my-exams')) : goLogin()
-  const goAdmin = () => user ? (setHash('admin'), setView('super-admin')) : goLogin()
+  const goAdmin = () => {
+    if (!user) { goLogin(); return }
+    if (!hasAdminAccess(user.role)) return
+    setHash('admin'); setView('super-admin')
+  }
   const goStudy = () => user ? (setHash('study'), setView('study')) : goLogin()
-  const goClasses = () => user ? (setHash('classes'), setView('class-mgmt')) : goLogin()
+  const goClasses = () => {
+    if (!user) { goLogin(); return }
+    if (!hasTeacherAccess(user.role)) return
+    setHash('classes'); setView('class-mgmt')
+  }
   const goMyClasses = () => user ? (setClassId(null), setOpenClassId(null), setHash('my-classes'), setView('my-classes')) : goLogin()
   const openClass = (cid) => user ? (setClassId(null), setOpenClassId(cid), setHash(`class/${cid}`), setView('my-classes')) : goLogin()
   const goTools = () => user ? setShowTeacherTools(true) : goLogin()
@@ -387,13 +427,21 @@ export default function App() {
   )
 
   /* ── Views ── */
-  if (view === 'super-admin' && user) return (
-    <>
-      {header}
-      <SuperAdminPage user={user} onGoHome={goHome} />
-      {teacherToolOverlays}
-    </>
-  )
+  if (view === 'super-admin') {
+    if (!user) return (
+      <>{header}<AccessDenied message="Bạn cần đăng nhập để truy cập trang này." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
+    )
+    if (!hasAdminAccess(user.role)) return (
+      <>{header}<AccessDenied message="Trang Admin chỉ dành cho Admin và Super Admin." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={true} /></>
+    )
+    return (
+      <>
+        {header}
+        <SuperAdminPage user={user} onGoHome={goHome} />
+        {teacherToolOverlays}
+      </>
+    )
+  }
 
   if (view === 'study') return (
     <>
@@ -403,13 +451,21 @@ export default function App() {
     </>
   )
 
-  if (view === 'class-mgmt' && user) return (
-    <>
-      {header}
-      <ClassManagementPage user={user} onGoHome={goHome} />
-      {teacherToolOverlays}
-    </>
-  )
+  if (view === 'class-mgmt') {
+    if (!user) return (
+      <>{header}<AccessDenied message="Bạn cần đăng nhập để truy cập trang này." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
+    )
+    if (!hasTeacherAccess(user.role)) return (
+      <>{header}<AccessDenied message="Quản lý lớp học chỉ dành cho Giáo viên, Admin và Super Admin." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={true} /></>
+    )
+    return (
+      <>
+        {header}
+        <ClassManagementPage user={user} onGoHome={goHome} />
+        {teacherToolOverlays}
+      </>
+    )
+  }
 
   if (view === 'my-classes' && user) {
     if (user.role === ROLES.GUEST) return (
@@ -435,18 +491,23 @@ export default function App() {
     )
   }
 
-  if (view === 'profile' && user) return (
-    <>
-      {header}
-      <ProfilePage
-        user={user}
-        onUpdateUser={handleUpdateUser}
-        onGoMyExams={goMyExams}
-        onGoHome={goHome}
-      />
-      {teacherToolOverlays}
-    </>
-  )
+  if (view === 'profile') {
+    if (!user) return (
+      <>{header}<AccessDenied message="Bạn cần đăng nhập để xem hồ sơ." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
+    )
+    return (
+      <>
+        {header}
+        <ProfilePage
+          user={user}
+          onUpdateUser={handleUpdateUser}
+          onGoMyExams={goMyExams}
+          onGoHome={goHome}
+        />
+        {teacherToolOverlays}
+      </>
+    )
+  }
 
   if (view === 'login') return <LoginPage onLogin={handleLogin} onGoHome={goHome} />
 
@@ -483,38 +544,56 @@ export default function App() {
     </>
   )
 
-  if (view === 'create-exam') return (
-    <>
-      {header}
-      <CreateExamPage
-        user={user}
-        onGoMyExams={() => { setMixResult(null); goMyExams() }}
-        manualMode={manualMode}
-        mixResult={mixResult}
-      />
-      {mixStandaloneModal}
-      {teacherToolOverlays}
-    </>
-  )
+  if (view === 'create-exam') {
+    if (!user) return (
+      <>{header}<AccessDenied message="Bạn cần đăng nhập để tạo đề thi." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
+    )
+    if (!hasTeacherAccess(user.role)) return (
+      <>{header}<AccessDenied message="Tạo đề thi chỉ dành cho Giáo viên, Admin và Super Admin." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={true} /></>
+    )
+    return (
+      <>
+        {header}
+        <CreateExamPage
+          user={user}
+          onGoMyExams={() => { setMixResult(null); goMyExams() }}
+          manualMode={manualMode}
+          mixResult={mixResult}
+        />
+        {mixStandaloneModal}
+        {teacherToolOverlays}
+      </>
+    )
+  }
 
-  if (view === 'edit-exam' && editingExam) return (
-    <>
-      {header}
-      <CreateExamPage
-        user={user}
-        onGoMyExams={() => { setEditingExam(null); goMyExams() }}
-        editingExam={editingExam}
-      />
-      {teacherToolOverlays}
-    </>
-  )
+  if (view === 'edit-exam' && editingExam) {
+    if (!user || !hasTeacherAccess(user.role)) return (
+      <>{header}<AccessDenied message="Chỉnh sửa đề thi chỉ dành cho Giáo viên, Admin và Super Admin." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={!!user} /></>
+    )
+    return (
+      <>
+        {header}
+        <CreateExamPage
+          user={user}
+          onGoMyExams={() => { setEditingExam(null); goMyExams() }}
+          editingExam={editingExam}
+        />
+        {teacherToolOverlays}
+      </>
+    )
+  }
 
-  if (view === 'solver-page') return (
-    <>
-      {header}
-      <ExerciseSolver onBack={() => { setHash(''); setView('home') }} />
-    </>
-  )
+  if (view === 'solver-page') {
+    if (!user || !hasTeacherAccess(user.role)) return (
+      <>{header}<AccessDenied message="Công cụ giải bài chỉ dành cho Giáo viên, Admin và Super Admin." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={!!user} /></>
+    )
+    return (
+      <>
+        {header}
+        <ExerciseSolver onBack={() => { setHash(''); setView('home') }} />
+      </>
+    )
+  }
 
   if (view === 'geo3d-page') return (
     <>
@@ -523,20 +602,28 @@ export default function App() {
     </>
   )
 
-  if (view === 'my-exams') return (
-    <>
-      {header}
-      <MyExamsPage
-        user={user}
-        onCreateExam={goCreateExam}
-        onEdit={goEdit}
-        onResults={goResults}
-      />
-      {choiceModal}
-      {mixStandaloneModal}
-      {teacherToolOverlays}
-    </>
-  )
+  if (view === 'my-exams') {
+    if (!user) return (
+      <>{header}<AccessDenied message="Bạn cần đăng nhập để xem đề thi của mình." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
+    )
+    if (!hasMemberAccess(user.role)) return (
+      <>{header}<AccessDenied message="Vai trò Khách không được phép xem đề thi. Liên hệ Admin để nâng cấp tài khoản." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={true} /></>
+    )
+    return (
+      <>
+        {header}
+        <MyExamsPage
+          user={user}
+          onCreateExam={goCreateExam}
+          onEdit={goEdit}
+          onResults={goResults}
+        />
+        {choiceModal}
+        {mixStandaloneModal}
+        {teacherToolOverlays}
+      </>
+    )
+  }
 
   if (view === 'home') return (
     <>

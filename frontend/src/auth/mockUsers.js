@@ -72,6 +72,14 @@ export function hasTeacherAccess(role) {
   return (ROLE_META[role]?.tier ?? 0) >= 2
 }
 
+export function hasAdminAccess(role) {
+  return role === ROLES.ADMIN || role === ROLES.SUPERADMIN
+}
+
+export function hasMemberAccess(role) {
+  return (ROLE_META[role]?.tier ?? 0) >= 1
+}
+
 export async function login(email, password) {
   try {
     const res  = await fetch('/api/auth/login', {
