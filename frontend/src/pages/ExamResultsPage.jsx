@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { fetchExamById, getSubmissions, hideResultsToggle, revealResults } from '../store/examStore.js'
+import { fetchExamById, getSubmissions, hideResultsToggle, revealResults, scaledScore } from '../store/examStore.js'
 import QuestionStats from '../components/QuestionStats.jsx'
 
 function fmtDate(iso) {
@@ -165,11 +165,13 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
 
   // Chỉ hiển thị bài nộp qua link chung của đề (không thuộc lớp học).
   // Điểm của bài nộp theo lớp được xem riêng trong trang quản lý lớp.
-  const subs     = (data?.submissions || []).filter(s => !s.classId)
+  const rawSubs  = (data?.submissions || []).filter(s => !s.classId)
   const revealed = data?.resultsRevealed || false
   const hideMode = data?.hideResults || false
 
-  const maxScore = subs[0]?.maxScore || 0
+  // Quy đổi mọi điểm về thang 10 để hiển thị thống nhất.
+  const maxScore = 10
+  const subs     = rawSubs.map(s => ({ ...s, score: scaledScore(s.score, s.maxScore), maxScore }))
 
   const scores   = subs.map(s => s.score ?? 0)
   const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 100) / 100 : 0

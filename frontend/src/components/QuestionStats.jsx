@@ -8,11 +8,68 @@ export const SECTION_PREFIXES = {
   'READING':   'RD',
 }
 
+const MC_SECTIONS = new Set(['PHẦN I', 'TIẾNG ANH', 'READING'])
+
+/* Một bài làm (attempt) cho câu này có đúng hay không. */
+function isAnswerCorrect(sec, q, ans) {
+  if (MC_SECTIONS.has(sec)) {
+    return !!q.answer && ans === q.answer
+  }
+  if (sec === 'PHẦN II') {
+    const sqs = q.sub_questions || []
+    return sqs.length > 0 && sqs.every(sq => ans?.[sq.label] === sq.correct_answer)
+  }
+  if (sec === 'PHẦN III') {
+    const ua = (ans || '').toString().trim().toLowerCase()
+    const ca = (q.answer || '').toString().trim().toLowerCase()
+    return !!ua && !!ca && ua === ca
+  }
+  return false
+}
+
+/* ── Hiển thị đáp án 1 lần làm của 1 học sinh cho 1 câu ──
+   - Trắc nghiệm / Tiếng Anh / Reading: chữ cái (A/B/C/D), xanh nếu đúng, đỏ nếu sai.
+   - Đúng/Sai (PHẦN II): "Đ Đ S S", câu con nào sai có dấu x.
+   - Trả lời ngắn (PHẦN III): nội dung học sinh nhập. */
+function AnswerAttempt({ sec, q, ans }) {
+  if (sec === 'PHẦN II') {
+    const userAns = ans || {}
+    const sqs     = q.sub_questions || []
+    return (
+      <span className="qs-attempt qs-attempt--tf">
+        {sqs.map((sq, i) => {
+          const u    = userAns[sq.label]
+          const has  = u === true || u === false
+          const mark = u === true ? 'Đ' : u === false ? 'S' : '·'
+          const ok   = has && u === sq.correct_answer
+          return (
+            <span
+              key={i}
+              className={`qs-mark ${!has ? 'qs-blank' : ok ? 'qs-ok' : 'qs-bad'}`}
+            >
+              {mark}{has && !ok ? 'x' : ''}
+            </span>
+          )
+        })}
+      </span>
+    )
+  }
+
+  const u  = (ans || '').toString().trim()
+  const ok = isAnswerCorrect(sec, q, ans)
+  return (
+    <span className={`qs-attempt qs-mark ${!u ? 'qs-blank' : ok ? 'qs-ok' : 'qs-bad'}`}>
+      {u || '·'}
+    </span>
+  )
+}
+
 /* ── Per-question statistics ──
    subs: danh sách bài làm (mỗi lần làm là một phần tử, có `answers`,
    `studentName` và tuỳ chọn `studentId`).
-   Nếu một học sinh làm sai cùng một câu nhiều lần (vd. bài tập làm 3 lần)
-   thì gộp lại thành "Nguyễn Văn A ×3". */
+   Khi mở rộng một câu sẽ hiện đáp án TỪNG học sinh đã chọn. Nếu một học
+   sinh làm đề nhiều lần (vd. trong lớp học), các lần làm hiện cạnh nhau:
+   trắc nghiệm "A A A", đúng/sai "Đ Đ S S | Đ Đ S S". */
 export default function QuestionStats({ exam, subs }) {
   const [expanded, setExpanded] = useState({})
   const [showSection, setShowSection] = useState({})
@@ -27,37 +84,31 @@ export default function QuestionStats({ exam, subs }) {
   const buildStats = (sec) => {
     const questions = exam.sections[sec]?.questions || []
     const prefix    = SECTION_PREFIXES[sec]
+
+    // Gộp các lần làm theo học sinh (giữ thứ tự thời gian).
+    const studentMap = new Map()   // id → { name, attempts: [sub,...] }
+    subs.forEach(sub => {
+      const name = sub.studentName || 'Ẩn danh'
+      const id   = String(sub.studentId ?? name)
+      if (!studentMap.has(id)) studentMap.set(id, { name, attempts: [] })
+      studentMap.get(id).attempts.push(sub)
+    })
+    studentMap.forEach(v =>
+      v.attempts.sort((a, b) => new Date(a.submittedAt || 0) - new Date(b.submittedAt || 0))
+    )
+    const students = [...studentMap.values()]
+
     return questions.map(q => {
-      const key          = `${prefix}_${q.question_number}`
-      let correctCount   = 0
-      const wrongMap     = new Map()   // studentId|name → { name, count }
+      const key        = `${prefix}_${q.question_number}`
+      let correctCount = 0
+      let wrongCount   = 0
 
       subs.forEach(sub => {
-        const ans = sub.answers?.[key]
-        let ok = false
-        if (sec === 'PHẦN I' || sec === 'TIẾNG ANH' || sec === 'READING') {
-          ok = q.answer && ans === q.answer
-        } else if (sec === 'PHẦN II') {
-          const sqs = q.sub_questions || []
-          ok = sqs.length > 0 && sqs.every(sq => ans?.[sq.label] === sq.correct_answer)
-        } else if (sec === 'PHẦN III') {
-          const ua = (ans || '').toString().trim().toLowerCase()
-          const ca = (q.answer || '').toString().trim().toLowerCase()
-          ok = !!ua && !!ca && ua === ca
-        }
-        if (ok) correctCount++
-        else {
-          const name = sub.studentName || 'Ẩn danh'
-          const id   = String(sub.studentId ?? name)
-          const cur  = wrongMap.get(id) || { name, count: 0 }
-          cur.count++
-          wrongMap.set(id, cur)
-        }
+        if (isAnswerCorrect(sec, q, sub.answers?.[key])) correctCount++
+        else wrongCount++
       })
 
-      const wrongStudents = [...wrongMap.values()].sort((a, b) => b.count - a.count)
-      const wrongCount    = subs.length - correctCount
-      return { num: q.question_number, key, correctCount, total: subs.length, wrongStudents, wrongCount }
+      return { num: q.question_number, key, q, sec, correctCount, wrongCount, total: subs.length, students }
     })
   }
 
@@ -94,25 +145,31 @@ export default function QuestionStats({ exam, subs }) {
                           {s.correctCount}/{s.total}
                         </span>
                         <span className="er-qstat-pct" style={{ color }}>({pct}%)</span>
-                        {s.wrongStudents.length > 0 && (
-                          <button className="er-qstat-toggle" onClick={() => toggle(s.key)}>
-                            {isExp ? '▲' : '▼'} {s.wrongCount} sai
-                          </button>
-                        )}
-                        {s.wrongStudents.length === 0 && (
-                          <span className="er-qstat-all-correct">✓ Tất cả đúng</span>
-                        )}
+                        <button className="er-qstat-toggle qs-toggle-ans" onClick={() => toggle(s.key)}>
+                          {isExp ? '▲' : '▼'} Đáp án
+                          {s.wrongCount > 0 && <span className="qs-toggle-wrong"> · {s.wrongCount} sai</span>}
+                        </button>
                       </div>
-                      {isExp && s.wrongStudents.length > 0 && (
-                        <div className="er-qstat-wrong-wrap">
-                          <span className="er-qstat-wrong-label">Trả lời sai:</span>
-                          <div className="er-qstat-wrong-names">
-                            {s.wrongStudents.map((w, i) => (
-                              <span key={i} className="er-qstat-wrong-chip">
-                                {w.name}{w.count > 1 ? ` ×${w.count}` : ''}
+                      {isExp && (
+                        <div className="qs-ans-list">
+                          {s.students.map((st, i) => (
+                            <div key={i} className="qs-ans-row">
+                              <span className="qs-ans-name">{st.name}</span>
+                              <span className="qs-ans-sep">:</span>
+                              <span className="qs-ans-vals">
+                                {st.attempts.map((att, j) => (
+                                  <React.Fragment key={j}>
+                                    {j > 0 && (
+                                      <span className="qs-attempt-sep">
+                                        {s.sec === 'PHẦN II' ? '|' : ''}
+                                      </span>
+                                    )}
+                                    <AnswerAttempt sec={s.sec} q={s.q} ans={att.answers?.[s.key]} />
+                                  </React.Fragment>
+                                ))}
                               </span>
-                            ))}
-                          </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

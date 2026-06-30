@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { getExamsByTeacher, getSubmissions as getExamSubmissions, fetchExamById } from '../store/examStore.js'
+import { getExamsByTeacher, getSubmissions as getExamSubmissions, fetchExamById, scaledScore } from '../store/examStore.js'
 import QuestionStats from '../components/QuestionStats.jsx'
 import {
   addAssignment, addDocument, addMemberToClass, createClass,
@@ -188,14 +188,15 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
           const rows = [...byStudent.values()].map(list => {
             list.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt))
             const last   = list[list.length - 1]
-            const scores = list.map(s => s.score ?? 0)
+            // Quy đổi điểm từng lần về thang 10 trước khi gộp.
+            const scores = list.map(s => scaledScore(s.score, s.maxScore))
             let score
             if (mode === 'average')     score = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
-            else if (mode === 'latest') score = last.score
+            else if (mode === 'latest') score = scaledScore(last.score, last.maxScore)
             else                        score = Math.max(...scores)   // highest
             return {
               studentId: last.studentId, studentName: last.studentName,
-              score, maxScore: last.maxScore, attempts: list.length,
+              score, maxScore: 10, attempts: list.length,
               submittedAt: last.submittedAt,
             }
           })

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { calcMaxScore, calcScore, examStatus, fetchExamById, submitResult } from '../store/examStore.js'
+import { calcMaxScore, calcScore, examStatus, fetchExamById, submitResult, scaledScore } from '../store/examStore.js'
 import { getExamWindow } from '../store/classStore.js'
 import QuestionCard from '../components/QuestionCard.jsx'
 import ReadingTakeView from '../components/ReadingTakeView.jsx'
@@ -244,7 +244,7 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
             </div>
           ) : (
             <div className="etl-score">
-              <div className="etl-score-num">{finalScore} <span>/ {finalMax}</span></div>
+              <div className="etl-score-num">{scaledScore(finalScore, finalMax)} <span>/ 10</span></div>
               <div className="etl-score-label">điểm</div>
               <p className="etl-name-tag">Bài làm của: <strong>{studentName}</strong></p>
             </div>

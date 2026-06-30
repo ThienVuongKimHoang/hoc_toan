@@ -4722,6 +4722,50 @@ button { font-family: inherit; }
   font-weight: 500;
 }
 
+/* ── Đáp án từng học sinh (mở rộng theo câu) ── */
+.er-qstat-toggle.qs-toggle-ans {
+  color: #2563eb;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.er-qstat-toggle.qs-toggle-ans:hover { background: #dbeafe; }
+.qs-toggle-wrong { color: #ef4444; font-weight: 700; }
+
+.qs-ans-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 0 4px 54px;
+}
+.qs-ans-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+.qs-ans-name {
+  font-weight: 600;
+  color: #334155;
+  min-width: 120px;
+}
+.qs-ans-sep { color: #cbd5e1; }
+.qs-ans-vals {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.qs-attempt { display: inline-flex; align-items: center; gap: 3px; }
+.qs-attempt--tf { gap: 4px; }
+.qs-attempt-sep { color: #94a3b8; font-weight: 700; }
+
+.qs-mark { font-weight: 700; }
+.qs-ok   { color: #16a34a; }
+.qs-bad  { color: #dc2626; }
+.qs-blank { color: #cbd5e1; }
+
 /* Pass-rate note */
 .er-passrate {
   margin: 0 0 14px;

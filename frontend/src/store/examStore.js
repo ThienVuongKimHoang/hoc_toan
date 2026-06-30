@@ -335,3 +335,15 @@ export function calcMaxScore(exam) {
 
   return Math.round(max * 100) / 100
 }
+
+/**
+ * Quy đổi điểm về thang 10.
+ * Nếu số câu không đủ để tổng điểm = 10, ta tính theo %
+ * (điểm đạt được / tổng điểm) rồi nhân hệ số 10.
+ * Khi maxScore không hợp lệ → trả về điểm gốc.
+ */
+export function scaledScore(score, maxScore) {
+  const s = score ?? 0
+  if (!maxScore || maxScore <= 0) return Math.round(s * 100) / 100
+  return Math.round((s / maxScore) * 10 * 100) / 100
+}
