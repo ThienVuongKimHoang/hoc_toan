@@ -53,7 +53,8 @@ export async function joinClassByCode(code, password, user) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code, password: password || null, userId: user.id, userName: user.name, userEmail: user.email }),
   })
-  return res.json()
+  const data = await res.json().catch(() => ({ error: `Lỗi máy chủ: HTTP ${res.status}` }))
+  return data
 }
 
 export async function addMemberToClass(classId, student) {

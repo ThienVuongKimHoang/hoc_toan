@@ -84,8 +84,9 @@ export default function AIAssistantModal({ activeSection, availableSections, onA
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ prompt: text, section, count }),
       })
+      if (!res.ok) throw new Error(`Lỗi máy chủ: HTTP ${res.status}`)
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`)
+      if (data.error) throw new Error(data.error)
       const qs = data.questions || []
       setQuestions(qs)
       setSelected(new Set(qs.map((_, i) => i)))

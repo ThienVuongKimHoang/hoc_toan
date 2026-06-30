@@ -27,6 +27,33 @@ function FigureImages({ path }) {
   )
 }
 
+// Render question_text với [img:id] markers → ảnh thật
+function QuestionText({ q }) {
+  const text = q?.question_text || ''
+  const images = q?.images || []
+  if (!text) return null
+  if (!text.includes('[img:')) return <MathText text={text} />
+  const parts = text.split(/(\[img:[^\]]*\])/g)
+  return (
+    <>
+      {parts.map((part, i) => {
+        const m = part.match(/^\[img:([^\]]*)\]$/)
+        if (m) {
+          const img = images.find(im => im.id === m[1])
+          if (!img) return null
+          const src = img.dataUrl || (img.url ? `/images/${img.url.replace('images/', '')}` : '')
+          return (
+            <span key={i} style={{ display: 'block', margin: '8px 0' }}>
+              <img src={src} alt={img.name || 'Hình minh họa'} className="figure-img" loading="lazy" />
+            </span>
+          )
+        }
+        return part ? <MathText key={i} text={part} /> : null
+      })}
+    </>
+  )
+}
+
 function PassageBlock({ title, text }) {
   const [collapsed, setCollapsed] = useState(false)
   if (!text) return null
@@ -73,7 +100,7 @@ function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false }
   return (
     <div className="q-body">
       {!hidePassage && <PassageBlock title={q.passage_title} text={q.passage_text} />}
-      <p className="q-text"><MathText text={q.question_text} /></p>
+      <p className="q-text"><QuestionText q={q} /></p>
       <FigureImages path={q.figure_path} />
       <div className="choices">
         {Object.entries(q.choices || {}).map(([key, val]) => (
@@ -122,7 +149,7 @@ function TrueFalseCard({ q, examMode, onAnswerChange }) {
 
   return (
     <div className="q-body">
-      <p className="q-text"><MathText text={q.question_text} /></p>
+      <p className="q-text"><QuestionText q={q} /></p>
       <FigureImages path={q.figure_path} />
       <div className="sub-questions">
         {subs.map((sub) => {
@@ -167,7 +194,7 @@ function ShortAnswerCard({ q, examMode, onAnswerChange }) {
   if (examMode) {
     return (
       <div className="q-body">
-        <p className="q-text"><MathText text={q.question_text} /></p>
+        <p className="q-text"><QuestionText q={q} /></p>
         <FigureImages path={q.figure_path} />
         <div className="short-answer-row">
           <input
@@ -184,7 +211,7 @@ function ShortAnswerCard({ q, examMode, onAnswerChange }) {
 
   return (
     <div className="q-body">
-      <p className="q-text"><MathText text={q.question_text} /></p>
+      <p className="q-text"><QuestionText q={q} /></p>
       <FigureImages path={q.figure_path} />
       <div className="short-answer-row">
         <input

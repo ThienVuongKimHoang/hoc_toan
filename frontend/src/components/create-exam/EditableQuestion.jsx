@@ -774,8 +774,9 @@ export default function EditableQuestion({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      if (!res.ok) throw new Error(`Lỗi máy chủ: HTTP ${res.status}`)
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`)
+      if (data.error) throw new Error(data.error)
       const gen = data.questions?.[0]
       if (!gen) throw new Error('AI không tạo được câu hỏi')
       setAiResult(gen)
