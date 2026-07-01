@@ -201,6 +201,7 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
               studentId: last.studentId, studentName: last.studentName,
               score, maxScore: 10, attempts: list.length,
               submittedAt: last.submittedAt,
+              timeSpent: last.timeSpent,
             }
           })
           // rawSubs: giữ từng lần làm để thống kê theo câu (gộp "Tên ×N" nếu sai nhiều lần)
@@ -247,6 +248,7 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
   const submittedIds = new Set(submissions.map(s => String(s.studentId)))
   const notSubmitted = members.filter(m => !submittedIds.has(String(m.userId)))
   const formatDt = iso => iso ? new Date(iso).toLocaleString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
+  const fmtDur = sec => (sec == null || sec < 0) ? null : (sec < 60 ? `${sec} giây` : (sec % 60 ? `${Math.floor(sec/60)} phút ${sec%60} giây` : `${Math.floor(sec/60)} phút`))
 
   return (
     <>
@@ -290,6 +292,17 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
                         {IC.clock(11)} {formatDt(s.submittedAt)}
                         {isExam && s.attempts > 1 && <span> · {s.attempts} lần làm</span>}
                       </div>
+                      {isExam && fmtDur(s.timeSpent) && (() => {
+                        const limitSec = assignment.duration ? assignment.duration * 60 : 0
+                        const pct = limitSec > 0 ? Math.min(100, Math.round((s.timeSpent / limitSec) * 100)) : 100
+                        const color = !limitSec ? '#6366f1' : pct >= 85 ? '#ef4444' : pct >= 60 ? '#f59e0b' : '#22c55e'
+                        return (
+                          <div className="sub-timebar" title="Thời gian làm bài">
+                            <div className="sub-timebar-fill" style={{ width: `${pct}%`, background: color }} />
+                            <span className="sub-timebar-label">⏱ {fmtDur(s.timeSpent)}</span>
+                          </div>
+                        )
+                      })()}
                       {s.note && <div className="sub-note">"{s.note}"</div>}
                       {s.files?.length > 0 && (
                         <div className="file-chip-list" style={{marginTop:6}}>

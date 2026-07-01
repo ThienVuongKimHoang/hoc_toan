@@ -140,7 +140,7 @@ export async function fetchExamById(id) {
 }
 
 /** Học sinh nộp bài */
-export async function submitResult(examId, { studentName, studentId, answers, score, maxScore, className, classId }) {
+export async function submitResult(examId, { studentName, studentId, answers, score, maxScore, className, classId, startedAt, timeSpent }) {
   const body = {
     studentName,
     studentId,
@@ -150,6 +150,8 @@ export async function submitResult(examId, { studentName, studentId, answers, sc
     className: className || null,
     classId:   classId   || null,
     submittedAt: new Date().toISOString(),
+    startedAt: startedAt || null,
+    timeSpent: timeSpent ?? null,   // giây làm bài
   }
   const res = await fetch(`/api/exams/${examId}/submit`, {
     method:  'POST',

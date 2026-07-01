@@ -215,8 +215,10 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
     setSubmitting(true)
     const score    = calcScore(exam, answers)
     const maxScore = calcMaxScore(exam)
+    const timeSpent = Math.max(0, Math.round((Date.now() - startedAt) / 1000))  // giây
     try {
-      await submitResult(exam.id, { studentName, studentId, answers, score, maxScore, className, classId })
+      await submitResult(exam.id, { studentName, studentId, answers, score, maxScore, className, classId,
+                                    startedAt: new Date(startedAt).toISOString(), timeSpent })
       setFinalScore(score)
       setFinalMax(maxScore)
       setSubmitted(true)

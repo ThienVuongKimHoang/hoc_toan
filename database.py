@@ -94,6 +94,8 @@ CREATE TABLE IF NOT EXISTS submissions (
     class_id     VARCHAR(100)
 );
 CREATE INDEX IF NOT EXISTS idx_sub_exam ON submissions(exam_id);
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS time_spent INTEGER;
 
 CREATE TABLE IF NOT EXISTS classes (
     id            VARCHAR(50)  PRIMARY KEY,
@@ -385,6 +387,8 @@ def _sub_from_row(row: dict) -> dict:
     return {
         "id":          r["id"],
         "submittedAt": r["submitted_at"].isoformat() if r.get("submitted_at") else None,
+        "startedAt":   r["started_at"].isoformat() if r.get("started_at") else None,
+        "timeSpent":   r.get("time_spent"),
         "studentName": r["student_name"] or "Ẩn danh",
         "studentId":   r["student_id"],
         "answers":     r["answers"] or {},
@@ -506,11 +510,12 @@ def add_submission(exam_id: str, sub: dict) -> int:
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO submissions(exam_id,submitted_at,student_name,student_id,
+                INSERT INTO submissions(exam_id,submitted_at,started_at,time_spent,student_name,student_id,
                     answers,score,max_score,class_name,class_id)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
             """, (
                 exam_id, sub.get("submittedAt"),
+                sub.get("startedAt"), sub.get("timeSpent"),
                 sub.get("studentName", "Ẩn danh"), str(sub.get("studentId", "")),
                 json.dumps(sub.get("answers") or {}, ensure_ascii=False),
                 sub.get("score"), sub.get("maxScore"),

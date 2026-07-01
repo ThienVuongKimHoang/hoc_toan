@@ -10,6 +10,14 @@ function fmtDate(iso) {
   })
 }
 
+function fmtDuration(sec) {
+  if (sec == null || sec < 0) return '—'
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  if (m === 0) return `${s} giây`
+  return s ? `${m} phút ${s} giây` : `${m} phút`
+}
+
 function ScoreBar({ score, maxScore }) {
   const pct   = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0
   const color = pct >= 70 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444'
@@ -17,6 +25,21 @@ function ScoreBar({ score, maxScore }) {
     <div className="er-score-bar">
       <div className="er-score-fill" style={{ width: `${pct}%`, background: color }} />
       <span className="er-score-label">{score}/{maxScore} ({pct}%)</span>
+    </div>
+  )
+}
+
+/* ── Thanh tiến độ thời gian làm bài ── */
+function TimeBar({ sec, limitMin }) {
+  if (sec == null || sec < 0) return <span className="er-time-empty">—</span>
+  const limitSec = limitMin ? limitMin * 60 : 0
+  const pct   = limitSec > 0 ? Math.min(100, Math.round((sec / limitSec) * 100)) : 100
+  // Dùng nhiều thời gian (gần hết giờ) → đỏ; nhanh → xanh
+  const color = !limitSec ? '#6366f1' : pct >= 85 ? '#ef4444' : pct >= 60 ? '#f59e0b' : '#22c55e'
+  return (
+    <div className="er-time-bar">
+      <div className="er-time-fill" style={{ width: `${pct}%`, background: color }} />
+      <span className="er-time-label">⏱ {fmtDuration(sec)}</span>
     </div>
   )
 }
@@ -284,6 +307,7 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
                   <th>#</th>
                   <th>Học sinh</th>
                   <th>Điểm</th>
+                  <th>Thời gian làm</th>
                   <th>Thời gian nộp</th>
                   <th></th>
                 </tr>
@@ -301,6 +325,9 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
                       </td>
                       <td className="er-td-score">
                         <ScoreBar score={s.score ?? 0} maxScore={s.maxScore ?? maxScore} />
+                      </td>
+                      <td className="er-td-timebar">
+                        <TimeBar sec={s.timeSpent} limitMin={exam?.settings?.duration} />
                       </td>
                       <td className="er-td-time">{fmtDate(s.submittedAt)}</td>
                       <td className="er-td-del">

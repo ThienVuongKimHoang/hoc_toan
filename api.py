@@ -362,6 +362,8 @@ async def submit_exam(exam_id: str, request: Request):
 
     submission = {
         "submittedAt": body.get("submittedAt"),
+        "startedAt":   body.get("startedAt"),
+        "timeSpent":   body.get("timeSpent"),   # giây làm bài
         "studentName":  body.get("studentName", "Ẩn danh"),
         "studentId":    body.get("studentId"),
         "answers":      body.get("answers", {}),
