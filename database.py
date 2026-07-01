@@ -533,6 +533,23 @@ def add_submission(exam_id: str, sub: dict) -> int:
     return idx
 
 
+def update_submission_score(sub_id, score, max_score) -> bool:
+    """Cập nhật điểm & điểm tối đa của 1 bài nộp (dùng khi chấm lại theo đáp án mới)."""
+    try:
+        sid = int(sub_id)
+    except (TypeError, ValueError):
+        return False
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE submissions SET score=%s, max_score=%s WHERE id=%s RETURNING id",
+                (score, max_score, sid),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    return row is not None
+
+
 def delete_submission(sub_id) -> bool:
     """Xóa 1 bài nộp theo id. Trả về False nếu không tìm thấy."""
     try:

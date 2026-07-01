@@ -297,15 +297,107 @@ async def result(task_id: str):
     return task["result"]
 
 
+# ─── Chấm điểm phía server (đồng bộ với calcScore ở frontend) ────────────────
+
+def _round2(x: float) -> float:
+    return int(x * 100 + 0.5) / 100   # làm tròn nửa lên như Math.round
+
+
+def _calc_score(exam: dict, answers: dict) -> float:
+    answers = answers or {}
+    secs = exam.get("sections") or {}
+    score = 0.0
+
+    p1 = secs.get("PHẦN I")
+    if p1:
+        ppq = p1.get("points_per_q") or 0.25
+        for q in (p1.get("questions") or []):
+            if answers.get(f"I_{q.get('question_number')}") == q.get("answer"):
+                score += ppq
+
+    p2 = secs.get("PHẦN II")
+    if p2:
+        ppq = p2.get("points_per_q") or 1.0
+        for q in (p2.get("questions") or []):
+            user = answers.get(f"II_{q.get('question_number')}") or {}
+            subs = q.get("sub_questions") or []
+            total = len(subs)
+            n_right = sum(1 for s in subs if user.get(s.get("label")) == s.get("correct_answer"))
+            pts = 0.0
+            if total:
+                if   n_right == total:     pts = ppq
+                elif n_right == total - 1: pts = ppq * 0.5
+                elif n_right == total - 2: pts = ppq * 0.2
+                elif n_right == total - 3: pts = ppq * 0.1
+            score += pts
+
+    p3 = secs.get("PHẦN III")
+    if p3:
+        ppq = p3.get("points_per_q") or 0.5
+        for q in (p3.get("questions") or []):
+            user    = str(answers.get(f"III_{q.get('question_number')}") or "").strip().lower()
+            correct = str(q.get("answer") or "").strip().lower()
+            if user and correct and user == correct:
+                score += ppq
+
+    for key, prefix, default in (("TIẾNG ANH", "EN", 0.25), ("READING", "RD", 0.25)):
+        sec = secs.get(key)
+        if sec:
+            ppq = sec.get("points_per_q") or default
+            for q in (sec.get("questions") or []):
+                if q.get("answer") and answers.get(f"{prefix}_{q.get('question_number')}") == q.get("answer"):
+                    score += ppq
+
+    return _round2(score)
+
+
+def _calc_max_score(exam: dict) -> float:
+    secs = exam.get("sections") or {}
+    m = 0.0
+    p1 = secs.get("PHẦN I")
+    if p1: m += len(p1.get("questions") or []) * (p1.get("points_per_q") or 0.25)
+    p2 = secs.get("PHẦN II")
+    if p2: m += len(p2.get("questions") or []) * (p2.get("points_per_q") or 1.0)
+    p3 = secs.get("PHẦN III")
+    if p3: m += len(p3.get("questions") or []) * (p3.get("points_per_q") or 0.5)
+    for key, default in (("TIẾNG ANH", 0.25), ("READING", 0.25)):
+        sec = secs.get(key)
+        if sec:
+            ppq = sec.get("points_per_q") or default
+            m += sum(1 for q in (sec.get("questions") or []) if q.get("answer")) * ppq
+    return _round2(m)
+
+
+def _recompute_submissions(exam_id: str, exam: dict) -> int:
+    """Chấm lại toàn bộ bài nộp theo đáp án hiện tại của đề. Trả về số bài đã đổi điểm."""
+    max_score = _calc_max_score(exam)
+    updated = 0
+    for sub in db.get_submissions(exam_id):
+        new_score = _calc_score(exam, sub.get("answers") or {})
+        if sub.get("score") != new_score or sub.get("maxScore") != max_score:
+            db.update_submission_score(sub["id"], new_score, max_score)
+            updated += 1
+    return updated
+
+
 @app.post("/api/exams/{exam_id}")
 async def upsert_exam(exam_id: str, request: Request):
-    """Lưu hoặc cập nhật một đề thi lên server."""
+    """Lưu hoặc cập nhật một đề thi lên server. Nếu đáp án đổi → chấm lại bài đã nộp."""
     body = await request.json()
     existing = db.get_exam(exam_id) or {}
     body.setdefault("resultsRevealed", existing.get("resultsRevealed", False))
     body.pop("submissions", None)
     db.upsert_exam(exam_id, body)
-    return {"ok": True, "id": exam_id}
+
+    # Tự động chấm lại điểm khi đề có câu hỏi (tránh zero hóa nếu payload thiếu sections)
+    rescored = 0
+    if body.get("sections"):
+        try:
+            rescored = _recompute_submissions(exam_id, body)
+        except Exception as exc:
+            print(f"[rescore] error for {exam_id}: {exc}")
+
+    return {"ok": True, "id": exam_id, "rescored": rescored}
 
 
 @app.get("/api/exams/{exam_id}")

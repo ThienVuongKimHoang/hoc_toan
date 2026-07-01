@@ -122,16 +122,15 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
   }, [])
 
   /* ── Helpers để sync exam lên server ── */
-  const syncToServer = (exam) => {
+  const syncToServer = (exam) =>
     fetch(`/api/exams/${exam.id}`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(exam),
-    }).catch(console.warn)
-  }
+    }).then(r => r.json()).catch(err => { console.warn(err); return null })
 
   /* ── Lưu lại (không phát đề) — dùng cho cả edit lẫn manual ── */
-  const handleSaveOnly = (edited) => {
+  const handleSaveOnly = async (edited) => {
     const t = title.trim() || 'Đề thi chưa đặt tên'
     let exam
     if (isEditing) {
@@ -140,7 +139,10 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
       // Manual mode: tạo đề mới và lưu vào localStorage (chưa publish)
       exam = createExam({ title: t, result: edited, userId: user.id })
     }
-    syncToServer(exam)
+    const res = await syncToServer(exam)
+    if (res?.rescored > 0) {
+      alert(`✅ Đã lưu đề và tự động chấm lại điểm cho ${res.rescored} bài nộp theo đáp án mới.`)
+    }
     onGoMyExams()
   }
 
