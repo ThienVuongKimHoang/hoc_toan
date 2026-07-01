@@ -383,6 +383,7 @@ def _exam_from_row(row: dict) -> dict:
 def _sub_from_row(row: dict) -> dict:
     r = dict(row)
     return {
+        "id":          r["id"],
         "submittedAt": r["submitted_at"].isoformat() if r.get("submitted_at") else None,
         "studentName": r["student_name"] or "Ẩn danh",
         "studentId":   r["student_id"],
@@ -523,6 +524,40 @@ def add_submission(exam_id: str, sub: dict) -> int:
             idx = cur.fetchone()[0] - 1
         conn.commit()
     return idx
+
+
+def delete_submission(sub_id) -> bool:
+    """Xóa 1 bài nộp theo id. Trả về False nếu không tìm thấy."""
+    try:
+        sid = int(sub_id)
+    except (TypeError, ValueError):
+        return False
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM submissions WHERE id=%s RETURNING id", (sid,))
+            deleted = cur.fetchone()
+        conn.commit()
+    return deleted is not None
+
+
+def delete_submissions_for_student(exam_id: str, student_id, class_id=None) -> int:
+    """Xóa TẤT CẢ bài nộp (mọi lần làm) của một học sinh cho một đề.
+    - class_id có giá trị: chỉ xóa bài nộp trong lớp đó.
+    - class_id None: chỉ xóa bài nộp qua link công khai (class_id IS NULL).
+    Trả về số dòng đã xóa."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            if class_id:
+                cur.execute(
+                    "DELETE FROM submissions WHERE exam_id=%s AND student_id=%s AND class_id=%s",
+                    (exam_id, str(student_id), str(class_id)))
+            else:
+                cur.execute(
+                    "DELETE FROM submissions WHERE exam_id=%s AND student_id=%s AND class_id IS NULL",
+                    (exam_id, str(student_id)))
+            n = cur.rowcount
+        conn.commit()
+    return n
 
 
 def update_exam_field(exam_id: str, camel_field: str, value) -> bool:

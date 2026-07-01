@@ -171,6 +171,24 @@ export async function getSubmissions(examId) {
   return res.json()
 }
 
+/** Giáo viên xóa MỘT bài nộp (một lần làm) theo id — dùng cho link công khai */
+export async function deleteSubmission(examId, subId) {
+  const res = await fetch(`/api/exams/${examId}/submissions/${subId}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Không thể xóa bài nộp')
+  return res.json()
+}
+
+/** Giáo viên xóa TẤT CẢ bài làm của một học sinh (mọi lần làm) cho đề này */
+export async function deleteStudentSubmissions(examId, studentId, classId = null) {
+  const res = await fetch(`/api/exams/${examId}/submissions/delete-student`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ studentId, classId }),
+  })
+  if (!res.ok) throw new Error('Không thể xóa bài làm của học sinh')
+  return res.json()
+}
+
 /** Giáo viên công bố kết quả */
 export async function revealResults(examId) {
   const res = await fetch(`/api/exams/${examId}/reveal`, { method: 'POST' })

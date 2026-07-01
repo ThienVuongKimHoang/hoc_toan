@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { getExamsByTeacher, getSubmissions as getExamSubmissions, fetchExamById, scaledScore } from '../store/examStore.js'
+import { getExamsByTeacher, getSubmissions as getExamSubmissions, fetchExamById, scaledScore, deleteStudentSubmissions } from '../store/examStore.js'
 import QuestionStats from '../components/QuestionStats.jsx'
 import {
   addAssignment, addDocument, addMemberToClass, createClass,
+  deleteAssignmentSubmission,
   deleteClass, getClassById, getClassesByTeacher, getSubmissions,
   joinUrl, removeAssignment, removeDocument, removeMemberFromClass,
   searchStudents, updateClassInfo, uploadFile,
@@ -167,9 +168,11 @@ function FileChip({ file, onRemove, onView }) {
 function SubmissionsPanel({ classId, assignment, members, onClose }) {
   const [data, setData] = useState(null)
   const [viewing, setViewing] = useState(null)
+  const [confirmDel, setConfirmDel] = useState(null)   // học sinh đang chờ xác nhận xóa
+  const [delBusy, setDelBusy] = useState(false)
   const isExam = !!assignment.examId
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     if (isExam) {
       // Đề thi: kết quả nằm ở bài nộp của ĐỀ, lọc theo lớp; gộp nhiều lần làm theo cách tính điểm.
       const mode = assignment.scoreMode || 'highest'
@@ -210,6 +213,26 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
         .catch(() => setData({ submissions: [], members: members || [] }))
     }
   }, [classId, assignment.id, isExam])
+
+  useEffect(() => { reload() }, [reload])
+
+  const handleDelete = async () => {
+    if (!confirmDel) return
+    setDelBusy(true)
+    try {
+      if (isExam) {
+        await deleteStudentSubmissions(assignment.examId, confirmDel.studentId, classId)
+      } else {
+        await deleteAssignmentSubmission(classId, assignment.id, confirmDel.studentId)
+      }
+      setConfirmDel(null)
+      reload()
+    } catch (e) {
+      alert(e?.message || 'Xóa bài làm thất bại')
+    } finally {
+      setDelBusy(false)
+    }
+  }
 
   if (!data) return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -283,6 +306,11 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
                     ) : (
                       <span className="sub-badge sub-badge--done">{IC.check(11)} Đã nộp</span>
                     )}
+                    <button
+                      className="sub-del-btn"
+                      title="Xóa bài làm của học sinh này"
+                      onClick={() => setConfirmDel(s)}
+                    >✕</button>
                   </div>
                 ))}
               </>
@@ -313,6 +341,26 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
         </div>
       </div>
       {viewing && <FileViewerModal file={viewing} onClose={() => setViewing(null)} />}
+      {confirmDel && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !delBusy && setConfirmDel(null)}>
+          <div className="modal-box sub-del-modal">
+            <div className="sub-del-icon">🗑️</div>
+            <h3 className="sub-del-title">Xóa bài làm?</h3>
+            <p className="sub-del-text">
+              Bạn có muốn xóa bài làm của học sinh{' '}
+              <strong>{confirmDel.studentName || 'học sinh này'}</strong> hay không?
+              {isExam && confirmDel.attempts > 1 && ` Tất cả ${confirmDel.attempts} lần làm sẽ bị xóa.`}
+              {' '}Hành động này không thể hoàn tác.
+            </p>
+            <div className="sub-del-actions">
+              <button className="mec-btn" disabled={delBusy} onClick={() => setConfirmDel(null)}>Hủy</button>
+              <button className="mec-btn mec-btn--delete" disabled={delBusy} onClick={handleDelete}>
+                {delBusy ? '⏳…' : '🗑️ Xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

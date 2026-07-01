@@ -7,3 +7,17 @@
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
+7:32:48 AM [vite] (client) hmr update /src/pages/HomePage.jsx, /src/pages/ExamResultsPage.jsx, /src/pages/PracticeExamPage.jsx, /src/pages/MyExamsPage.jsx, /src/pages/ExamLobbyPage.jsx, /src/pages/SuperAdminPage.jsx, /src/pages/ProfilePage.jsx, /src/pages/ClassManagementPage.jsx, /src/pages/ExamTakePage.jsx, /src/pages/CreateExamPage.jsx, /src/components/PracticeSettingsModal.jsx, /src/components/PublishModal.jsx
+7:33:02 AM [vite] (client) hmr update /src/pages/ExamResultsPage.jsx
+7:33:09 AM [vite] (client) hmr update /src/pages/ExamResultsPage.jsx
+7:33:15 AM [vite] (client) hmr update /src/pages/ExamResultsPage.jsx
+7:33:25 AM [vite] (client) hmr update /src/pages/ExamResultsPage.jsx
+7:33:43 AM [vite] (client) hmr update /src/pages/ExamResultsPage.jsx
+7:34:46 AM [vite] (client) hmr update /src/pages/MyClassesPage.jsx, /src/components/AssignmentPopup.jsx, /src/pages/ClassManagementPage.jsx, /src/pages/ExamTakePage.jsx
+7:35:01 AM [vite] (client) hmr update /src/pages/ClassManagementPage.jsx
+7:35:06 AM [vite] (client) hmr update /src/pages/ClassManagementPage.jsx
+7:35:33 AM [vite] (client) hmr update /src/pages/ClassManagementPage.jsx
+7:35:49 AM [vite] (client) hmr update /src/pages/ClassManagementPage.jsx
+7:36:03 AM [vite] (client) hmr update /src/pages/ClassManagementPage.jsx
+7:36:25 AM [vite] (client) hmr update /src/pages/ClassManagementPage.jsx
+7:36:36 AM [vite] (client) hmr update /src/index.css

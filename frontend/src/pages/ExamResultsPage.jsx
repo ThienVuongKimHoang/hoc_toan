@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { fetchExamById, getSubmissions, hideResultsToggle, revealResults, scaledScore } from '../store/examStore.js'
+import { deleteSubmission, fetchExamById, getSubmissions, hideResultsToggle, revealResults, scaledScore } from '../store/examStore.js'
 import QuestionStats from '../components/QuestionStats.jsx'
 
 function fmtDate(iso) {
@@ -128,6 +128,8 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
   const [loading,     setLoading]     = useState(true)
   const [toggling,    setToggling]    = useState(false)
   const [err,         setErr]         = useState('')
+  const [confirmDel,  setConfirmDel]  = useState(null)   // bài nộp đang chờ xác nhận xóa
+  const [delBusy,     setDelBusy]     = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -151,6 +153,20 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
       setErr(e.message)
     } finally {
       setToggling(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirmDel) return
+    setDelBusy(true)
+    try {
+      await deleteSubmission(examId, confirmDel.id)
+      setConfirmDel(null)
+      load()
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setDelBusy(false)
     }
   }
 
@@ -269,6 +285,7 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
                   <th>Học sinh</th>
                   <th>Điểm</th>
                   <th>Thời gian nộp</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -276,7 +293,7 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
                   .slice()
                   .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
                   .map((s, i) => (
-                    <tr key={i} className="er-row">
+                    <tr key={s.id ?? i} className="er-row">
                       <td className="er-td-num">{i + 1}</td>
                       <td className="er-td-name">
                         <div className="er-avatar">{(s.studentName || '?')[0].toUpperCase()}</div>
@@ -286,12 +303,39 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
                         <ScoreBar score={s.score ?? 0} maxScore={s.maxScore ?? maxScore} />
                       </td>
                       <td className="er-td-time">{fmtDate(s.submittedAt)}</td>
+                      <td className="er-td-del">
+                        <button
+                          className="er-del-btn"
+                          title="Xóa bài làm này"
+                          onClick={() => setConfirmDel(s)}
+                        >✕</button>
+                      </td>
                     </tr>
                   ))}
               </tbody>
             </table>
           </div>
         </>
+      )}
+
+      {confirmDel && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !delBusy && setConfirmDel(null)}>
+          <div className="modal-box er-del-modal">
+            <div className="er-del-icon">🗑️</div>
+            <h3 className="er-del-title">Xóa bài làm?</h3>
+            <p className="er-del-text">
+              Bạn có muốn xóa bài làm của học sinh{' '}
+              <strong>{confirmDel.studentName || 'Ẩn danh'}</strong> hay không?
+              Hành động này không thể hoàn tác.
+            </p>
+            <div className="er-del-actions">
+              <button className="mec-btn" disabled={delBusy} onClick={() => setConfirmDel(null)}>Hủy</button>
+              <button className="mec-btn mec-btn--delete" disabled={delBusy} onClick={handleDelete}>
+                {delBusy ? '⏳…' : '🗑️ Xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

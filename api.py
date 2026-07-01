@@ -389,6 +389,27 @@ async def get_submissions(exam_id: str):
     }
 
 
+@app.delete("/api/exams/{exam_id}/submissions/{sub_id}")
+async def delete_one_submission(exam_id: str, sub_id: str):
+    """Giáo viên xóa MỘT bài nộp (một lần làm) theo id — dùng cho link công khai."""
+    if not db.delete_submission(sub_id):
+        return JSONResponse({"error": "Không tìm thấy bài nộp"}, status_code=404)
+    return {"ok": True}
+
+
+@app.post("/api/exams/{exam_id}/submissions/delete-student")
+async def delete_student_submissions(exam_id: str, request: Request):
+    """Giáo viên xóa TẤT CẢ bài làm của một học sinh cho đề này.
+    Truyền classId để giới hạn trong một lớp; bỏ trống = bài nộp qua link công khai."""
+    body = await request.json()
+    student_id = body.get("studentId")
+    class_id   = body.get("classId") or None
+    if student_id is None:
+        return JSONResponse({"error": "Thiếu studentId"}, status_code=400)
+    n = db.delete_submissions_for_student(exam_id, student_id, class_id)
+    return {"ok": True, "deleted": n}
+
+
 @app.post("/api/exams/{exam_id}/reveal")
 async def reveal_results(exam_id: str):
     """Giáo viên công bố kết quả."""
@@ -1119,6 +1140,30 @@ async def get_assignment_submissions(cls_id: str, asgn_id: str):
         if a["id"] == asgn_id:
             return {"submissions": a.get("submissions", []), "members": cls.get("members", [])}
     return JSONResponse({"error": "Không tìm thấy bài tập"}, status_code=404)
+
+
+@app.delete("/api/classes/{cls_id}/assignments/{asgn_id}/submissions/{student_id}")
+async def delete_assignment_submission(cls_id: str, asgn_id: str, student_id: str):
+    """Giáo viên xóa bài nộp (file) của một học sinh cho bài tập trong lớp."""
+    cls = db.get_class(cls_id)
+    if not cls:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    asgns = cls.get("assignments", [])
+    found = False
+    for i, a in enumerate(asgns):
+        if a["id"] == asgn_id:
+            a["submissions"] = [
+                s for s in a.get("submissions", [])
+                if str(s.get("studentId")) != str(student_id)
+            ]
+            asgns[i] = a
+            found = True
+            break
+    if not found:
+        return JSONResponse({"error": "Không tìm thấy bài tập"}, status_code=404)
+    cls["assignments"] = asgns
+    db.upsert_class(cls_id, cls)
+    return {"ok": True}
 
 
 @app.post("/api/classes/{cls_id}/documents")

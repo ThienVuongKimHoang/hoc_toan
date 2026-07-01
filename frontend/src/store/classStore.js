@@ -126,6 +126,12 @@ export async function submitAssignment(classId, assignmentId, { studentId, stude
   return res.json()
 }
 
+export async function deleteAssignmentSubmission(classId, assignmentId, studentId) {
+  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/submissions/${studentId}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Xóa bài làm thất bại')
+  return res.json()
+}
+
 export async function getSubmissions(classId, assignmentId) {
   const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/submissions`)
   if (!res.ok) throw new Error('Không lấy được bài nộp')
