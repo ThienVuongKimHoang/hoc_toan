@@ -202,6 +202,7 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
               score, maxScore: 10, attempts: list.length,
               submittedAt: last.submittedAt,
               timeSpent: last.timeSpent,
+              violations: list.reduce((n, s) => n + (s.violationCount || 0), 0),
             }
           })
           // rawSubs: giữ từng lần làm để thống kê theo câu (gộp "Tên ×N" nếu sai nhiều lần)
@@ -287,7 +288,14 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
                   <div key={s.studentId} className="sub-row">
                     <div className="sub-avatar">{s.studentName?.[0] ?? '?'}</div>
                     <div className="sub-info">
-                      <div className="sub-name">{s.studentName}</div>
+                      <div className="sub-name">
+                        {s.studentName}
+                        {isExam && s.violations > 0 && (
+                          <span className="sub-violation-chip" title="Số lần vi phạm khóa màn hình">
+                            ⚠️ {s.violations}
+                          </span>
+                        )}
+                      </div>
                       <div className="sub-time">
                         {IC.clock(11)} {formatDt(s.submittedAt)}
                         {isExam && s.attempts > 1 && <span> · {s.attempts} lần làm</span>}
@@ -506,6 +514,7 @@ function AssignmentModal({ teacherId, onClose, onSave }) {
   const [closeTime,   setCloseTime]   = useState('23:59')
   const [maxAttempts, setMaxAttempts] = useState('')        // '' = không giới hạn
   const [scoreMode,   setScoreMode]   = useState('highest') // highest | average | latest
+  const [lockScreen,  setLockScreen]  = useState(false)     // khóa màn hình chống gian lận
   const [attachments, setAttachments] = useState([])
   const [uploading,   setUploading]   = useState(false)
   const [viewing,     setViewing]     = useState(null)
@@ -535,6 +544,7 @@ function AssignmentModal({ teacherId, onClose, onSave }) {
         dueDate: closeIso, duration: ex?.settings?.duration ?? null,
         maxAttempts: maxAttempts ? Math.max(1, parseInt(maxAttempts, 10) || 1) : null,
         scoreMode,
+        lockScreen,
         attachments: [],
       })
       return
@@ -620,6 +630,17 @@ function AssignmentModal({ teacherId, onClose, onSave }) {
                   {scoreMode === 'latest'  && '🕒 Điểm ghi nhận = lần làm GẦN NHẤT.'}
                   {maxAttempts ? ` Tối đa ${maxAttempts} lần làm.` : ' Không giới hạn số lần làm.'}
                 </div>
+
+                <label className="cm-lock-toggle" style={{marginTop:14}}>
+                  <input type="checkbox" checked={lockScreen}
+                    onChange={e => setLockScreen(e.target.checked)} />
+                  <div>
+                    <div className="cm-lock-title">🔒 Khóa màn hình khi làm bài</div>
+                    <div className="cm-lock-sub">
+                      Bắt buộc toàn màn hình, chặn rời tab / copy / phím tắt. Mỗi lần vi phạm được ghi lại cho bạn xem.
+                    </div>
+                  </div>
+                </label>
 
                 <label className="cm-label" style={{marginTop:14}}>Ghi chú cho học sinh <span style={{color:'#94a3b8',fontWeight:400}}>(tuỳ chọn)</span></label>
                 <textarea className="cm-input cm-textarea" rows={2}

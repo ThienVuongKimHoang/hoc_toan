@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { calcMaxScore, calcScore, examStatus, fetchExamById, submitResult, scaledScore } from '../store/examStore.js'
+import { calcMaxScore, calcScore, examStatus, fetchExamById, submitResult, scaledScore, verifyLockEscape } from '../store/examStore.js'
 import { getExamWindow } from '../store/classStore.js'
 import QuestionCard from '../components/QuestionCard.jsx'
 import ReadingTakeView from '../components/ReadingTakeView.jsx'
@@ -26,6 +26,141 @@ function useCountdown(targetIso) {
     return () => clearInterval(t)
   }, [targetIso])
   return ms
+}
+
+/* ── Khóa màn hình khi làm bài (chống gian lận, khóa cứng) ── */
+function requestFs() {
+  const el = document.documentElement
+  return (el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen)?.call(el)
+}
+function isFs() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement)
+}
+// Vào fullscreen + khóa phím Esc (Keyboard Lock API — Chrome/Edge desktop)
+async function enterFsLock() {
+  try { await requestFs() } catch { /* trình duyệt có thể chặn */ }
+  try { await navigator.keyboard?.lock?.(['Escape', 'F11']) } catch { /* không hỗ trợ */ }
+}
+function releaseKeyboard() {
+  try { navigator.keyboard?.unlock?.() } catch { /* bỏ qua */ }
+}
+
+function useExamLock(enabled) {
+  const [violations, setViolations] = useState(0)
+  const [warning,    setWarning]    = useState('')
+  const [blocked,    setBlocked]    = useState(false)   // đề bị che, phải quay lại mới làm tiếp
+  const [askUnlock,  setAskUnlock]  = useState(false)   // đang hỏi mật khẩu thoát
+  const [unlocked,   setUnlocked]   = useState(false)   // đã thoát khóa bằng mật khẩu
+  const countRef = useRef(0)
+  const lastRef  = useRef(0)
+
+  useEffect(() => {
+    if (!enabled || unlocked) return
+    const pressed = new Set()   // các phím đang được giữ (theo e.code)
+
+    const flag = (reason, doBlock = true) => {
+      const now = Date.now()
+      if (now - lastRef.current > 500) {   // gộp sự kiện trùng (blur + visibilitychange)
+        lastRef.current = now
+        countRef.current += 1
+        setViolations(countRef.current)
+        setWarning(reason)
+      }
+      if (doBlock) setBlocked(true)
+    }
+
+    const onVisibility = () => { if (document.hidden) flag('Bạn đã rời khỏi màn hình làm bài!') }
+    const onBlur       = () => flag('Cửa sổ làm bài bị mất tiêu điểm!')
+    const onFsChange   = () => {
+      if (!isFs()) {
+        flag('Bạn đã thoát chế độ toàn màn hình!')
+        enterFsLock()   // cố tự ép lại (nếu trình duyệt cần thao tác thì nút "Quay lại" sẽ xử lý)
+      }
+    }
+    const block = (e) => { e.preventDefault(); return false }
+    const onKeyUp = (e) => { pressed.delete(e.code) }
+    const onKey = (e) => {
+      pressed.add(e.code)
+      // Cửa thoát bí mật: giữ Shift + 1 + 3 → hỏi mật khẩu
+      if (e.shiftKey && pressed.has('Digit1') && pressed.has('Digit3')) {
+        e.preventDefault()
+        setAskUnlock(true)
+        return false
+      }
+      const k = (e.key || '').toLowerCase()
+      // Chặn Esc (thoát fullscreen) và Alt+F4 (đóng cửa sổ)
+      if (e.key === 'Escape' || (e.altKey && e.key === 'F4')) {
+        e.preventDefault(); e.stopPropagation()
+        return false
+      }
+      const combo =
+        e.key === 'F12' || e.key === 'PrintScreen' ||
+        (e.ctrlKey && ['c', 'v', 'x', 'p', 'u', 's', 'a', 'w'].includes(k)) ||
+        (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(k)) ||
+        ((e.metaKey || e.ctrlKey) && ['c', 'v', 'x', 'p'].includes(k)) ||
+        (e.altKey && ['tab', 'f4'].includes(k)) ||   // Alt+Tab, Alt+F4
+        (e.ctrlKey && k === 'f4')                     // Ctrl+F4 (đóng tab)
+      if (combo) { e.preventDefault(); e.stopPropagation(); flag('Phím tắt bị chặn trong lúc làm bài.', false); return false }
+    }
+    const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; return '' }
+
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('blur', onBlur)
+    document.addEventListener('fullscreenchange', onFsChange)
+    document.addEventListener('webkitfullscreenchange', onFsChange)
+    document.addEventListener('contextmenu', block)
+    document.addEventListener('copy', block)
+    document.addEventListener('cut', block)
+    document.addEventListener('paste', block)
+    document.addEventListener('selectstart', block)
+    document.addEventListener('keydown', onKey, true)
+    document.addEventListener('keyup', onKeyUp, true)
+    window.addEventListener('beforeunload', onBeforeUnload)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('blur', onBlur)
+      document.removeEventListener('fullscreenchange', onFsChange)
+      document.removeEventListener('webkitfullscreenchange', onFsChange)
+      document.removeEventListener('contextmenu', block)
+      document.removeEventListener('copy', block)
+      document.removeEventListener('cut', block)
+      document.removeEventListener('paste', block)
+      document.removeEventListener('selectstart', block)
+      document.removeEventListener('keydown', onKey, true)
+      document.removeEventListener('keyup', onKeyUp, true)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      releaseKeyboard()
+      if (isFs()) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)
+    }
+  }, [enabled, unlocked])
+
+  // Học sinh bấm "Quay lại làm bài" — thao tác này cho phép vào lại fullscreen + khóa phím
+  const resume = async () => {
+    await enterFsLock()
+    setBlocked(false)
+    setWarning('')
+  }
+
+  // Nhập mật khẩu để thoát khóa hoàn toàn (xác minh ở server)
+  const tryUnlock = async (pw) => {
+    const ok = await verifyLockEscape(pw)
+    if (ok) {
+      setUnlocked(true)
+      setAskUnlock(false)
+      setBlocked(false)
+      setWarning('')
+      releaseKeyboard()
+      if (isFs()) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)
+    }
+    return ok
+  }
+
+  return {
+    violations, warning, blocked, resume, unlocked,
+    askUnlock, closeUnlock: () => setAskUnlock(false), tryUnlock,
+    dismissWarning: () => setWarning(''),
+  }
 }
 
 function fmtMs(ms) {
@@ -103,6 +238,42 @@ function ExpiredView({ exam, onGoHome }) {
         <div className="etl-close-time">🔒 Đóng lúc {fmtDate(exam.settings.closeTime)}</div>
         <button className="btn-primary" style={{ marginTop: 20 }} onClick={onGoHome}>← Trang chủ</button>
       </div>
+    </div>
+  )
+}
+
+/* ── Ô nhập mật khẩu thoát khóa (Shift + 1 + 3) ── */
+function UnlockPrompt({ onSubmit, onClose }) {
+  const [pwd, setPwd]         = useState('')
+  const [err, setErr]         = useState('')
+  const [busy, setBusy]       = useState(false)
+  const submit = async (e) => {
+    e.preventDefault()
+    if (busy) return
+    setBusy(true)
+    const ok = await onSubmit(pwd)
+    setBusy(false)
+    if (!ok) setErr('Sai mật khẩu thoát.')
+  }
+  return (
+    <div className="et-unlock-overlay">
+      <form className="et-unlock-card" onSubmit={submit}>
+        <div className="et-unlock-icon">🔓</div>
+        <h2>Thoát chế độ khóa</h2>
+        <p className="et-unlock-sub">Nhập mật khẩu để gỡ khóa màn hình.</p>
+        <input
+          type="password" autoFocus className="et-unlock-input"
+          placeholder="Mật khẩu thoát"
+          value={pwd} onChange={e => { setPwd(e.target.value); setErr('') }}
+        />
+        {err && <div className="pm-error" style={{ marginTop: 8 }}>⚠️ {err}</div>}
+        <div className="et-unlock-actions">
+          <button type="button" className="btn-primary" onClick={onClose} disabled={busy}>Hủy</button>
+          <button type="submit" className="btn-submit-exam" disabled={busy}>
+            {busy ? '⏳ Đang kiểm tra…' : 'Thoát khóa'}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }
@@ -194,8 +365,22 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
   const [finalScore,    setFinalScore]    = useState(null)
   const [finalMax,      setFinalMax]      = useState(null)
 
-  const startedAt  = useRef(Date.now()).current
-  const endByDur   = startedAt + exam.settings.duration * 60_000
+  // Khóa màn hình (chống gian lận) — bật theo cài đặt của giáo viên
+  const lockOn = !!exam.settings?.lockScreen
+  const [lockStarted, setLockStarted] = useState(!lockOn)
+  const [startedAt,   setStartedAt]   = useState(() => (lockOn ? null : Date.now()))
+  const { violations, warning, blocked, resume, unlocked,
+          askUnlock, closeUnlock, tryUnlock, dismissWarning } = useExamLock(lockOn && lockStarted && !submitted)
+  const lockActive = lockOn && !unlocked
+
+  const beginLocked = async () => {
+    await enterFsLock()
+    setStartedAt(Date.now())
+    setLockStarted(true)
+  }
+
+  const effStart   = startedAt ?? Date.now()
+  const endByDur   = effStart + exam.settings.duration * 60_000
   const endByClose = new Date(exam.settings.closeTime).getTime()
   const endTime    = Math.min(endByDur, endByClose)
   const endIso     = new Date(endTime).toISOString()
@@ -215,10 +400,11 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
     setSubmitting(true)
     const score    = calcScore(exam, answers)
     const maxScore = calcMaxScore(exam)
-    const timeSpent = Math.max(0, Math.round((Date.now() - startedAt) / 1000))  // giây
+    const timeSpent = Math.max(0, Math.round((Date.now() - effStart) / 1000))  // giây
     try {
       await submitResult(exam.id, { studentName, studentId, answers, score, maxScore, className, classId,
-                                    startedAt: new Date(startedAt).toISOString(), timeSpent })
+                                    startedAt: new Date(effStart).toISOString(), timeSpent,
+                                    violationCount: lockOn ? violations : null })
       setFinalScore(score)
       setFinalMax(maxScore)
       setSubmitted(true)
@@ -257,10 +443,71 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
     )
   }
 
+  // Cổng vào chế độ khóa: yêu cầu toàn màn hình trước khi bắt đầu
+  if (lockOn && !lockStarted) {
+    return (
+      <div className="et-locked">
+        <div className="etl-card">
+          <div className="etl-icon">🔒</div>
+          <h1 className="etl-title">{exam.title}</h1>
+          <div className="etl-meta">
+            <span>📋 {exam.totalQuestions} câu hỏi</span>
+            <span>⏱ {exam.settings.duration} phút</span>
+          </div>
+          <div className="etl-divider" />
+          <div className="et-lock-notice">
+            <p><strong>Đề này bật chế độ khóa màn hình.</strong> Trong lúc làm bài:</p>
+            <ul>
+              <li>Bài làm chạy ở chế độ <strong>toàn màn hình bắt buộc</strong>.</li>
+              <li>Rời tab / thoát toàn màn hình sẽ <strong>che kín đề</strong> — phải quay lại mới làm tiếp được.</li>
+              <li>Copy / dán / chuột phải / phím tắt (kể cả Esc) bị vô hiệu hóa.</li>
+              <li>Mỗi lần vi phạm được <strong>ghi lại cho giáo viên</strong>.</li>
+            </ul>
+          </div>
+          <button className="btn-submit-exam" style={{ marginTop: 16 }} onClick={beginLocked}>
+            🚀 Vào toàn màn hình & bắt đầu
+          </button>
+          <button className="btn-primary" style={{ marginTop: 10 }} onClick={onGoHome}>← Trang chủ</button>
+        </div>
+      </div>
+    )
+  }
+
   const questions = exam.sections?.[activeSection]?.questions ?? []
 
   return (
     <div className="et-exam">
+      {askUnlock && (
+        <UnlockPrompt onSubmit={tryUnlock} onClose={closeUnlock} />
+      )}
+      {lockActive && blocked && !submitted && (
+        <div className="et-lock-overlay">
+          <div className="et-lock-overlay-card">
+            <div className="et-lock-overlay-icon">🔒</div>
+            <h1>Đề đang bị khóa</h1>
+            <p className="et-lock-overlay-reason">{warning || 'Bạn đã rời khỏi chế độ làm bài.'}</p>
+            <p className="et-lock-overlay-sub">
+              Bạn không thể tiếp tục cho đến khi quay lại chế độ toàn màn hình.
+              Lần vi phạm này đã được ghi lại cho giáo viên.
+            </p>
+            <div className="et-lock-overlay-count">Tổng số lần vi phạm: <strong>{violations}</strong></div>
+            <button className="btn-submit-exam et-lock-resume" onClick={resume}>
+              ↩️ Quay lại làm bài (toàn màn hình)
+            </button>
+          </div>
+        </div>
+      )}
+      {lockActive && (
+        <>
+          <div className="et-lock-status">🔒 Chế độ khóa màn hình đang bật · Vi phạm: <strong>{violations}</strong></div>
+          {warning && !blocked && (
+            <div className="et-lock-warning" onClick={dismissWarning}>
+              ⚠️ {warning} <span className="et-lock-warning-count">(lần thứ {violations})</span>
+              <button className="et-lock-warning-x" onClick={dismissWarning}>✕</button>
+            </div>
+          )}
+        </>
+      )}
       <TimerBar endIso={endIso} durationMins={exam.settings.duration} />
 
       <div className="app" style={{ paddingTop: 16 }}>
@@ -380,6 +627,7 @@ export default function ExamTakePage({ examId, classId, user, onGoHome, onGoLogi
               closeTime: win.closeTime || e.settings?.closeTime,
               duration:  win.duration  ?? e.settings?.duration,
               password:  null,   // lớp học là cổng vào — không cần mật khẩu công khai
+              lockScreen: win.lockScreen ?? e.settings?.lockScreen ?? false,
             },
             _classGated:   true,
             _className:    win.className,

@@ -322,6 +322,11 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
                       <td className="er-td-name">
                         <div className="er-avatar">{(s.studentName || '?')[0].toUpperCase()}</div>
                         {s.studentName || 'Ẩn danh'}
+                        {s.violationCount > 0 && (
+                          <span className="er-violation-chip" title="Số lần vi phạm khóa màn hình">
+                            ⚠️ {s.violationCount}
+                          </span>
+                        )}
                       </td>
                       <td className="er-td-score">
                         <ScoreBar score={s.score ?? 0} maxScore={s.maxScore ?? maxScore} />

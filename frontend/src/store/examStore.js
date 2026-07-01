@@ -82,6 +82,7 @@ export async function publishExam(examId, settings) {
       closeTime:   settings.closeTime,
       password:    settings.password || null,
       hideResults: settings.hideResults || false,
+      lockScreen:  settings.lockScreen || false,
     },
     classes: settings.classes || exam.classes || [],
   }
@@ -140,7 +141,7 @@ export async function fetchExamById(id) {
 }
 
 /** Học sinh nộp bài */
-export async function submitResult(examId, { studentName, studentId, answers, score, maxScore, className, classId, startedAt, timeSpent }) {
+export async function submitResult(examId, { studentName, studentId, answers, score, maxScore, className, classId, startedAt, timeSpent, violationCount }) {
   const body = {
     studentName,
     studentId,
@@ -152,6 +153,7 @@ export async function submitResult(examId, { studentName, studentId, answers, sc
     submittedAt: new Date().toISOString(),
     startedAt: startedAt || null,
     timeSpent: timeSpent ?? null,   // giây làm bài
+    violationCount: violationCount ?? null,   // số lần vi phạm khóa màn hình
   }
   const res = await fetch(`/api/exams/${examId}/submit`, {
     method:  'POST',
@@ -254,6 +256,20 @@ export async function verifyPracticePassword(examId, password) {
   })
   if (res.status === 401) return false
   return res.ok
+}
+
+/** Xác minh mật khẩu thoát khóa màn hình (kiểm tra ở server) */
+export async function verifyLockEscape(password) {
+  try {
+    const res = await fetch('/api/lock/verify', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ password }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
 }
 
 /** URL chia sẻ chế độ luyện tập */

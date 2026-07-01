@@ -73,7 +73,7 @@ export async function removeMemberFromClass(classId, userId) {
   return res.json()
 }
 
-export async function addAssignment(classId, { title, description, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, attachments }) {
+export async function addAssignment(classId, { title, description, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, attachments }) {
   const res = await fetch(`${API}/${classId}/assignments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -83,6 +83,7 @@ export async function addAssignment(classId, { title, description, examId, dueDa
       duration: duration ?? null,
       maxAttempts: maxAttempts ?? null,
       scoreMode: scoreMode || 'highest',
+      lockScreen: !!lockScreen,
       attachments: attachments || [],
     }),
   })

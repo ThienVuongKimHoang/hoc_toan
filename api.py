@@ -364,6 +364,7 @@ async def submit_exam(exam_id: str, request: Request):
         "submittedAt": body.get("submittedAt"),
         "startedAt":   body.get("startedAt"),
         "timeSpent":   body.get("timeSpent"),   # giây làm bài
+        "violationCount": body.get("violationCount"),   # số lần vi phạm khóa màn hình
         "studentName":  body.get("studentName", "Ẩn danh"),
         "studentId":    body.get("studentId"),
         "answers":      body.get("answers", {}),
@@ -522,6 +523,20 @@ async def get_practice_info(exam_id: str):
         "openTime":       ps.get("openTime"),
         "closeTime":      ps.get("closeTime"),
     }
+
+
+# Mật khẩu giáo viên/giám thị dùng để thoát chế độ khóa màn hình (Shift + 1 + 3).
+LOCK_ESCAPE_PASSWORD = "toan_anh_sang"
+
+
+@app.post("/api/lock/verify")
+async def verify_lock_escape(request: Request):
+    """Xác minh mật khẩu thoát khóa màn hình (kiểm tra phía server)."""
+    body = await request.json()
+    pwd  = body.get("password") or ""
+    if pwd == LOCK_ESCAPE_PASSWORD:
+        return {"ok": True}
+    return JSONResponse({"error": "Sai mật khẩu thoát."}, status_code=401)
 
 
 @app.post("/api/exams/{exam_id}/practice-verify")
@@ -1005,6 +1020,7 @@ async def add_assignment_endpoint(cls_id: str, request: Request):
         "duration": body.get("duration"),
         "maxAttempts": max_attempts,     # số lần làm tối đa (None = không giới hạn)
         "scoreMode": score_mode,         # highest | average | latest
+        "lockScreen": bool(body.get("lockScreen", False)),   # khóa màn hình chống gian lận
         "attachments": body.get("attachments", []),
         "createdAt": _now_iso(), "submissions": [],
     }
@@ -1092,6 +1108,7 @@ async def get_class_exam_window(cls_id: str, exam_id: str, studentId: str = None
         "duration":   asgn.get("duration"),
         "maxAttempts": asgn.get("maxAttempts"),
         "scoreMode":   asgn.get("scoreMode") or "highest",
+        "lockScreen":  bool(asgn.get("lockScreen", False)),
         "attemptsUsed": attempts_used,
     }
 

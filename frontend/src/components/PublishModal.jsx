@@ -69,6 +69,7 @@ export default function PublishModal({ exam, onClose, onPublished }) {
   const [password,    setPassword]    = useState('')
   const [showPwd,     setShowPwd]     = useState(false)
   const [hideResults, setHideResults] = useState(false)
+  const [lockScreen,  setLockScreen]  = useState(false)
   const [classes,          setClasses]          = useState([])
   const [publishedClasses, setPublishedClasses] = useState([])
   const [link,             setLink]             = useState(null)
@@ -99,6 +100,7 @@ export default function PublishModal({ exam, onClose, onPublished }) {
   useEffect(() => {
     if (exam.settings) {
       setHideResults(exam.settings.hideResults || false)
+      setLockScreen(exam.settings.lockScreen || false)
     }
   }, [exam])
 
@@ -124,6 +126,7 @@ export default function PublishModal({ exam, onClose, onPublished }) {
       closeTime:   new Date(closeTime).toISOString(),
       password:    password.trim() || null,
       hideResults,
+      lockScreen,
       classes:     validClasses,
     })
     setPublishedClasses(validClasses)
@@ -230,6 +233,24 @@ export default function PublishModal({ exam, onClose, onPublished }) {
             {hideResults && (
               <div className="pm-hide-note">
                 Học sinh sẽ thấy "Bài đã nộp" nhưng không thấy điểm cho đến khi bạn công bố kết quả.
+              </div>
+            )}
+
+            {/* Khóa màn hình */}
+            <div className="pm-row pm-row--toggle">
+              <div className="pm-label">
+                🔒 Khóa màn hình
+                <span className="pm-optional"> (chống gian lận: toàn màn hình, chặn rời tab & copy)</span>
+              </div>
+              <label className="pm-toggle-switch">
+                <input type="checkbox" checked={lockScreen}
+                  onChange={e => setLockScreen(e.target.checked)} />
+                <span className="pm-toggle-slider" />
+              </label>
+            </div>
+            {lockScreen && (
+              <div className="pm-hide-note">
+                Học sinh phải làm bài ở chế độ toàn màn hình. Rời tab, thoát toàn màn hình hoặc dùng phím tắt sẽ bị ghi nhận vi phạm và báo cho bạn.
               </div>
             )}
 

@@ -4468,7 +4468,106 @@ button { font-family: inherit; }
   text-shadow: 0 1px 2px rgba(255,255,255,0.6);
   white-space: nowrap;
 }
+.er-violation-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  margin-left: 8px; padding: 2px 8px;
+  background: #fef2f2; color: #b91c1c;
+  border: 1px solid #fecaca; border-radius: 99px;
+  font-size: 0.72rem; font-weight: 800; white-space: nowrap;
+}
 .er-loading { text-align: center; padding: 60px; color: #64748b; font-size: 1.1rem; }
+
+/* ── Khóa màn hình (chống gian lận) ── */
+.et-lock-notice {
+  text-align: left; background: #fffbeb; border: 1px solid #fde68a;
+  border-radius: 12px; padding: 12px 14px; margin: 4px 0 8px; color: #92400e;
+  font-size: 0.9rem;
+}
+.et-lock-notice ul { margin: 8px 0 0; padding-left: 18px; }
+.et-lock-notice li { margin: 3px 0; }
+.et-lock-status {
+  position: sticky; top: 0; z-index: 30;
+  background: #1e293b; color: #e2e8f0;
+  text-align: center; font-size: 0.82rem; font-weight: 700;
+  padding: 6px 12px; letter-spacing: 0.2px;
+}
+.et-lock-status strong { color: #fca5a5; }
+.et-lock-warning {
+  position: sticky; top: 30px; z-index: 30;
+  background: #dc2626; color: #fff;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 40px 10px 14px; font-weight: 800; font-size: 0.95rem;
+  cursor: pointer; position: relative;
+  animation: etLockPulse 0.5s ease;
+}
+@keyframes etLockPulse { from { transform: scale(0.98); opacity: 0.6; } to { transform: scale(1); opacity: 1; } }
+.et-lock-warning-count { font-weight: 600; opacity: 0.9; }
+.et-lock-warning-x {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  background: rgba(255,255,255,0.2); border: none; color: #fff;
+  width: 22px; height: 22px; border-radius: 50%; cursor: pointer; font-weight: 700;
+}
+.sub-violation-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  margin-left: 8px; padding: 1px 7px;
+  background: #fef2f2; color: #b91c1c;
+  border: 1px solid #fecaca; border-radius: 99px;
+  font-size: 0.7rem; font-weight: 800; white-space: nowrap;
+}
+.cm-lock-toggle {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px;
+  padding: 12px 14px; cursor: pointer;
+}
+.cm-lock-toggle input { margin-top: 3px; width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; }
+.cm-lock-title { font-weight: 700; color: #92400e; font-size: 0.92rem; }
+.cm-lock-sub   { font-size: 0.8rem; color: #a16207; margin-top: 2px; }
+
+/* Lớp phủ khóa cứng — che kín đề khi rời chế độ làm bài */
+.et-lock-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(15, 23, 42, 0.98);
+  backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.et-lock-overlay-card {
+  max-width: 460px; width: 100%; text-align: center;
+  background: #fff; border-radius: 20px; padding: 32px 28px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.et-lock-overlay-icon { font-size: 3.4rem; }
+.et-lock-overlay-card h1 { margin: 8px 0 4px; font-size: 1.5rem; color: #dc2626; }
+.et-lock-overlay-reason { font-weight: 800; color: #b91c1c; margin: 6px 0; font-size: 1.05rem; }
+.et-lock-overlay-sub { color: #64748b; font-size: 0.9rem; margin: 8px 0; line-height: 1.5; }
+.et-lock-overlay-count {
+  margin: 14px 0; padding: 8px 12px; border-radius: 10px;
+  background: #fef2f2; color: #991b1b; font-weight: 700;
+}
+.et-lock-overlay-count strong { font-size: 1.15rem; }
+.et-lock-resume { margin-top: 8px; width: 100%; }
+
+/* Ô nhập mật khẩu thoát khóa — trên cả lớp phủ khóa cứng */
+.et-unlock-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(15, 23, 42, 0.7);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.et-unlock-card {
+  max-width: 380px; width: 100%; text-align: center;
+  background: #fff; border-radius: 18px; padding: 28px 24px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.et-unlock-icon { font-size: 2.6rem; }
+.et-unlock-card h2 { margin: 6px 0 2px; font-size: 1.25rem; color: #0f172a; }
+.et-unlock-sub { color: #64748b; font-size: 0.88rem; margin-bottom: 14px; }
+.et-unlock-input {
+  width: 100%; padding: 11px 14px; border-radius: 10px;
+  border: 1.5px solid #cbd5e1; font-size: 1rem; box-sizing: border-box;
+}
+.et-unlock-input:focus { outline: none; border-color: #2563eb; }
+.et-unlock-actions { display: flex; gap: 10px; margin-top: 16px; }
+.et-unlock-actions button { flex: 1; }
 
 /* ── Histogram ── */
 .er-histogram {
