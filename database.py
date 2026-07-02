@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS classes (
     created_at    TIMESTAMPTZ  DEFAULT NOW(),
     join_code     VARCHAR(20),
     join_password VARCHAR(255),
+    subject       VARCHAR(20),
     members       JSONB        DEFAULT '[]',
     assignments   JSONB        DEFAULT '[]',
     documents     JSONB        DEFAULT '[]'
@@ -727,6 +728,7 @@ def _cls_from_row(row: dict) -> dict:
         "createdAt":    r["created_at"].isoformat() if r.get("created_at") else None,
         "joinCode":     r["join_code"],
         "joinPassword": r["join_password"],
+        "subject":      r.get("subject") or None,
         "members":      r["members"] or [],
         "assignments":  r["assignments"] or [],
         "documents":    r["documents"] or [],
@@ -817,18 +819,20 @@ def upsert_class(cid: str, cls: dict) -> None:
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO classes(id,name,description,teacher_id,teacher_name,
-                    created_at,join_code,join_password,members,assignments,documents)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    created_at,join_code,join_password,subject,members,assignments,documents)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT(id) DO UPDATE SET
                     name=EXCLUDED.name, description=EXCLUDED.description,
                     teacher_id=EXCLUDED.teacher_id, teacher_name=EXCLUDED.teacher_name,
                     join_code=EXCLUDED.join_code, join_password=EXCLUDED.join_password,
+                    subject=EXCLUDED.subject,
                     members=EXCLUDED.members, assignments=EXCLUDED.assignments,
                     documents=EXCLUDED.documents
             """, (
                 cid, cls.get("name", ""), cls.get("description", ""),
                 str(cls.get("teacherId", "")), cls.get("teacherName", ""),
                 cls.get("createdAt"), cls.get("joinCode"), cls.get("joinPassword"),
+                cls.get("subject") or None,
                 json.dumps(cls.get("members") or [], ensure_ascii=False),
                 json.dumps(cls.get("assignments") or [], ensure_ascii=False),
                 json.dumps(cls.get("documents") or [], ensure_ascii=False),

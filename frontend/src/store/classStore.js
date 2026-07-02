@@ -21,11 +21,11 @@ export async function getClassById(classId) {
   return res.json()
 }
 
-export async function createClass({ name, description, teacherId, teacherName, joinPassword }) {
+export async function createClass({ name, description, subject, teacherId, teacherName, joinPassword }) {
   const res = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, description, teacherId, teacherName: teacherName || '', joinPassword: joinPassword || null, createdAt: new Date().toISOString() }),
+    body: JSON.stringify({ name, description, subject: subject || null, teacherId, teacherName: teacherName || '', joinPassword: joinPassword || null, createdAt: new Date().toISOString() }),
   })
   if (!res.ok) throw new Error('Tạo lớp thất bại')
   return res.json()
@@ -73,7 +73,7 @@ export async function removeMemberFromClass(classId, userId) {
   return res.json()
 }
 
-export async function addAssignment(classId, { title, description, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, attachments }) {
+export async function addAssignment(classId, { title, description, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, attachments, writingTask }) {
   const res = await fetch(`${API}/${classId}/assignments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -84,6 +84,7 @@ export async function addAssignment(classId, { title, description, examId, dueDa
       maxAttempts: maxAttempts ?? null,
       scoreMode: scoreMode || 'highest',
       lockScreen: !!lockScreen,
+      writingTask: writingTask || null,
       attachments: attachments || [],
     }),
   })
@@ -151,6 +152,21 @@ export async function addDocument(classId, doc) {
 
 export async function removeDocument(classId, docId) {
   await fetch(`${API}/${classId}/documents/${docId}`, { method: 'DELETE' })
+}
+
+/** Chấm (hoặc chấm lại) bài IELTS Writing của một học sinh bằng AI */
+export async function gradeSubmission(classId, assignmentId, studentId) {
+  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/grade/${studentId}`, { method: 'POST' })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'Chấm bài thất bại')
+  return data
+}
+
+/** Bảng tóm tắt thống kê điểm AI từng học sinh */
+export async function getGradesSummary(classId, assignmentId) {
+  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/grades-summary`)
+  if (!res.ok) throw new Error('Không lấy được bảng điểm')
+  return res.json()
 }
 
 export function joinUrl(joinCode) {

@@ -11,6 +11,8 @@ import {
 import TeacherToolsModal from '../components/TeacherToolsModal.jsx'
 import ExerciseSolver from '../components/ExerciseSolver.jsx'
 import Geo3DViewer from '../components/Geo3DViewer.jsx'
+import SubjectBadge, { SubjectPicker, SUBJECTS } from '../components/SubjectBadge.jsx'
+import { BandChip, GradeButton, IeltsGradeModal, IeltsStatsTable } from '../components/IeltsGrade.jsx'
 
 /* ─── SVG icons ─── */
 function Svg({ size = 16, children }) {
@@ -170,7 +172,11 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
   const [viewing, setViewing] = useState(null)
   const [confirmDel, setConfirmDel] = useState(null)   // học sinh đang chờ xác nhận xóa
   const [delBusy, setDelBusy] = useState(false)
+  const [viewGrade, setViewGrade] = useState(null)     // submission đang xem kết quả AI
+  const [statsKey, setStatsKey] = useState(0)          // refresh bảng thống kê sau khi chấm
   const isExam = !!assignment.examId
+  const isWriting = !!assignment.writingTask
+  const taskLabel = isWriting ? `IELTS Writing ${assignment.writingTask === 'task1' ? 'Task 1' : 'Task 2'}` : null
 
   const reload = useCallback(() => {
     if (isExam) {
@@ -269,6 +275,16 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
                 {assignment.maxAttempts ? ` · Tối đa ${assignment.maxAttempts} lần` : ' · Không giới hạn số lần'}
               </div>
             )}
+            {isWriting && (
+              <div className="ielts-panel-stats">
+                <h4 className="sub-section-title" style={{marginTop:0}}>📊 Bảng điểm {taskLabel} (AI chấm)</h4>
+                <IeltsStatsTable classId={classId} assignmentId={assignment.id} refreshKey={statsKey}
+                  onViewStudent={sid => {
+                    const s = (data?.submissions || []).find(x => String(x.studentId) === String(sid))
+                    if (s?.aiGrade) setViewGrade(s)
+                  }} />
+              </div>
+            )}
             <div className="sub-stats-row">
               <div className="sub-stat sub-stat--done">
                 {IC.check(18)}<span>{submissions.length}/{members.length}</span><small>Đã nộp</small>
@@ -320,7 +336,23 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
                         </div>
                       )}
                     </div>
-                    {isExam && s.score != null ? (
+                    {isWriting ? (
+                      <div className="ielts-row-actions">
+                        {s.aiGrade?.status === 'done' && (
+                          <button className="ielts-band-view" title="Xem kết quả chấm AI"
+                            onClick={() => setViewGrade(s)}>
+                            <BandChip band={s.aiGrade.overallBand} size="sm" /> Xem kết quả
+                          </button>
+                        )}
+                        {s.aiGrade?.status === 'pending' && <span className="ielts-pending-chip">⏳ Đang chấm…</span>}
+                        {s.aiGrade?.status === 'error' && (
+                          <span className="ielts-error-chip" title={s.aiGrade.error}>⚠️ Lỗi chấm</span>
+                        )}
+                        <GradeButton classId={classId} assignmentId={assignment.id}
+                          studentId={s.studentId} hasGrade={s.aiGrade?.status === 'done'}
+                          onDone={() => { reload(); setStatsKey(k => k + 1) }} />
+                      </div>
+                    ) : isExam && s.score != null ? (
                       <span className="sub-badge sub-badge--done">
                         {s.score}/{s.maxScore ?? '—'} điểm
                       </span>
@@ -362,6 +394,10 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
         </div>
       </div>
       {viewing && <FileViewerModal file={viewing} onClose={() => setViewing(null)} />}
+      {viewGrade && (
+        <IeltsGradeModal grade={viewGrade.aiGrade} studentName={viewGrade.studentName}
+          taskLabel={taskLabel} onClose={() => setViewGrade(null)} />
+      )}
       {confirmDel && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !delBusy && setConfirmDel(null)}>
           <div className="modal-box sub-del-modal">
@@ -390,13 +426,14 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
 function ClassFormModal({ initial, onClose, onSave, loading }) {
   const [name,     setName]     = useState(initial?.name ?? '')
   const [desc,     setDesc]     = useState(initial?.description ?? '')
+  const [subject,  setSubject]  = useState(initial?.subject ?? null)
   const [password, setPassword] = useState(initial?.joinPassword ?? '')
   const [showPwd,  setShowPwd]  = useState(false)
   const [err,      setErr]      = useState('')
 
   const submit = () => {
     if (!name.trim()) { setErr('Vui lòng nhập tên lớp.'); return }
-    onSave({ name: name.trim(), description: desc.trim(), joinPassword: password.trim() || null })
+    onSave({ name: name.trim(), description: desc.trim(), subject, joinPassword: password.trim() || null })
   }
 
   return (
@@ -411,6 +448,14 @@ function ClassFormModal({ initial, onClose, onSave, loading }) {
           <input className="cm-input" placeholder="VD: Lớp 12A1, Nhóm Toán nâng cao…"
             value={name} onChange={e => setName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && submit()} autoFocus />
+
+          <label className="cm-label" style={{marginTop:14}}>Loại hình lớp học</label>
+          <SubjectPicker value={subject} onChange={setSubject} />
+          {subject === 'anh' && (
+            <div className="cm-info-note" style={{marginTop:8}}>
+              🇬🇧 Lớp Tiếng Anh: bài tập nộp file có thể bật <strong>chấm điểm IELTS Writing bằng AI</strong>.
+            </div>
+          )}
 
           <label className="cm-label" style={{marginTop:14}}>Mô tả</label>
           <textarea className="cm-input cm-textarea" rows={2}
@@ -495,8 +540,9 @@ function AddStudentModal({ classMembers, onClose, onAdd }) {
 }
 
 /* ─── Assignment form modal ─── */
-function AssignmentModal({ teacherId, onClose, onSave }) {
+function AssignmentModal({ teacherId, cls, onClose, onSave }) {
   const exams = getExamsByTeacher(teacherId).filter(e => e.published)
+  const isEnglishClass = cls?.subject === 'anh'
   const today = new Date().toISOString().slice(0, 10)
   const weekLater = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10)
 
@@ -515,6 +561,7 @@ function AssignmentModal({ teacherId, onClose, onSave }) {
   const [maxAttempts, setMaxAttempts] = useState('')        // '' = không giới hạn
   const [scoreMode,   setScoreMode]   = useState('highest') // highest | average | latest
   const [lockScreen,  setLockScreen]  = useState(false)     // khóa màn hình chống gian lận
+  const [writingTask, setWritingTask] = useState('')        // '' | task1 | task2 (IELTS Writing, lớp Anh)
   const [attachments, setAttachments] = useState([])
   const [uploading,   setUploading]   = useState(false)
   const [viewing,     setViewing]     = useState(null)
@@ -552,8 +599,11 @@ function AssignmentModal({ teacherId, onClose, onSave }) {
     // homework
     if (!title.trim()) { setErr('Vui lòng nhập tiêu đề bài tập.'); return }
     if (!dueDate)      { setErr('Vui lòng chọn ngày hạn nộp.');    return }
+    if (writingTask === 'task1' && attachments.length === 0) {
+      setErr('IELTS Writing Task 1 cần đính kèm ảnh đề bài (biểu đồ/bảng/sơ đồ) để AI chấm chính xác.'); return
+    }
     const iso = new Date(`${dueDate}T${dueTime}`).toISOString()
-    onSave({ title: title.trim(), description: desc.trim(), examId: null, dueDate: iso, attachments })
+    onSave({ title: title.trim(), description: desc.trim(), examId: null, dueDate: iso, attachments, writingTask: writingTask || null })
   }
 
   const selectedExam = exams.find(e => e.id === examId)
@@ -670,8 +720,31 @@ function AssignmentModal({ teacherId, onClose, onSave }) {
                     value={dueTime} onChange={e => setDueTime(e.target.value)} />
                 </div>
 
+                {isEnglishClass && (
+                  <>
+                    <label className="cm-label" style={{marginTop:14}}>🤖 Chấm điểm AI (IELTS Writing)</label>
+                    <div className="wt-picker">
+                      {[['', '✍️ Không chấm AI'], ['task1', '📊 Part 1 · Writing Task 1'], ['task2', '📝 Part 2 · Writing Task 2']].map(([v, l]) => (
+                        <button key={v} type="button"
+                          className={`wt-pick ${writingTask === v ? 'wt-pick--active' : ''}`}
+                          onClick={() => setWritingTask(v)}>{l}</button>
+                      ))}
+                    </div>
+                    {writingTask && (
+                      <div className="cm-info-note" style={{marginTop:8}}>
+                        {writingTask === 'task1'
+                          ? <>📊 <strong>Task 1</strong>: AI chấm theo band descriptors Task 1. Hãy <strong>đính kèm ảnh đề bài</strong> (biểu đồ/bảng/sơ đồ) bên dưới — AI sẽ trích xuất hình ảnh đề để chấm chính xác.</>
+                          : <>📝 <strong>Task 2</strong>: AI chấm theo band descriptors Task 2. Ghi đề bài vào phần Mô tả hoặc đính kèm ảnh đề.</>}
+                        {' '}Bài nộp của học sinh sẽ được chấm tự động (band 0–9, 4 tiêu chí, nhận xét chi tiết).
+                      </div>
+                    )}
+                  </>
+                )}
+
                 <label className="cm-label" style={{marginTop:14}}>
-                  📎 Tài liệu đính kèm <span style={{color:'#94a3b8',fontWeight:400}}>(tuỳ chọn)</span>
+                  📎 Tài liệu đính kèm {writingTask === 'task1'
+                    ? <span style={{color:'#dc2626',fontWeight:600}}>(ảnh đề bài — bắt buộc)</span>
+                    : <span style={{color:'#94a3b8',fontWeight:400}}>(tuỳ chọn)</span>}
                 </label>
                 {attachments.length > 0 && (
                   <div className="file-chip-list">
@@ -771,7 +844,7 @@ function ClassDetail({ cls, teacherId, onBack, onUpdated }) {
       <div className="cm-detail-header">
         <button className="cm-back-btn" onClick={onBack}>{IC.back(18)} Quay lại</button>
         <div style={{flex:1}}>
-          <h2 className="cm-detail-title">{cls.name}</h2>
+          <h2 className="cm-detail-title">{cls.name} <SubjectBadge subject={cls.subject} /></h2>
           {cls.description && <p className="cm-detail-desc">{cls.description}</p>}
         </div>
         <div className="cm-detail-stats">
@@ -882,6 +955,11 @@ function ClassDetail({ cls, teacherId, onBack, onUpdated }) {
                               {IC.clock(12)} {formatDt(a.dueDate)}{past && ' (Hết hạn)'}
                             </span>
                           )}
+                          {a.writingTask && (
+                            <span className="cm-exam-chip ielts-task-chip">
+                              🤖 IELTS Writing {a.writingTask === 'task1' ? 'Task 1' : 'Task 2'} · Chấm AI
+                            </span>
+                          )}
                           {a.attachments?.length > 0 && <span className="cm-exam-chip">{IC.clip(12)} {a.attachments.length} file</span>}
                         </div>
                         {a.attachments?.length > 0 && (
@@ -946,7 +1024,7 @@ function ClassDetail({ cls, teacherId, onBack, onUpdated }) {
         <AddStudentModal classMembers={cls.members||[]} onClose={() => setShowAddStudent(false)} onAdd={handleAddMember} />
       )}
       {showAssignment && (
-        <AssignmentModal teacherId={teacherId} onClose={() => setShowAssignment(false)} onSave={handleAddAssignment} />
+        <AssignmentModal teacherId={teacherId} cls={cls} onClose={() => setShowAssignment(false)} onSave={handleAddAssignment} />
       )}
       {viewSubs && (
         <SubmissionsPanel classId={cls.id} assignment={viewSubs} members={cls.members||[]} onClose={() => setViewSubs(null)} />
@@ -974,17 +1052,17 @@ export default function ClassManagementPage({ user }) {
 
   useEffect(() => { reload() }, [])
 
-  const handleCreate = async ({ name, description, joinPassword }) => {
+  const handleCreate = async ({ name, description, subject, joinPassword }) => {
     setLoading(true)
     try {
-      await createClass({ name, description, teacherId: user.id, teacherName: user.name, joinPassword })
+      await createClass({ name, description, subject, teacherId: user.id, teacherName: user.name, joinPassword })
       setShowCreate(false)
       reload()
     } finally { setLoading(false) }
   }
 
-  const handleEdit = async ({ name, description, joinPassword }) => {
-    await updateClassInfo(editCls.id, { name, description, joinPassword })
+  const handleEdit = async ({ name, description, subject, joinPassword }) => {
+    await updateClassInfo(editCls.id, { name, description, subject: subject || null, joinPassword })
     setEditCls(null)
     reload()
   }
@@ -1064,9 +1142,10 @@ export default function ClassManagementPage({ user }) {
           {classes.map(cls => (
             <div key={cls.id} className="cm-class-card">
               <div className="cm-class-card-header">
-                <div className="cm-class-icon">🏫</div>
+                <div className="cm-class-icon">{SUBJECTS[cls.subject]?.icon ?? '🏫'}</div>
                 <div className="cm-class-title">{cls.name}</div>
               </div>
+              <div className="cm-class-subject-row"><SubjectBadge subject={cls.subject} /></div>
               {cls.description && <div className="cm-class-desc-preview">{cls.description}</div>}
               <div className="cm-class-stats">
                 <span>{IC.users(13)} {cls.members?.length ?? 0} học sinh</span>

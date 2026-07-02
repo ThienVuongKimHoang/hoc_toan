@@ -49,6 +49,7 @@ IMAGES_DIR = SRC_DIR / "output" / "images"
 FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
 
 import database as db
+import ielts_grading as ielts
 
 # task_id → {"status": pending|running|done|error, "progress": [...], "result": ..., "error": ...}
 TASKS: dict[str, dict] = {}
@@ -944,6 +945,7 @@ async def create_class_endpoint(request: Request):
     cls = {
         "id": cid, "name": body.get("name", ""),
         "description": body.get("description", ""),
+        "subject": body.get("subject") or None,   # toan | ly | hoa | anh | van | khac
         "teacherId": body.get("teacherId"), "teacherName": body.get("teacherName", ""),
         "createdAt": body.get("createdAt", _now_iso()),
         "joinCode": _join_code(), "joinPassword": body.get("joinPassword") or None,
@@ -1047,7 +1049,7 @@ async def update_class_endpoint(cls_id: str, request: Request):
     body = await request.json()
     cls = db.get_class(cls_id)
     if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    for k in ("name", "description", "joinPassword"):
+    for k in ("name", "description", "joinPassword", "subject"):
         if k in body: cls[k] = body[k]
     db.upsert_class(cls_id, cls)
     return cls
@@ -1113,6 +1115,8 @@ async def add_assignment_endpoint(cls_id: str, request: Request):
         "maxAttempts": max_attempts,     # số lần làm tối đa (None = không giới hạn)
         "scoreMode": score_mode,         # highest | average | latest
         "lockScreen": bool(body.get("lockScreen", False)),   # khóa màn hình chống gian lận
+        # IELTS Writing (lớp Tiếng Anh): part 1 ↔ task1, part 2 ↔ task2, None = không chấm AI
+        "writingTask": body.get("writingTask") if body.get("writingTask") in ("task1", "task2") else None,
         "attachments": body.get("attachments", []),
         "createdAt": _now_iso(), "submissions": [],
     }
@@ -1229,17 +1233,24 @@ async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request
                 return JSONResponse({"error": "Đã quá thời hạn nộp bài."}, status_code=403)
         except Exception:
             pass
+    graded_asgn = None
     for i, a in enumerate(asgns):
         if a["id"] == asgn_id:
             subs = a.get("submissions", [])
             sub = {"studentId": body.get("studentId"), "studentName": body.get("studentName", ""),
                    "submittedAt": _now_iso(), "files": body.get("files", []), "note": body.get("note", "")}
+            if a.get("writingTask"):
+                sub["aiGrade"] = {"status": "pending"}   # AI sẽ chấm ở background
+                graded_asgn = a
             idx = next((j for j, s in enumerate(subs) if str(s.get("studentId")) == str(body.get("studentId"))), None)
             if idx is not None: subs[idx] = sub
             else: subs.append(sub)
             a["submissions"] = subs; asgns[i] = a; break
     cls["assignments"] = asgns
     db.upsert_class(cls_id, cls)
+    # Bài IELTS Writing → tự động chấm AI ở background sau khi nộp
+    if graded_asgn is not None:
+        asyncio.create_task(_grade_submission_bg(cls_id, asgn_id, str(body.get("studentId"))))
     return {"ok": True}
 
 
@@ -1275,6 +1286,106 @@ async def delete_assignment_submission(cls_id: str, asgn_id: str, student_id: st
     cls["assignments"] = asgns
     db.upsert_class(cls_id, cls)
     return {"ok": True}
+
+
+# ─── IELTS Writing AI grading ────────────────────────────────────────────────
+
+def _find_assignment(cls: dict, asgn_id: str):
+    return next((a for a in cls.get("assignments", []) if a.get("id") == asgn_id), None)
+
+
+def _save_ai_grade(cls_id: str, asgn_id: str, student_id: str, grade: dict) -> None:
+    """Ghi kết quả chấm vào submission (đọc lại class mới nhất để tránh ghi đè)."""
+    cls = db.get_class(cls_id)
+    if not cls:
+        return
+    asgn = _find_assignment(cls, asgn_id)
+    if not asgn:
+        return
+    for s in asgn.get("submissions", []):
+        if str(s.get("studentId")) == str(student_id):
+            s["aiGrade"] = grade
+            break
+    db.upsert_class(cls_id, cls)
+
+
+def _grade_submission_sync(cls_id: str, asgn_id: str, student_id: str) -> dict:
+    """Chạy toàn bộ pipeline chấm (blocking) và lưu kết quả."""
+    cls = db.get_class(cls_id)
+    if not cls:
+        return {"status": "error", "error": "Không tìm thấy lớp."}
+    asgn = _find_assignment(cls, asgn_id)
+    if not asgn:
+        return {"status": "error", "error": "Không tìm thấy bài tập."}
+    if not asgn.get("writingTask"):
+        return {"status": "error", "error": "Bài tập này không bật chấm AI (IELTS Writing)."}
+    sub = next((s for s in asgn.get("submissions", [])
+                if str(s.get("studentId")) == str(student_id)), None)
+    if not sub:
+        return {"status": "error", "error": "Học sinh chưa nộp bài."}
+    try:
+        grade = ielts.run_grading(_get_groq(), asgn, sub, CLASS_DOCS_DIR)
+    except Exception as e:
+        grade = {"status": "error", "error": f"Lỗi khi chấm: {e}", "gradedAt": _now_iso()}
+    _save_ai_grade(cls_id, asgn_id, student_id, grade)
+    return grade
+
+
+async def _grade_submission_bg(cls_id: str, asgn_id: str, student_id: str) -> None:
+    """Tự động chấm ở background sau khi học sinh nộp bài."""
+    try:
+        await asyncio.to_thread(_grade_submission_sync, cls_id, asgn_id, student_id)
+    except Exception as e:
+        _save_ai_grade(cls_id, asgn_id, student_id,
+                       {"status": "error", "error": str(e), "gradedAt": _now_iso()})
+
+
+@app.post("/api/classes/{cls_id}/assignments/{asgn_id}/grade/{student_id}")
+async def grade_submission_endpoint(cls_id: str, asgn_id: str, student_id: str):
+    """Chấm (hoặc chấm lại) bài IELTS Writing của một học sinh."""
+    _save_ai_grade(cls_id, asgn_id, student_id, {"status": "pending"})
+    grade = await asyncio.to_thread(_grade_submission_sync, cls_id, asgn_id, student_id)
+    if grade.get("status") == "error":
+        return JSONResponse({"error": grade.get("error", "Chấm thất bại"), "aiGrade": grade}, status_code=422)
+    return {"ok": True, "aiGrade": grade}
+
+
+@app.get("/api/classes/{cls_id}/assignments/{asgn_id}/grades-summary")
+async def grades_summary_endpoint(cls_id: str, asgn_id: str):
+    """Bảng tóm tắt thống kê điểm AI từng học sinh (học sinh & giáo viên đều xem được)."""
+    cls = db.get_class(cls_id)
+    if not cls:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    asgn = _find_assignment(cls, asgn_id)
+    if not asgn:
+        return JSONResponse({"error": "Không tìm thấy bài tập"}, status_code=404)
+    rows, bands = [], []
+    for s in asgn.get("submissions", []):
+        g = s.get("aiGrade") or {}
+        crit = g.get("criteria") or {}
+        row = {
+            "studentId": s.get("studentId"), "studentName": s.get("studentName", ""),
+            "submittedAt": s.get("submittedAt"), "status": g.get("status") or "none",
+            "wordCount": g.get("wordCount"), "overallBand": g.get("overallBand"),
+        }
+        for k in ielts.CRITERIA_KEYS:
+            row[k] = (crit.get(k) or {}).get("band")
+        rows.append(row)
+        if g.get("status") == "done" and g.get("overallBand") is not None:
+            bands.append(g["overallBand"])
+    rows.sort(key=lambda r: (-(r["overallBand"] or -1), r["studentName"]))
+    stats = {
+        "graded": len(bands), "total": len(rows),
+        "avg": round(sum(bands) / len(bands), 2) if bands else None,
+        "max": max(bands) if bands else None,
+        "min": min(bands) if bands else None,
+    }
+    return {"writingTask": asgn.get("writingTask"), "criterionLabel":
+            ("Task Achievement" if asgn.get("writingTask") == "task1" else "Task Response"),
+            "rows": rows, "stats": stats}
+
+
+# ─── End IELTS Writing AI grading ────────────────────────────────────────────
 
 
 @app.post("/api/classes/{cls_id}/documents")

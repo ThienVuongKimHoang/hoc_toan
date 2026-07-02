@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { getClassesByStudent, getExamWindow, getPendingForStudent, joinClassByCode, submitAssignment, uploadFile } from '../store/classStore.js'
+import SubjectBadge, { SUBJECTS } from '../components/SubjectBadge.jsx'
+import { BandChip, IeltsGradeModal, IeltsStatsModal } from '../components/IeltsGrade.jsx'
 
 /* ─── SVG icons ─── */
 function Svg({ size = 16, children }) {
@@ -182,6 +184,13 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
               </div>
             ) : (
               <>
+                {assignment.writingTask && (
+                  <div className="cm-info-note ielts-submit-note" style={{marginBottom:12}}>
+                    🤖 Bài <strong>IELTS Writing {assignment.writingTask === 'task1' ? 'Task 1' : 'Task 2'}</strong> —
+                    AI sẽ tự động chấm điểm (band 0–9) ngay sau khi bạn nộp.
+                    Nộp file <strong>.txt / .docx / .pdf</strong> hoặc <strong>ảnh chụp bài viết tay</strong> đều được.
+                  </div>
+                )}
                 <label className="cm-label">📂 File bài làm của bạn</label>
                 {files.length > 0 && (
                   <div className="file-chip-list">
@@ -310,10 +319,16 @@ function ExamAssignmentCard({ assignment, cls, user }) {
 
 /* ─── Assignment card for student ─── */
 function AssignmentCard({ assignment, cls, user, onSubmit }) {
+  const [showGrade, setShowGrade] = useState(false)
+  const [showStats, setShowStats] = useState(false)
+
   if (assignment.examId) return <ExamAssignmentCard assignment={assignment} cls={cls} user={user} />
 
   const mySubmission = assignment.submissions?.find(s => String(s.studentId) === String(user.id))
   const isDuePast   = assignment.dueDate && new Date(assignment.dueDate) < new Date()
+  const isWriting   = !!assignment.writingTask
+  const taskLabel   = isWriting ? `IELTS Writing ${assignment.writingTask === 'task1' ? 'Task 1' : 'Task 2'}` : null
+  const myGrade     = mySubmission?.aiGrade
 
   return (
     <div className={`mc-asgn-card ${isDuePast && !mySubmission ? 'mc-asgn-card--overdue' : ''} ${mySubmission ? 'mc-asgn-card--done' : ''}`}>
@@ -324,12 +339,25 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
           <span className={`cm-due-chip ${isDuePast ? 'cm-due-chip--past' : ''}`}>
             {IC.clock(12)} Hạn: {formatDt(assignment.dueDate)}{isDuePast && ' (Hết hạn)'}
           </span>
+          {isWriting && <span className="cm-exam-chip ielts-task-chip">🤖 {taskLabel} · AI chấm điểm</span>}
           {assignment.attachments?.length > 0 && <span className="cm-exam-chip">{IC.clip(12)} {assignment.attachments.length} file đính kèm</span>}
         </div>
         {mySubmission && (
           <div className="mc-submitted-info">
             {IC.check(13)} Đã nộp lúc {formatDt(mySubmission.submittedAt)}
             {mySubmission.files?.length > 0 && <span> · {mySubmission.files.length} file</span>}
+          </div>
+        )}
+        {isWriting && mySubmission && (
+          <div className="ielts-row-actions" style={{marginTop:8}}>
+            {myGrade?.status === 'done' && (
+              <button className="ielts-band-view" onClick={() => setShowGrade(true)}>
+                <BandChip band={myGrade.overallBand} size="sm" /> Xem kết quả AI
+              </button>
+            )}
+            {myGrade?.status === 'pending' && <span className="ielts-pending-chip">⏳ AI đang chấm bài…</span>}
+            {myGrade?.status === 'error' && <span className="ielts-error-chip" title={myGrade.error}>⚠️ Chấm lỗi — nộp lại hoặc báo giáo viên</span>}
+            <button className="mec-btn" onClick={() => setShowStats(true)}>📊 Bảng điểm lớp</button>
           </div>
         )}
       </div>
@@ -342,6 +370,13 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
           ? (mySubmission ? '✅ Đã nộp (hết hạn)' : '🔒 Đã hết hạn')
           : (mySubmission ? '✏️ Nộp lại' : '📤 Nộp bài')}
       </button>
+      {showGrade && myGrade && (
+        <IeltsGradeModal grade={myGrade} studentName={user.name} taskLabel={taskLabel}
+          onClose={() => setShowGrade(false)} />
+      )}
+      {showStats && (
+        <IeltsStatsModal classId={cls.id} assignment={assignment} onClose={() => setShowStats(false)} />
+      )}
     </div>
   )
 }
@@ -359,12 +394,22 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
     })
   }, [cls.id, refreshKey])
 
+  // AI đang chấm bài của mình → tự refresh để hiện kết quả khi chấm xong
+  const hasPendingGrade = (localCls.assignments || []).some(a =>
+    a.writingTask && a.submissions?.some(s =>
+      String(s.studentId) === String(user.id) && s.aiGrade?.status === 'pending'))
+  useEffect(() => {
+    if (!hasPendingGrade) return
+    const t = setTimeout(() => setRefreshKey(k => k + 1), 8000)
+    return () => clearTimeout(t)
+  }, [hasPendingGrade, refreshKey])
+
   return (
     <div className="cm-detail">
       <div className="cm-detail-header">
         <button className="cm-back-btn" onClick={onBack}>{IC.back(18)} Quay lại</button>
         <div style={{flex:1}}>
-          <h2 className="cm-detail-title">{localCls.name}</h2>
+          <h2 className="cm-detail-title">{localCls.name} <SubjectBadge subject={localCls.subject} /></h2>
           {localCls.description && <p className="cm-detail-desc">{localCls.description}</p>}
           {localCls.teacherName && <p className="cm-detail-desc">Giáo viên: <strong>{localCls.teacherName}</strong></p>}
         </div>
@@ -562,13 +607,14 @@ export default function MyClassesPage({ user, initialJoinCode, initialClassId })
             return (
               <div key={cls.id} className="cm-class-card" style={{cursor:'pointer'}} onClick={() => setSelected(cls)}>
                 <div className="cm-class-card-header">
-                  <div className="cm-class-icon">🏫</div>
+                  <div className="cm-class-icon">{SUBJECTS[cls.subject]?.icon ?? '🏫'}</div>
                   <div style={{flex:1}}>
                     <div className="cm-class-title">{cls.name}</div>
                     {cls.teacherName && <div style={{fontSize:'0.78rem',color:'#64748b'}}>GV: {cls.teacherName}</div>}
                   </div>
                   {pending > 0 && <span className="mc-pending-badge">{pending} cần nộp</span>}
                 </div>
+                <div className="cm-class-subject-row"><SubjectBadge subject={cls.subject} /></div>
                 {cls.description && <div className="cm-class-desc-preview">{cls.description}</div>}
                 <div className="cm-class-stats">
                   <span>{IC.book(13)} {cls.assignments?.length ?? 0} bài tập</span>
