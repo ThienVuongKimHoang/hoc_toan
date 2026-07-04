@@ -15,8 +15,8 @@ export default function Header({ user, onGoHome, onGoLogin, onGoLobby, onLogout,
     <header className={`site-header ${scrolled ? 'scrolled' : ''}`}>
       <div className="header-inner">
         <button className="logo" onClick={onGoHome}>
-          <span className="logo-icon">📐</span>
-          <span className="logo-text">HocToan<span className="logo-dot">.AI</span></span>
+          <span className="logo-icon">☀️</span>
+          <span className="logo-text">Trung tâm <span className="logo-dot">Ánh Sáng</span></span>
         </button>
 
         <nav className="site-nav">

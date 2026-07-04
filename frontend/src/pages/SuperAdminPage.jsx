@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ROLE_META } from '../auth/mockUsers.js'
 import { getAllExams } from '../store/examStore.js'
+import SiteContentTab from './SiteContentTab.jsx'
 
 /* ── SVG primitives ── */
 function Ic({ size = 16, children, style }) {
@@ -797,6 +798,7 @@ const TABS = [
   { key: 'exams',  label: 'Quản lý đề thi',     icon: IcExams },
   { key: 'users',  label: 'Người dùng',          icon: IcUsers },
   { key: 'config', label: 'Cấu hình hệ thống',   icon: IcConfig },
+  { key: 'site',   label: 'Nội dung trang chủ',   icon: IcGlobe },
 ]
 
 export default function SuperAdminPage({ user, onGoHome }) {
@@ -817,6 +819,7 @@ export default function SuperAdminPage({ user, onGoHome }) {
     exams:  <ExamsTab />,
     users:  <UsersTab />,
     config: <ConfigTab />,
+    site:   <SiteContentTab />,
   }[tab]
 
   return (

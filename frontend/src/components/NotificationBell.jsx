@@ -86,7 +86,7 @@ export default function NotificationBell({ user, onOpenClass }) {
                   className={`notif-item ${!n.read ? 'notif-item--unread' : ''} ${n.classId ? 'notif-item--link' : ''}`}
                   onClick={() => handleClickNotif(n)}
                   title={n.classId ? 'Bấm để mở lớp & bài tập' : undefined}>
-                  <div className="notif-icon">📝</div>
+                  <div className="notif-icon">{n.type === 'register' ? '📋' : '📝'}</div>
                   <div className="notif-content">
                     <div className="notif-title">{n.title}</div>
                     <div className="notif-msg">{n.message}</div>

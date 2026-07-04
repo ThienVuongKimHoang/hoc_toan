@@ -742,6 +742,144 @@ async def admin_save_config(request: Request):
     db.save_config(cfg)
     return {"ok": True, "config": cfg}
 
+
+# ─── Nội dung trang chủ (super admin tùy chỉnh được) ─────────────────────────
+
+_SITE_CONTENT_DEFAULT = {
+    "info": {
+        "name": "Trung tâm Ánh Sáng",
+        "phone": "098 532 22 77",
+        "fb": "https://www.facebook.com/toan.ly.hoa.thay.duc.di.an",
+        "address": "399/1 Trần Hưng Đạo, Đông Hòa, Dĩ An, Bình Dương",
+        "heroTitle": "Học chắc kiến thức, sáng con đường thi cử",
+        "heroDesc": "Trung tâm Ánh Sáng tại Dĩ An đồng hành cùng học sinh từ lớp 6 đến lớp 12: lớp nhỏ, thầy cô theo sát từng em, học phí phù hợp với phụ huynh.",
+        "heroImage": "/img/lop_hoc2.jpg",
+        "heroBadge": "1.500+",
+        "heroBadgeLabel": "học viên đã theo học",
+    },
+    "stats": [
+        {"value": "12+", "label": "năm kinh nghiệm giảng dạy"},
+        {"value": "95%", "label": "học viên tăng từ 2 điểm trở lên"},
+        {"value": "8.2", "label": "điểm trung bình thi vào 10 môn Toán"},
+        {"value": "6.5+", "label": "IELTS đầu ra trung bình"},
+    ],
+    "teachers": [
+        {"name": "Thầy Đức", "subject": "Toán – Lý – Hóa", "photo": "",
+         "bio": "Hơn 12 năm luyện thi vào 10 và tốt nghiệp THPT, nổi tiếng dạy dễ hiểu với học sinh mất gốc."},
+        {"name": "Cô Hương", "subject": "Ngữ Văn", "photo": "",
+         "bio": "Chuyên luyện nghị luận xã hội và văn học, chấm chữa bài từng em mỗi tuần."},
+        {"name": "Cô My", "subject": "Tiếng Anh – IELTS", "photo": "",
+         "bio": "IELTS 8.0, phụ trách lớp tiếng Anh phổ thông và luyện IELTS mục tiêu 6.5+."},
+    ],
+    "courses": [
+        {"name": "Toán 6 – 12", "desc": "2–3 buổi/tuần · bám sát chương trình trên lớp, luyện đề theo từng kỳ thi.", "fee": "500.000đ", "featured": False},
+        {"name": "Lý – Hóa 8 – 12", "desc": "Học chắc lý thuyết, thí nghiệm minh họa, luyện chuyên đề thi tốt nghiệp.", "fee": "500.000đ", "featured": False},
+        {"name": "Ngữ Văn 9 & 12", "desc": "Luyện viết mỗi buổi, chấm chữa chi tiết, ôn trọng tâm thi vào 10 và THPT.", "fee": "450.000đ", "featured": False},
+        {"name": "Tiếng Anh phổ thông", "desc": "Ngữ pháp – từ vựng – đề thi, dành cho học sinh lớp 6 – 12.", "fee": "500.000đ", "featured": False},
+        {"name": "IELTS 5.0 → 6.5+", "desc": "Lộ trình 4 – 6 tháng, luyện đủ 4 kỹ năng, thi thử hàng tháng có chấm band.", "fee": "800.000đ", "featured": True},
+    ],
+    # Lịch học: cells theo thứ tự [T2, T3, T4, T5, T6, T7, CN]; mỗi entry = [tên lớp, màu]
+    # màu: xanhla | vang | cam | tim | do | xanhduong | hong | trang
+    "schedule": {
+        "note": "Lịch có thể thay đổi theo tuần — liên hệ trung tâm để biết lịch chính xác.",
+        "days": ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật"],
+        "slots": [
+            {"time": "8h00 – 9h30", "cells": [
+                [],
+                [["Ngữ pháp cơ bản (P2)", "xanhla"]],
+                [],
+                [["Ngữ pháp cơ bản", "xanhla"]],
+                [],
+                [["KIDS 2 8h00", "xanhla"], ["KHTN 8 (Ngân P5)", "trang"], ["Lý 11 (Tân P2)", "trang"], ["Lý 12 (Đức P3)", "trang"]],
+                [["KIDS 2", "xanhla"], ["Toán 10 - Khoa - P5", "do"], ["AV 7 - Vy - P4", "vang"], ["Toán 8 - Quỳnh - P3", "do"], ["Lý 12 (Đức P3)", "trang"]],
+            ]},
+            {"time": "09h45 – 11h15", "cells": [
+                [],
+                [["Ngữ pháp nâng cao (P2)", "xanhla"]],
+                [],
+                [["Ngữ pháp nâng cao", "xanhla"]],
+                [],
+                [["KHTN 7 (Ngân P5)", "trang"], ["Hóa 11 (Đức P3)", "trang"], ["KHTN 9 (Tân P2)", "trang"], ["KIDS 1 09h45", "xanhla"]],
+                [["AV 8 - Vy", "vang"], ["Toán 11 (Đức P3)", "do"], ["KHTN 9 - Tân - P5", "trang"], ["Toán 7 - Khoa - P4", "trang"], ["KIDS 1", "xanhla"]],
+            ]},
+            {"time": "13h30 – 15h15", "cells": [
+                [], [], [], [], [],
+                [["IELTS", "xanhla"]],
+                [["IELTS", "xanhla"]],
+            ]},
+            {"time": "15h30 – 17h00", "cells": [
+                [], [], [], [], [],
+                [["Toán 11 (Đức P2)", "do"], ["Văn 9 - Thủy (15h00-17h00)", "tim"]],
+                [["Văn 9 - Thủy (15h00-17h00)", "tim"]],
+            ]},
+            {"time": "17h45 – 19h15", "cells": [
+                [["AV 10 - Kim", "xanhduong"], ["AV 9 - Vy (P3)", "vang"], ["Toán 12 (Đức P2)", "trang"], ["AV6", "cam"], ["Văn 8 - Thủy", "tim"]],
+                [["AV 11 - Thùy Anh", "hong"], ["AV 8 - Vy", "vang"], ["Hóa 12 (Đức P3)", "trang"], ["Lý 10 (Quỳnh P1)", "trang"], ["IELTS", "xanhla"]],
+                [["AV 10 - Kim", "xanhduong"], ["AV 9 - Vy", "vang"], ["Toán 12 (Đức P2)", "trang"], ["AV6", "cam"], ["Toán 7 (Khoa P5)", "trang"]],
+                [["AV 11 - Thùy Anh", "hong"], ["Hóa 12 (Đức P3)", "trang"], ["KHTN 8 (Ngân P5)", "trang"], ["Văn 7 - Thủy", "tim"]],
+                [["AV 10 - Kim", "xanhduong"], ["AV 9 - Vy", "vang"], ["Toán 12 (Đức P2)", "trang"], ["AV6", "cam"]],
+                [["AV 11 - Thùy Anh", "hong"], ["AV 8 - Vy", "vang"], ["Toán 6 (Tân P3)", "trang"], ["Lý 10 (Quỳnh P1)", "trang"], ["Toán 7 (Khoa P2)", "trang"]],
+                [],
+            ]},
+            {"time": "19h30 – 21h00", "cells": [
+                [["AV 12 - Kim (P3)", "xanhduong"], ["Toán 6 (Tân P3)", "trang"], ["Văn 7 - Thủy", "tim"], ["Toán 9 (Đức P2)", "trang"]],
+                [["Toán 11 (Đức P2)", "do"], ["AV 7 - Vy", "vang"], ["Toán 8 (Quỳnh P3)", "do"], ["Toeic", "xanhla"]],
+                [["AV 12 - Kim", "xanhduong"], ["Lý 11 (Tân P5)", "trang"], ["Toán 10 (Khoa P4)", "trang"], ["Toán 9 (Đức P2)", "trang"]],
+                [["Văn 8 - Thủy", "tim"], ["KHTN 7 (Ngân P5)", "trang"], ["Hóa 11 (Đức P3)", "trang"], ["Toeic", "xanhla"], ["Hóa 10 (V.Anh)", "trang"]],
+                [["AV 12 - Kim", "xanhduong"], ["Toán 6 (Tân P3)", "trang"], ["Hóa 10 (V.Anh)", "trang"], ["Toán 9 (Đức P2)", "trang"]],
+                [["AV 7 - Vy", "vang"], ["Toán 8 (Quỳnh P3)", "do"], ["Toeic", "xanhla"], ["Toán 10 (Khoa P2)", "trang"]],
+                [],
+            ]},
+        ],
+    },
+    "achievements": [
+        {"image": "/img/hoc_vien.jpg", "caption": "Học viên đạt thành tích cao trong kỳ thi vào 10"},
+        {"image": "/img/hoc_vien2.jpg", "caption": "Vinh danh học viên xuất sắc tại trung tâm"},
+    ],
+    "testimonials": [
+        {"quote": "Em mất gốc Toán từ lớp 7, học thầy Đức một năm thì thi vào 10 được 8.5. Thầy giảng chậm, kỹ, bài nào chưa hiểu được hỏi lại thoải mái.", "who": "Minh Anh — học sinh lớp 9, THCS Đông Hòa"},
+        {"quote": "Lớp Lý – Hóa học vui mà chắc. Nhờ luyện đề ở trung tâm, em đạt 9.0 Hóa kỳ thi tốt nghiệp vừa rồi.", "who": "Quốc Bảo — học sinh lớp 12, THPT Dĩ An"},
+        {"quote": "Cô My sửa từng câu Writing, mỗi tuần đều có bài Speaking 1-1. Sau 4 tháng em đạt IELTS 6.5 đúng mục tiêu.", "who": "Thu Hà — sinh viên năm nhất"},
+    ],
+}
+
+
+@app.get("/api/site-content")
+async def get_site_content():
+    """Nội dung trang chủ — public, merge với mặc định."""
+    saved = db.load_config().get("site_content") or {}
+    return {**_SITE_CONTENT_DEFAULT, **saved}
+
+
+@app.post("/api/site-content")
+async def save_site_content(request: Request):
+    """Super admin lưu nội dung trang chủ."""
+    body = await request.json()
+    db.save_config({"site_content": body})
+    return {"ok": True}
+
+
+@app.post("/api/site-register")
+async def site_register(request: Request):
+    """Form đăng ký tư vấn trên trang chủ → thông báo cho super admin."""
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    phone = (body.get("phone") or "").strip()
+    subject = (body.get("subject") or "").strip()
+    if not name or not phone:
+        return JSONResponse({"error": "Thiếu họ tên hoặc số điện thoại"}, status_code=400)
+    for adm in db.get_super_admins():
+        db.add_notif({
+            "id": _cls_id(), "type": "register",
+            "targetUserId": str(adm.get("id")), "classId": None,
+            "className": "", "assignmentId": "",
+            "title": f"Đăng ký tư vấn mới: {name}",
+            "message": f"SĐT: {phone}" + (f" · Quan tâm: {subject}" if subject else ""),
+            "createdAt": _now_iso(), "read": False,
+        })
+    return {"ok": True}
+
+
 @app.post("/api/admin/super-admins")
 async def create_super_admin(request: Request):
     """Tạo tài khoản super_admin mới hoặc nâng cấp user hiện có."""
@@ -1286,106 +1424,6 @@ async def delete_assignment_submission(cls_id: str, asgn_id: str, student_id: st
     cls["assignments"] = asgns
     db.upsert_class(cls_id, cls)
     return {"ok": True}
-
-
-# ─── IELTS Writing AI grading ────────────────────────────────────────────────
-
-def _find_assignment(cls: dict, asgn_id: str):
-    return next((a for a in cls.get("assignments", []) if a.get("id") == asgn_id), None)
-
-
-def _save_ai_grade(cls_id: str, asgn_id: str, student_id: str, grade: dict) -> None:
-    """Ghi kết quả chấm vào submission (đọc lại class mới nhất để tránh ghi đè)."""
-    cls = db.get_class(cls_id)
-    if not cls:
-        return
-    asgn = _find_assignment(cls, asgn_id)
-    if not asgn:
-        return
-    for s in asgn.get("submissions", []):
-        if str(s.get("studentId")) == str(student_id):
-            s["aiGrade"] = grade
-            break
-    db.upsert_class(cls_id, cls)
-
-
-def _grade_submission_sync(cls_id: str, asgn_id: str, student_id: str) -> dict:
-    """Chạy toàn bộ pipeline chấm (blocking) và lưu kết quả."""
-    cls = db.get_class(cls_id)
-    if not cls:
-        return {"status": "error", "error": "Không tìm thấy lớp."}
-    asgn = _find_assignment(cls, asgn_id)
-    if not asgn:
-        return {"status": "error", "error": "Không tìm thấy bài tập."}
-    if not asgn.get("writingTask"):
-        return {"status": "error", "error": "Bài tập này không bật chấm AI (IELTS Writing)."}
-    sub = next((s for s in asgn.get("submissions", [])
-                if str(s.get("studentId")) == str(student_id)), None)
-    if not sub:
-        return {"status": "error", "error": "Học sinh chưa nộp bài."}
-    try:
-        grade = ielts.run_grading(_get_groq(), asgn, sub, CLASS_DOCS_DIR)
-    except Exception as e:
-        grade = {"status": "error", "error": f"Lỗi khi chấm: {e}", "gradedAt": _now_iso()}
-    _save_ai_grade(cls_id, asgn_id, student_id, grade)
-    return grade
-
-
-async def _grade_submission_bg(cls_id: str, asgn_id: str, student_id: str) -> None:
-    """Tự động chấm ở background sau khi học sinh nộp bài."""
-    try:
-        await asyncio.to_thread(_grade_submission_sync, cls_id, asgn_id, student_id)
-    except Exception as e:
-        _save_ai_grade(cls_id, asgn_id, student_id,
-                       {"status": "error", "error": str(e), "gradedAt": _now_iso()})
-
-
-@app.post("/api/classes/{cls_id}/assignments/{asgn_id}/grade/{student_id}")
-async def grade_submission_endpoint(cls_id: str, asgn_id: str, student_id: str):
-    """Chấm (hoặc chấm lại) bài IELTS Writing của một học sinh."""
-    _save_ai_grade(cls_id, asgn_id, student_id, {"status": "pending"})
-    grade = await asyncio.to_thread(_grade_submission_sync, cls_id, asgn_id, student_id)
-    if grade.get("status") == "error":
-        return JSONResponse({"error": grade.get("error", "Chấm thất bại"), "aiGrade": grade}, status_code=422)
-    return {"ok": True, "aiGrade": grade}
-
-
-@app.get("/api/classes/{cls_id}/assignments/{asgn_id}/grades-summary")
-async def grades_summary_endpoint(cls_id: str, asgn_id: str):
-    """Bảng tóm tắt thống kê điểm AI từng học sinh (học sinh & giáo viên đều xem được)."""
-    cls = db.get_class(cls_id)
-    if not cls:
-        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    asgn = _find_assignment(cls, asgn_id)
-    if not asgn:
-        return JSONResponse({"error": "Không tìm thấy bài tập"}, status_code=404)
-    rows, bands = [], []
-    for s in asgn.get("submissions", []):
-        g = s.get("aiGrade") or {}
-        crit = g.get("criteria") or {}
-        row = {
-            "studentId": s.get("studentId"), "studentName": s.get("studentName", ""),
-            "submittedAt": s.get("submittedAt"), "status": g.get("status") or "none",
-            "wordCount": g.get("wordCount"), "overallBand": g.get("overallBand"),
-        }
-        for k in ielts.CRITERIA_KEYS:
-            row[k] = (crit.get(k) or {}).get("band")
-        rows.append(row)
-        if g.get("status") == "done" and g.get("overallBand") is not None:
-            bands.append(g["overallBand"])
-    rows.sort(key=lambda r: (-(r["overallBand"] or -1), r["studentName"]))
-    stats = {
-        "graded": len(bands), "total": len(rows),
-        "avg": round(sum(bands) / len(bands), 2) if bands else None,
-        "max": max(bands) if bands else None,
-        "min": min(bands) if bands else None,
-    }
-    return {"writingTask": asgn.get("writingTask"), "criterionLabel":
-            ("Task Achievement" if asgn.get("writingTask") == "task1" else "Task Response"),
-            "rows": rows, "stats": stats}
-
-
-# ─── End IELTS Writing AI grading ────────────────────────────────────────────
 
 
 @app.post("/api/classes/{cls_id}/documents")

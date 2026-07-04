@@ -290,8 +290,8 @@ function LoginPage({ onLogin, onGoHome }) {
         {/* Left panel */}
         <div className="login-left">
           <button className="login-logo" onClick={onGoHome}>
-            <span>📐</span>
-            <span>HocToan<b>.AI</b></span>
+            <span>☀️</span>
+            <span>Trung tâm <b>Ánh Sáng</b></span>
           </button>
           <h2>Luyện đề thi Toán THPT<br />thông minh hơn mỗi ngày</h2>
           <p>Nền tảng luyện tập với AI — phân tích đề thi, trích xuất câu hỏi, kiểm tra kết quả tức thì.</p>

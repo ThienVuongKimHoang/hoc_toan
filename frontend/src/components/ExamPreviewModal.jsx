@@ -164,7 +164,7 @@ export default function ExamPreviewModal({ result, title, onClose, onPublish, on
                 <span>Môn: Toán</span>
                 <span>Tổng số câu: {totalQ}</span>
               </div>
-              <div className="ep-paper-note">(Đề thi này được tạo bởi HocToan.AI)</div>
+              <div className="ep-paper-note">(Đề thi này được tạo bởi Trung tâm Ánh Sáng)</div>
             </div>
 
             {/* Sections */}
