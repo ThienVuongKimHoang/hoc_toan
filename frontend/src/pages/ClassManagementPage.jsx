@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { getExamsByTeacher, getSubmissions as getExamSubmissions, fetchExamById, scaledScore, deleteStudentSubmissions } from '../store/examStore.js'
+import { getExamsByTeacher, fetchExamsByTeacher, getSubmissions as getExamSubmissions, fetchExamById, scaledScore, deleteStudentSubmissions } from '../store/examStore.js'
 import QuestionStats from '../components/QuestionStats.jsx'
 import {
   addAssignment, addDocument, addMemberToClass, createClass,
@@ -541,7 +541,15 @@ function AddStudentModal({ classMembers, onClose, onAdd }) {
 
 /* ─── Assignment form modal ─── */
 function AssignmentModal({ teacherId, cls, onClose, onSave }) {
-  const exams = getExamsByTeacher(teacherId).filter(e => e.published)
+  // Hiện cache localStorage ngay, rồi cập nhật bằng danh sách chuẩn từ server
+  const [exams, setExams] = useState(() => getExamsByTeacher(teacherId).filter(e => e.published))
+  useEffect(() => {
+    let alive = true
+    fetchExamsByTeacher(teacherId).then(list => {
+      if (alive) setExams(list.filter(e => e.published))
+    })
+    return () => { alive = false }
+  }, [teacherId])
   const isEnglishClass = cls?.subject === 'anh'
   const today = new Date().toISOString().slice(0, 10)
   const weekLater = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10)

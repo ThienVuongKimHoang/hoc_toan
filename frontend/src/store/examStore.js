@@ -32,7 +32,24 @@ export function deleteExam(id) {
 }
 
 export function getExamsByTeacher(userId) {
-  return getAllExams().filter(e => e.createdBy === userId)
+  // So sánh lỏng theo chuỗi: createdBy có thể là số (dữ liệu cũ) hoặc chuỗi (server)
+  return getAllExams().filter(e => String(e.createdBy) === String(userId))
+}
+
+/** Đề thi của giáo viên lấy từ SERVER (metadata), gộp với cache localStorage.
+    Dùng cho modal giao đề trong lớp — đề vẫn hiện đủ khi đổi trình duyệt/máy. */
+export async function fetchExamsByTeacher(userId) {
+  const local = getExamsByTeacher(userId)
+  try {
+    const res = await fetch(`/api/my-exams?userId=${encodeURIComponent(userId)}`)
+    if (!res.ok) return local
+    const server = await res.json()
+    const byId = new Map(local.map(e => [e.id, e]))
+    for (const e of server) byId.set(e.id, { ...byId.get(e.id), ...e })
+    return [...byId.values()]
+  } catch {
+    return local
+  }
 }
 
 /** Tạo đề thi mới từ kết quả extraction */
