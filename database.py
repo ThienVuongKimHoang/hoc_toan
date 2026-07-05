@@ -112,6 +112,9 @@ CREATE TABLE IF NOT EXISTS classes (
     assignments   JSONB        DEFAULT '[]',
     documents     JSONB        DEFAULT '[]'
 );
+-- Migration cho DB tạo trước khi cột subject tồn tại (CREATE IF NOT EXISTS
+-- không thêm cột mới vào bảng cũ)
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS subject VARCHAR(20);
 
 CREATE TABLE IF NOT EXISTS notifications (
     id             VARCHAR(50)  PRIMARY KEY,
@@ -139,7 +142,19 @@ def init_db():
     """Create tables then migrate from JSON files if they're empty."""
     with _C() as conn:
         with conn.cursor() as cur:
+            # Phát hiện DB cũ chưa có classes.subject TRƯỚC khi chạy DDL
+            # (DDL sẽ tự thêm cột; các lớp cũ được gán mặc định 'toan' một lần)
+            cur.execute("""SELECT EXISTS (SELECT 1 FROM information_schema.tables
+                                          WHERE table_name = 'classes')
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM information_schema.columns
+                                      WHERE table_name = 'classes'
+                                        AND column_name = 'subject')""")
+            backfill_subject = cur.fetchone()[0]
             cur.execute(_DDL)
+            if backfill_subject:
+                cur.execute("UPDATE classes SET subject = 'toan' WHERE subject IS NULL")
+                print(f"[DB] Đã thêm cột classes.subject, gán 'toan' cho {cur.rowcount} lớp cũ")
         conn.commit()
     _migrate_users()
     _migrate_exams()
