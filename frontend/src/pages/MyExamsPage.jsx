@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { classShareUrl, deleteExam, examStatus, getExamsByTeacher, lobbyUrl, practiceShareUrl, setExamPublic, shareUrl } from '../store/examStore.js'
+import { classShareUrl, deleteExam, examStatus, fetchExamById, fetchExamsByTeacher, getExamsByTeacher, lobbyUrl, practiceShareUrl, setExamPublic, shareUrl } from '../store/examStore.js'
 import PublishModal from '../components/PublishModal.jsx'
 import PracticeSettingsModal from '../components/PracticeSettingsModal.jsx'
 
@@ -92,14 +92,24 @@ function MetaChip({ icon, children }) {
 
 export default function MyExamsPage({ user, onCreateExam, onEdit, onResults }) {
   const isGuest = user?.role === 'khach'
-  const [exams,          setExams]          = useState([])
+  // Hiện cache localStorage ngay (đỡ nháy trống), rồi cập nhật từ DB qua server
+  const [exams,          setExams]          = useState(() => getExamsByTeacher(user?.id))
   const [republish,      setRepublish]      = useState(null)
   const [practiceExam,   setPracticeExam]   = useState(null)
   const [togglingPublic, setTogglingPublic] = useState(null)
   const [openLinkId,     setOpenLinkId]     = useState(null)
   const [copiedKey,      setCopiedKey]      = useState(null)
 
-  const reload = () => setExams(getExamsByTeacher(user.id))
+  const reload = () => {
+    fetchExamsByTeacher(user.id).then(setExams)
+  }
+
+  // Sửa đề cần sections đầy đủ — đề lấy từ DB chỉ có metadata nên tải trọn trước
+  const handleEdit = async (exam) => {
+    const full = exam.sections ? exam : await fetchExamById(exam.id)
+    if (full) onEdit(full)
+    else alert('Không tải được nội dung đề thi từ server.')
+  }
 
   useEffect(() => {
     if (!openLinkId) return
@@ -131,9 +141,10 @@ export default function MyExamsPage({ user, onCreateExam, onEdit, onResults }) {
     finally { setTogglingPublic(null) }
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (confirm('Xoá đề thi này? Hành động không thể hoàn tác.')) {
-      deleteExam(id); reload()
+      await deleteExam(id)
+      reload()
     }
   }
 
@@ -285,7 +296,7 @@ export default function MyExamsPage({ user, onCreateExam, onEdit, onResults }) {
                     </button>
 
                     <button className="mec-btn mec-btn--edit"
-                      onClick={() => onEdit(exam)}
+                      onClick={() => handleEdit(exam)}
                       title="Sửa câu hỏi">
                       {IC.pencil(15)} Sửa
                     </button>

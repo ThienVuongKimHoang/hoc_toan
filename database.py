@@ -476,6 +476,48 @@ def load_exams_meta() -> list:
     return result
 
 
+def load_exams_by_creator(uid: str) -> list:
+    """Đề thi của một giáo viên: đủ metadata cho trang 'Đề thi của tôi'
+    (không kèm sections cho nhẹ), kèm số bài nộp."""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT e.id, e.title, e.source, e.total_questions, e.published,
+                       e.is_public, e.featured, e.results_revealed, e.created_by,
+                       e.created_at, e.updated_at, e.settings, e.practice_settings,
+                       e.classes_data,
+                       COALESCE(s.cnt, 0) AS submission_count
+                FROM exams e
+                LEFT JOIN (
+                    SELECT exam_id, COUNT(*) AS cnt FROM submissions GROUP BY exam_id
+                ) s ON s.exam_id = e.id
+                WHERE e.created_by = %s
+                ORDER BY e.created_at DESC NULLS LAST
+            """, (str(uid),))
+            rows = cur.fetchall()
+    out = []
+    for r in rows:
+        rd = dict(r)
+        out.append({
+            "id":               rd["id"],
+            "title":            rd["title"] or "",
+            "source":           rd["source"] or "",
+            "totalQuestions":   rd["total_questions"] or 0,
+            "published":        bool(rd["published"]),
+            "isPublic":         bool(rd["is_public"]),
+            "featured":         bool(rd["featured"]),
+            "resultsRevealed":  bool(rd["results_revealed"]),
+            "createdBy":        rd["created_by"],
+            "createdAt":        rd["created_at"].isoformat() if rd.get("created_at") else None,
+            "updatedAt":        rd["updated_at"].isoformat() if rd.get("updated_at") else None,
+            "settings":         rd["settings"],
+            "practiceSettings": rd["practice_settings"],
+            "classes":          rd["classes_data"] or [],
+            "submissionCount":  int(rd["submission_count"]),
+        })
+    return out
+
+
 def upsert_exam(exam_id: str, exam: dict) -> None:
     """Save/update one exam. Submissions are preserved (separate table)."""
     exam.pop("submissions", None)

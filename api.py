@@ -711,12 +711,12 @@ async def admin_all_exams():
 
 @app.get("/api/my-exams")
 async def my_exams(userId: str = ""):
-    """Đề thi do một giáo viên tạo (metadata). Nguồn chuẩn cho modal giao đề
-    trong lớp — không phụ thuộc localStorage của từng trình duyệt."""
+    """Đề thi do một giáo viên tạo (metadata, không kèm sections). Nguồn chuẩn
+    cho trang 'Đề thi của tôi' và modal giao đề — không phụ thuộc localStorage."""
     uid = str(userId)
     if not uid:
         return []
-    return [e for e in db.load_exams_meta() if str(e.get("createdBy")) == uid]
+    return db.load_exams_by_creator(uid)
 
 
 @app.delete("/api/admin/exams/{exam_id}")

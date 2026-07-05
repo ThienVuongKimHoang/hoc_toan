@@ -28,7 +28,8 @@ export function saveExam(exam) {
 
 export function deleteExam(id) {
   persist(getAllExams().filter(e => e.id !== id))
-  fetch(`/api/exams/${id}`, { method: 'DELETE' }).catch(() => {})
+  // trả promise để caller chờ server xóa xong rồi mới reload danh sách từ DB
+  return fetch(`/api/exams/${id}`, { method: 'DELETE' }).catch(() => {})
 }
 
 export function getExamsByTeacher(userId) {
@@ -86,9 +87,11 @@ export function updateExam(examId, { title, result }) {
   return updated
 }
 
-/** Phát đề — lưu settings, đánh dấu published, đồng bộ lên server */
+/** Phát đề — lưu settings, đánh dấu published, đồng bộ lên server.
+    Lấy đề từ localStorage, nếu trình duyệt này không có thì tải từ server
+    (để "Phát đề / Cài đặt" vẫn dùng được trên máy khác). */
 export async function publishExam(examId, settings) {
-  const exam = getExamById(examId)
+  const exam = await fetchExamById(examId)
   if (!exam) return null
   const updated = {
     ...exam,
