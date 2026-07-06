@@ -12,7 +12,10 @@ const SECTION_LABELS = {
 }
 
 function getSectionList(exam) {
-  return Object.keys(exam?.sections || {}).filter(s => s in SECTION_LABELS)
+  // Chỉ giữ các phần có câu hỏi — phần rỗng bị bỏ qua khi làm bài
+  return Object.keys(exam?.sections || {}).filter(
+    s => s in SECTION_LABELS && (exam.sections[s]?.questions?.length ?? 0) > 0
+  )
 }
 
 function fmtMs(ms) {
