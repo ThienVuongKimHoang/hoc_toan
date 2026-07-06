@@ -27,12 +27,24 @@ function FigureImages({ path }) {
   )
 }
 
-// Render question_text với [img:id] markers → ảnh thật
+function InlineImage({ img }) {
+  const src = img.dataUrl || (img.url ? `/images/${img.url.replace('images/', '')}` : '')
+  if (!src) return null
+  return (
+    <span style={{ display: 'block', margin: '8px 0' }}>
+      <img src={src} alt={img.name || 'Hình minh họa'} className="figure-img" loading="lazy" />
+    </span>
+  )
+}
+
+// Render question_text với [img:id] markers → ảnh thật.
+// Ảnh đính kèm không được marker nào tham chiếu vẫn hiển thị ở cuối đề bài.
 function QuestionText({ q }) {
   const text = q?.question_text || ''
   const images = q?.images || []
-  if (!text) return null
-  if (!text.includes('[img:')) return <MathText text={text} />
+  const referenced = new Set([...text.matchAll(/\[img:([^\]]*)\]/g)].map(m => m[1]))
+  const orphans = images.filter(im => !referenced.has(im.id))
+  if (!text && orphans.length === 0) return null
   const parts = text.split(/(\[img:[^\]]*\])/g)
   return (
     <>
@@ -40,16 +52,11 @@ function QuestionText({ q }) {
         const m = part.match(/^\[img:([^\]]*)\]$/)
         if (m) {
           const img = images.find(im => im.id === m[1])
-          if (!img) return null
-          const src = img.dataUrl || (img.url ? `/images/${img.url.replace('images/', '')}` : '')
-          return (
-            <span key={i} style={{ display: 'block', margin: '8px 0' }}>
-              <img src={src} alt={img.name || 'Hình minh họa'} className="figure-img" loading="lazy" />
-            </span>
-          )
+          return img ? <InlineImage key={i} img={img} /> : null
         }
         return part ? <MathText key={i} text={part} /> : null
       })}
+      {orphans.map((img, i) => <InlineImage key={img.id || `o${i}`} img={img} />)}
     </>
   )
 }

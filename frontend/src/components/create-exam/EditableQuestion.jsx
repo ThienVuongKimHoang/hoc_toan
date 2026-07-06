@@ -840,24 +840,34 @@ export default function EditableQuestion({
   }
   const cancelEdit = () => { setEditingText(false); setLocalText(q.question_text || '') }
 
-  const handleAddImage = (img) => onUpdate({ ...q, images: [...(q.images || []), img] })
-  const handleDeleteImage = (id) => onUpdate({ ...q, images: (q.images || []).filter(i => i.id !== id) })
-
-  // Thêm ảnh vào gallery VÀ chèn marker [img:id] ở CUỐI nội dung (luôn append)
-  const addImageAndInsertMarker = (file) => {
-    if (!file || !file.type.startsWith('image/')) return
-    if (file.size > 5 * 1024 * 1024) { alert('Ảnh quá lớn (tối đa 5 MB).'); return }
-    const id = `i${Date.now()}`
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      onUpdate({ ...q, images: [...(q.images || []), { id, dataUrl: ev.target.result, name: file.name }] })
-      const marker = `\n[img:${id}]`
+  // Thêm ảnh vào gallery VÀ chèn marker [img:id] ở CUỐI nội dung (luôn append) —
+  // thiếu marker thì QuestionCard phía học sinh không hiển thị ảnh inline.
+  // Đang mở editor: chèn vào localText (lưu khi bấm ✓). Không thì ghi thẳng vào question_text.
+  const handleAddImage = (img) => {
+    const marker = `\n[img:${img.id}]`
+    if (editingText) {
+      onUpdate({ ...q, images: [...(q.images || []), img] })
       setLocalText(prev => prev + marker)
       requestAnimationFrame(() => {
         const ta = taRef.current
         if (ta) { ta.focus(); ta.scrollTop = ta.scrollHeight; const end = ta.value.length; ta.setSelectionRange(end, end) }
       })
+    } else {
+      onUpdate({ ...q, images: [...(q.images || []), img], question_text: (q.question_text || '') + marker })
     }
+  }
+  // Xoá ảnh thì gỡ luôn marker tương ứng khỏi nội dung
+  const handleDeleteImage = (id) => {
+    const strip = (t) => (t || '').replace(new RegExp(`\\n?\\[img:${id}\\]`, 'g'), '')
+    if (editingText) setLocalText(prev => strip(prev))
+    onUpdate({ ...q, images: (q.images || []).filter(i => i.id !== id), question_text: strip(q.question_text) })
+  }
+
+  const addImageAndInsertMarker = (file) => {
+    if (!file || !file.type.startsWith('image/')) return
+    if (file.size > 5 * 1024 * 1024) { alert('Ảnh quá lớn (tối đa 5 MB).'); return }
+    const reader = new FileReader()
+    reader.onload = (ev) => handleAddImage({ id: `i${Date.now()}`, dataUrl: ev.target.result, name: file.name })
     reader.readAsDataURL(file)
   }
 
