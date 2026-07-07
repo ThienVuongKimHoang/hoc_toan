@@ -530,6 +530,10 @@ export default function MyClassesPage({ user, initialJoinCode, initialClassId })
   useEffect(() => {
     if (!initialJoinCode) return
     const code = initialJoinCode.trim().toUpperCase()
+    // Xóa mã khỏi URL NGAY — nếu giữ nguyên #join/<code>, mỗi lần F5 hoặc
+    // đăng nhập lại ở tab này sẽ âm thầm tham gia lớp thêm lần nữa
+    // (kể cả sau khi giáo viên đã xóa học sinh khỏi lớp).
+    window.history.replaceState(null, '', '#my-classes')
     let cancelled = false
     joinClassByCode(code, null, user).then(result => {
       if (cancelled) return
