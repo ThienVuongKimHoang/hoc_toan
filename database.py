@@ -6,8 +6,11 @@ Default: postgresql://hoc_toan:hoc_toan123@localhost:5433/hoc_toan
 Migrates existing JSON files on first run (only if tables are empty).
 """
 
+import hashlib
+import hmac as _hmac
 import json
 import os
+import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -44,6 +47,35 @@ class _C:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# ── Password hashing (PBKDF2, stdlib — không thêm dependency) ─────────────────
+
+_PWD_PREFIX = "pbkdf2$"
+
+
+def hash_password(plain: str) -> str:
+    salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", (plain or "").encode(), salt.encode(), 100_000)
+    return f"{_PWD_PREFIX}{salt}${dk.hex()}"
+
+
+def verify_password(plain: str, stored: str) -> bool:
+    """So khớp mật khẩu. Hỗ trợ cả bản ghi cũ còn plaintext (sẽ được nâng cấp dần)."""
+    if not stored:
+        return False
+    if stored.startswith(_PWD_PREFIX):
+        try:
+            _, salt, hexhash = stored.split("$", 2)
+        except ValueError:
+            return False
+        dk = hashlib.pbkdf2_hmac("sha256", (plain or "").encode(), salt.encode(), 100_000)
+        return _hmac.compare_digest(dk.hex(), hexhash)
+    return _hmac.compare_digest(stored, plain or "")
+
+
+def is_hashed(stored: str) -> bool:
+    return bool(stored) and stored.startswith(_PWD_PREFIX)
 
 
 # ── Schema ─────────────────────────────────────────────────────────────────────
@@ -164,7 +196,28 @@ def init_db():
     _migrate_classes()
     _migrate_notifs()
     _migrate_config()
-    _ensure_super_admin() 
+    _migrate_password_hashes()
+    _ensure_super_admin()
+
+
+def _migrate_password_hashes() -> None:
+    """Hash mọi mật khẩu còn lưu plaintext (chạy một lần, an toàn khi chạy lại)."""
+    with _C() as conn:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, password FROM users WHERE password <> '' AND password NOT LIKE %s",
+                    (_PWD_PREFIX + "%",))
+                rows = cur.fetchall()
+                for uid, pwd in rows:
+                    cur.execute("UPDATE users SET password=%s WHERE id=%s",
+                                (hash_password(pwd), uid))
+            conn.commit()
+            if rows:
+                print(f"[DB] Đã hash mật khẩu cho {len(rows)} tài khoản")
+        except Exception as e:
+            conn.rollback()
+            print(f"[DB] _migrate_password_hashes error: {e}")
 
 
 _BASE = Path(__file__).parent
@@ -329,20 +382,29 @@ def _migrate_config():
             print(f"[DB] migrate_config error: {e}")
 
 def _ensure_super_admin() -> None:
-    """Tạo tài khoản super_admin mặc định nếu chưa có ai có role này."""
+    """Tạo tài khoản super_admin mặc định nếu chưa có ai có role này.
+    KHÔNG chiếm/nâng quyền tài khoản có sẵn trùng email — tránh việc một người
+    dùng thường đăng ký admin@gmail.com rồi bỗng thành super_admin sau restart."""
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM users WHERE role='super_admin'")
             if cur.fetchone()[0] > 0:
                 return   # đã có super_admin rồi, bỏ qua
+            cur.execute("SELECT 1 FROM users WHERE LOWER(email)=LOWER(%s)", ('admin@gmail.com',))
+            if cur.fetchone():
+                print("[DB] CẢNH BÁO: không còn super_admin nào, nhưng email admin@gmail.com "
+                      "đã thuộc về người dùng khác — không tự nâng quyền. "
+                      "Hãy tạo super_admin thủ công qua /api/admin/super-admins.")
+                return
         try:
             uid = int(datetime.now(timezone.utc).timestamp() * 1000)
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO users(id,email,password,name,role,avatar,is_registered,created_at)
                     VALUES(%s,%s,%s,%s,%s,%s,%s,NOW())
-                    ON CONFLICT(email) DO UPDATE SET role='super_admin'
-                """, (uid, 'admin@gmail.com', '123456', 'Super Admin', 'super_admin', 'S', True))
+                    ON CONFLICT(email) DO NOTHING
+                """, (uid, 'admin@gmail.com', hash_password('123456'),
+                      'Super Admin', 'super_admin', 'S', True))
             conn.commit()
             print("[DB] Created default super_admin: admin@gmail.com / 123456")
         except Exception as e:
@@ -569,6 +631,60 @@ def upsert_exam(exam_id: str, exam: dict) -> None:
         conn.commit()
 
 
+def add_submission_guarded(exam_id: str, sub: dict, max_attempts=None, legacy_owner=None):
+    """Thêm bài nộp; nếu max_attempts đặt, ĐẾM số lần đã làm trong cùng transaction
+    (khóa advisory theo đề+lớp+học sinh) để hai request song song không lách giới hạn.
+    Trả về (True, index) khi nhận, (False, số_lần_đã_dùng) khi đã hết lượt."""
+    class_id   = sub.get("classId")
+    student_id = str(sub.get("studentId", ""))
+    asgn_id    = sub.get("assignmentId")
+    with _C() as conn:
+        try:
+            with conn.cursor() as cur:
+                if max_attempts and class_id:
+                    key = f"submit|{exam_id}|{class_id}|{student_id}"
+                    cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 42))", (key,))
+                    if asgn_id:
+                        # Bài cũ chưa gắn assignment_id tính cho lần giao bài sớm nhất
+                        cur.execute("""
+                            SELECT COUNT(*) FROM submissions
+                            WHERE exam_id=%s AND student_id=%s AND class_id=%s
+                              AND (assignment_id=%s OR (assignment_id IS NULL AND %s))
+                        """, (exam_id, student_id, str(class_id), str(asgn_id),
+                              legacy_owner is not None and str(asgn_id) == str(legacy_owner)))
+                    else:
+                        cur.execute("""
+                            SELECT COUNT(*) FROM submissions
+                            WHERE exam_id=%s AND student_id=%s AND class_id=%s
+                        """, (exam_id, student_id, str(class_id)))
+                    used = cur.fetchone()[0]
+                    if used >= int(max_attempts):
+                        conn.rollback()
+                        return False, used
+                cur.execute("""
+                    INSERT INTO submissions(exam_id,submitted_at,started_at,time_spent,violation_count,
+                        student_name,student_id,answers,score,max_score,class_name,class_id,assignment_id)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                """, (
+                    exam_id, sub.get("submittedAt"),
+                    sub.get("startedAt"), sub.get("timeSpent"), sub.get("violationCount"),
+                    sub.get("studentName", "Ẩn danh"), student_id,
+                    json.dumps(sub.get("answers") or {}, ensure_ascii=False),
+                    sub.get("score"), sub.get("maxScore"),
+                    sub.get("className"), sub.get("classId"),
+                    asgn_id or None,
+                ))
+                new_id = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM submissions WHERE exam_id=%s AND id<=%s",
+                            (exam_id, new_id))
+                idx = cur.fetchone()[0] - 1
+            conn.commit()
+            return True, idx
+        except Exception:
+            conn.rollback()
+            raise
+
+
 def add_submission(exam_id: str, sub: dict) -> int:
     """Insert a submission, return its 0-based index."""
     with _C() as conn:
@@ -684,7 +800,29 @@ def delete_exam(exam_id: str) -> bool:
             cur.execute("DELETE FROM exams WHERE id=%s RETURNING id", (exam_id,))
             found = cur.fetchone() is not None
         conn.commit()
+    if found:
+        try:
+            strip_exam_assignments(exam_id)
+        except Exception as e:
+            print(f"[DB] strip_exam_assignments({exam_id}) error: {e}")
     return found
+
+
+def strip_exam_assignments(exam_id: str) -> int:
+    """Gỡ mọi lần giao bài tham chiếu đề exam_id khỏi tất cả lớp (khi xóa đề)
+    để học sinh không còn thấy bài tập trỏ vào đề đã mất. Trả về số lớp bị sửa."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE classes SET assignments = COALESCE(
+                    (SELECT jsonb_agg(a) FROM jsonb_array_elements(assignments) a
+                     WHERE a->>'examId' IS DISTINCT FROM %s), '[]'::jsonb)
+                WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(assignments) a
+                              WHERE a->>'examId' = %s)
+            """, (exam_id, exam_id))
+            n = cur.rowcount
+        conn.commit()
+    return n
 
 
 # ── Users ──────────────────────────────────────────────────────────────────────
@@ -911,6 +1049,45 @@ def upsert_class(cid: str, cls: dict) -> None:
                 json.dumps(cls.get("documents") or [], ensure_ascii=False),
             ))
         conn.commit()
+
+
+def update_class_atomic(cid: str, mutate) -> Optional[dict]:
+    """Đọc lớp với khóa dòng (SELECT ... FOR UPDATE), gọi mutate(cls) sửa tại chỗ,
+    rồi ghi lại trong CÙNG transaction — hai request song song không còn ghi đè
+    lẫn nhau (vd: hai học sinh nộp bài tập file cùng lúc làm mất một bài).
+    mutate trả False → hủy, không ghi. Trả về cls sau mutate, None nếu lớp không tồn tại."""
+    with _C() as conn:
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT * FROM classes WHERE id=%s FOR UPDATE", (cid,))
+                row = cur.fetchone()
+                if not row:
+                    conn.rollback()
+                    return None
+                cls = _cls_from_row(dict(row))
+                if mutate(cls) is False:
+                    conn.rollback()
+                    return cls
+                cur.execute("""
+                    UPDATE classes SET
+                        name=%s, description=%s, teacher_id=%s, teacher_name=%s,
+                        join_code=%s, join_password=%s, subject=%s,
+                        members=%s, assignments=%s, documents=%s
+                    WHERE id=%s
+                """, (
+                    cls.get("name", ""), cls.get("description", ""),
+                    str(cls.get("teacherId", "")), cls.get("teacherName", ""),
+                    cls.get("joinCode"), cls.get("joinPassword"), cls.get("subject") or None,
+                    json.dumps(cls.get("members") or [], ensure_ascii=False),
+                    json.dumps(cls.get("assignments") or [], ensure_ascii=False),
+                    json.dumps(cls.get("documents") or [], ensure_ascii=False),
+                    cid,
+                ))
+            conn.commit()
+            return cls
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def update_class_members(cid: str, members: list) -> bool:

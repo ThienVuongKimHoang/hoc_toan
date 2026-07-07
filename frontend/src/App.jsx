@@ -161,11 +161,15 @@ export default function App() {
     setUser(u)
     localStorage.setItem(USER_KEY, JSON.stringify(u))
     if (loginRedirect) {
-      const { view: rv, examId: rid, classId: rcid } = loginRedirect
+      const { view: rv, examId: rid, classId: rcid, assignmentId: raid } = loginRedirect
       setLoginRedirect(null)
       if (rv === 'take-exam') {
-        setHash(`take/${rid}`)
+        // Giữ nguyên ngữ cảnh lớp/bài tập — mất nó thì bài nộp không được tính vào lớp
+        const parts = [rid, rcid, raid].filter(Boolean).join('/')
+        setHash(`take/${parts}`)
         setExamId(rid)
+        setClassId(rcid ?? null)
+        setAssignmentId(raid ?? null)
         setView('take-exam')
       } else if (rv === 'create-exam') {
         setHash('')
@@ -302,9 +306,9 @@ export default function App() {
     setView('create-exam')
   }
 
-  // Redirect về đề thi sau khi login
-  const goLoginFromExam = (id) => {
-    setLoginRedirect({ view: 'take-exam', examId: id })
+  // Redirect về đề thi sau khi login (giữ cả lớp/bài tập nếu vào từ link của lớp)
+  const goLoginFromExam = (id, cid = null, aid = null) => {
+    setLoginRedirect({ view: 'take-exam', examId: id, classId: cid, assignmentId: aid })
     setHash('')
     setView('login')
   }
@@ -535,7 +539,7 @@ export default function App() {
   )
 
   if (view === 'take-exam') return (
-    <ExamTakePage examId={examId} classId={classId} assignmentId={assignmentId} user={user} onGoHome={goHome} onGoLogin={() => goLoginFromExam(examId)} />
+    <ExamTakePage examId={examId} classId={classId} assignmentId={assignmentId} user={user} onGoHome={goHome} onGoLogin={() => goLoginFromExam(examId, classId, assignmentId)} />
   )
 
   if (view === 'practice-exam') return (

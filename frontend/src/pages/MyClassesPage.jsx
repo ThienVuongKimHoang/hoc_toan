@@ -391,6 +391,11 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
     // Refresh class data to get latest submissions
     import('../store/classStore.js').then(m => m.getClassById(cls.id)).then(fresh => {
       if (fresh) setLocalCls(fresh)
+      else {
+        // Lớp đã bị xóa trong lúc đang mở → quay lại danh sách thay vì hiện dữ liệu cũ
+        alert('Lớp học này không còn tồn tại.')
+        onBack()
+      }
     })
   }, [cls.id, refreshKey])
 

@@ -410,6 +410,16 @@ async def get_exam(exam_id: str):
     return exam
 
 
+@app.delete("/api/exams/{exam_id}")
+async def delete_exam_endpoint(exam_id: str):
+    """Giáo viên xóa đề thi. (Trước đây route này không tồn tại nên nút xóa
+    chỉ xóa localStorage — đề 'sống lại' khi mở máy khác.)
+    Kèm dọn các lần giao bài trong lớp đang trỏ vào đề này."""
+    if not db.delete_exam(exam_id):
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    return {"ok": True}
+
+
 def _asgn_candidates(cls, exam_id):
     """Các lần giao bài trong lớp dùng đề exam_id (một đề có thể giao nhiều lần)."""
     return [a for a in (cls.get("assignments") or []) if a.get("examId") == exam_id]
@@ -473,13 +483,16 @@ def _exam_assignment(cls_id, exam_id, asgn_id=None):
 async def submit_exam(exam_id: str, request: Request):
     """Học sinh nộp bài thi."""
     body = await request.json()
-    if not db.get_exam(exam_id):
+    exam = db.get_exam(exam_id)
+    if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
 
     # Nếu nộp qua LỚP: học sinh phải là thành viên; kiểm tra cửa sổ thời gian
     # & số lần làm tối đa THEO TỪNG LẦN GIAO BÀI (một đề có thể giao nhiều lần).
-    cls_id  = body.get("classId")
-    asgn_id = body.get("assignmentId") or None
+    cls_id       = body.get("classId")
+    asgn_id      = body.get("assignmentId") or None
+    max_attempts = None
+    legacy_owner = None
     if cls_id:
         cls, asgn, legacy_owner = _exam_assignment(cls_id, exam_id, asgn_id)
         if not cls:
@@ -500,17 +513,17 @@ async def submit_exam(exam_id: str, request: Request):
             except Exception:
                 pass
             max_attempts = asgn.get("maxAttempts")
-            if max_attempts:
-                used = sum(
-                    1 for s in db.get_submissions(exam_id)
-                    if str(s.get("studentId")) == str(body.get("studentId"))
-                    and str(s.get("classId")) == str(cls_id)
-                    and _sub_belongs_to_asgn(s, asgn_id, legacy_owner)
-                )
-                if used >= int(max_attempts):
-                    return JSONResponse(
-                        {"error": f"Bạn đã làm đủ {max_attempts} lần cho phép."},
-                        status_code=403)
+
+    # Điểm do SERVER chấm từ answers — không tin điểm client gửi lên
+    # (client có thể POST thẳng score giả). Đề không có sections (hiếm) mới
+    # đành dùng điểm client như trước.
+    answers = body.get("answers") or {}
+    if exam.get("sections"):
+        score     = _calc_score(exam, answers)
+        max_score = _calc_max_score(exam)
+    else:
+        score     = body.get("score")
+        max_score = body.get("maxScore")
 
     submission = {
         "submittedAt": body.get("submittedAt"),
@@ -519,15 +532,20 @@ async def submit_exam(exam_id: str, request: Request):
         "violationCount": body.get("violationCount"),   # số lần vi phạm khóa màn hình
         "studentName":  body.get("studentName", "Ẩn danh"),
         "studentId":    body.get("studentId"),
-        "answers":      body.get("answers", {}),
-        "score":        body.get("score"),
-        "maxScore":     body.get("maxScore"),
+        "answers":      answers,
+        "score":        score,
+        "maxScore":     max_score,
         "className":    body.get("className"),
         "classId":      body.get("classId"),
         "assignmentId": asgn_id if cls_id else None,
     }
-    idx = db.add_submission(exam_id, submission)
-    return {"ok": True, "submissionIndex": idx}
+    # Đếm số lần đã làm + insert trong CÙNG transaction (khóa advisory) — hai
+    # request nộp song song không thể cùng lách qua giới hạn maxAttempts.
+    ok, result = db.add_submission_guarded(exam_id, submission, max_attempts, legacy_owner)
+    if not ok:
+        return JSONResponse(
+            {"error": f"Bạn đã làm đủ {max_attempts} lần cho phép."}, status_code=403)
+    return {"ok": True, "submissionIndex": result}
 
 
 @app.get("/api/exams/{exam_id}/submissions")
@@ -982,7 +1000,7 @@ async def create_super_admin(request: Request):
     new_user = {
         "id":           int(datetime.now(_tz.utc).timestamp() * 1000),
         "email":        email,
-        "password":     password,
+        "password":     db.hash_password(password),
         "name":         name,
         "role":         "super_admin",
         "avatar":       name[0].upper() if name else "S",
@@ -1020,9 +1038,18 @@ async def api_login(request: Request):
     body     = await request.json()
     email    = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
-    user     = db.get_user_by_email(email, pwd=True)
-    if not user or user.get("password") != password:
+    # Chặn đăng nhập bằng mật khẩu rỗng (tài khoản Google có password = "")
+    if not password:
         return JSONResponse({"error": "Email hoặc mật khẩu không đúng."}, status_code=401)
+    user = db.get_user_by_email(email, pwd=True)
+    if not user or not db.verify_password(password, user.get("password") or ""):
+        return JSONResponse({"error": "Email hoặc mật khẩu không đúng."}, status_code=401)
+    # Bản ghi cũ còn plaintext → nâng cấp sang hash ngay khi đăng nhập thành công
+    if not db.is_hashed(user.get("password") or ""):
+        try:
+            db.update_user_password(str(user["id"]), db.hash_password(password))
+        except Exception:
+            pass
     return {k: v for k, v in user.items() if k != "password"}
 
 
@@ -1084,7 +1111,7 @@ async def api_register(request: Request):
     new_user = {
         "id":           int(datetime.now(_tz.utc).timestamp() * 1000),
         "email":        email,
-        "password":     password,
+        "password":     db.hash_password(password),
         "name":         name,
         "role":         "khach",
         "avatar":       name[0].upper() if name else "?",
@@ -1136,7 +1163,7 @@ async def admin_reset_user_password(user_id: str, request: Request):
     new_password = (body.get("password") or "").strip()
     if len(new_password) < 6:
         return JSONResponse({"error": "Mật khẩu tối thiểu 6 ký tự."}, status_code=400)
-    if not db.update_user_password(user_id, new_password):
+    if not db.update_user_password(user_id, db.hash_password(new_password)):
         return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
     return {"ok": True}
 
@@ -1172,12 +1199,20 @@ async def create_class_endpoint(request: Request):
     return cls
 
 
+def _sanitize_class(cls: dict) -> dict:
+    """Bản trả về cho HỌC SINH: không lộ mật khẩu tham gia lớp."""
+    out = dict(cls)
+    out["joinPassword"] = None
+    out["hasJoinPassword"] = bool(cls.get("joinPassword"))
+    return out
+
+
 @app.get("/api/classes")
 async def list_classes(teacherId: str = None, studentId: str = None, email: str = None):
     if teacherId:
         return db.list_classes_by_teacher(teacherId)
     if studentId:
-        return db.list_classes_by_student(studentId, email)
+        return [_sanitize_class(c) for c in db.list_classes_by_student(studentId, email)]
     return []
 
 
@@ -1254,14 +1289,17 @@ async def join_class_by_code(request: Request):
         return JSONResponse({"error": "Bạn là giáo viên của lớp này, không thể tham gia với tư cách học sinh."}, status_code=403)
     if cls.get("joinPassword") and cls["joinPassword"] != password:
         return JSONResponse({"error": "Sai mật khẩu."}, status_code=401)
-    members = cls.get("members", [])
     em = (uemail or "").strip().lower()
-    if not any(str(m.get("userId")) == str(uid)
+
+    def mutate(c):
+        members = c.get("members", [])
+        if any(str(m.get("userId")) == str(uid)
                or (em and (m.get("email") or "").strip().lower() == em)
                for m in members):
+            return False
         members.append({"userId": uid, "name": uname, "email": uemail, "addedAt": _now_iso()})
-        cls["members"] = members
-        db.upsert_class(cls["id"], cls)
+        c["members"] = members
+    db.update_class_atomic(cls["id"], mutate)
     return {"ok": True, "classId": cls["id"], "className": cls["name"]}
 
 
@@ -1269,17 +1307,20 @@ async def join_class_by_code(request: Request):
 async def get_class_endpoint(cls_id: str):
     cls = db.get_class(cls_id)
     if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    return cls
+    # Endpoint này phục vụ trang lớp của HỌC SINH → ẩn mật khẩu tham gia.
+    # (Giáo viên lấy lớp của mình qua /api/classes?teacherId=... nên vẫn đủ thông tin.)
+    return _sanitize_class(cls)
 
 
 @app.put("/api/classes/{cls_id}")
 async def update_class_endpoint(cls_id: str, request: Request):
     body = await request.json()
-    cls = db.get_class(cls_id)
+
+    def mutate(cls):
+        for k in ("name", "description", "joinPassword", "subject"):
+            if k in body: cls[k] = body[k]
+    cls = db.update_class_atomic(cls_id, mutate)
     if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    for k in ("name", "description", "joinPassword", "subject"):
-        if k in body: cls[k] = body[k]
-    db.upsert_class(cls_id, cls)
     return cls
 
 
@@ -1293,36 +1334,39 @@ async def delete_class_endpoint(cls_id: str):
 @app.post("/api/classes/{cls_id}/members")
 async def add_member_endpoint(cls_id: str, request: Request):
     body = await request.json()
-    cls = db.get_class(cls_id)
-    if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    if str(cls.get("teacherId")) == str(body.get("userId")):
-        return JSONResponse({"error": "Không thể thêm giáo viên của lớp vào danh sách học sinh."}, status_code=403)
-    members = cls.get("members", [])
     em = (body.get("email") or "").strip().lower()
-    if not any(str(m.get("userId")) == str(body.get("userId"))
+    err = {}
+
+    def mutate(cls):
+        if str(cls.get("teacherId")) == str(body.get("userId")):
+            err["msg"] = "Không thể thêm giáo viên của lớp vào danh sách học sinh."
+            return False
+        members = cls.get("members", [])
+        if any(str(m.get("userId")) == str(body.get("userId"))
                or (em and (m.get("email") or "").strip().lower() == em)
                for m in members):
+            return False
         members.append({"userId": body.get("userId"), "name": body.get("name", ""),
                         "email": body.get("email", ""), "addedAt": _now_iso()})
         cls["members"] = members
-        db.upsert_class(cls_id, cls)
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if err: return JSONResponse({"error": err["msg"]}, status_code=403)
     return {"ok": True}
 
 
 @app.delete("/api/classes/{cls_id}/members/{user_id}")
 async def remove_member_endpoint(cls_id: str, user_id: str):
-    cls = db.get_class(cls_id)
-    if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    cls["members"] = [m for m in cls.get("members", []) if str(m.get("userId")) != user_id]
-    db.upsert_class(cls_id, cls)
+    def mutate(cls):
+        cls["members"] = [m for m in cls.get("members", []) if str(m.get("userId")) != user_id]
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     return {"ok": True}
 
 
 @app.post("/api/classes/{cls_id}/assignments")
 async def add_assignment_endpoint(cls_id: str, request: Request):
     body = await request.json()
-    cls = db.get_class(cls_id)
-    if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     exam_id   = body.get("examId") or None
     open_time = body.get("openTime")
     close_time = body.get("closeTime") or body.get("dueDate")
@@ -1351,8 +1395,10 @@ async def add_assignment_endpoint(cls_id: str, request: Request):
         "attachments": body.get("attachments", []),
         "createdAt": _now_iso(), "submissions": [],
     }
-    cls.setdefault("assignments", []).append(asgn)
-    db.upsert_class(cls_id, cls)
+    def mutate(cls):
+        cls.setdefault("assignments", []).append(asgn)
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     for m in cls.get("members", []):
         db.add_notif({
             "id": _cls_id(), "type": "assignment",
@@ -1445,45 +1491,53 @@ async def get_class_exam_window(cls_id: str, exam_id: str, studentId: str = None
 
 @app.delete("/api/classes/{cls_id}/assignments/{asgn_id}")
 async def delete_assignment_endpoint(cls_id: str, asgn_id: str):
-    cls = db.get_class(cls_id)
-    if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    cls["assignments"] = [a for a in cls.get("assignments", []) if a["id"] != asgn_id]
-    db.upsert_class(cls_id, cls)
+    def mutate(cls):
+        cls["assignments"] = [a for a in cls.get("assignments", []) if a["id"] != asgn_id]
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     return {"ok": True}
 
 
 @app.post("/api/classes/{cls_id}/assignments/{asgn_id}/submit")
 async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request):
     body = await request.json()
-    cls = db.get_class(cls_id)
-    if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    asgns = cls.get("assignments", [])
-    # Quá hạn nộp → không cho nộp file nữa
-    target = next((a for a in asgns if a["id"] == asgn_id), None)
-    if target:
+    err = {}
+    graded = {"writing": False}
+
+    # Toàn bộ đọc-sửa-ghi chạy trong MỘT transaction có khóa dòng — hai học sinh
+    # nộp cùng lúc không còn ghi đè mất bài của nhau.
+    def mutate(cls):
+        asgns = cls.get("assignments", [])
+        target = next((a for a in asgns if a["id"] == asgn_id), None)
+        if not target:
+            err["resp"] = ("Không tìm thấy bài tập", 404)
+            return False
         due = target.get("closeTime") or target.get("dueDate")
         try:
             if due and datetime.now(_tz.utc) > datetime.fromisoformat(str(due).replace("Z", "+00:00")):
-                return JSONResponse({"error": "Đã quá thời hạn nộp bài."}, status_code=403)
+                err["resp"] = ("Đã quá thời hạn nộp bài.", 403)
+                return False
         except Exception:
             pass
-    graded_asgn = None
-    for i, a in enumerate(asgns):
-        if a["id"] == asgn_id:
-            subs = a.get("submissions", [])
-            sub = {"studentId": body.get("studentId"), "studentName": body.get("studentName", ""),
-                   "submittedAt": _now_iso(), "files": body.get("files", []), "note": body.get("note", "")}
-            if a.get("writingTask"):
-                sub["aiGrade"] = {"status": "pending"}   # AI sẽ chấm ở background
-                graded_asgn = a
-            idx = next((j for j, s in enumerate(subs) if str(s.get("studentId")) == str(body.get("studentId"))), None)
-            if idx is not None: subs[idx] = sub
-            else: subs.append(sub)
-            a["submissions"] = subs; asgns[i] = a; break
-    cls["assignments"] = asgns
-    db.upsert_class(cls_id, cls)
+        subs = target.get("submissions", [])
+        sub = {"studentId": body.get("studentId"), "studentName": body.get("studentName", ""),
+               "submittedAt": _now_iso(), "files": body.get("files", []), "note": body.get("note", "")}
+        if target.get("writingTask"):
+            sub["aiGrade"] = {"status": "pending"}   # AI sẽ chấm ở background
+            graded["writing"] = True
+        idx = next((j for j, s in enumerate(subs) if str(s.get("studentId")) == str(body.get("studentId"))), None)
+        if idx is not None: subs[idx] = sub
+        else: subs.append(sub)
+        target["submissions"] = subs
+        cls["assignments"] = asgns
+
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if "resp" in err:
+        msg, status = err["resp"]
+        return JSONResponse({"error": msg}, status_code=status)
     # Bài IELTS Writing → tự động chấm AI ở background sau khi nộp
-    if graded_asgn is not None:
+    if graded["writing"]:
         asyncio.create_task(_grade_submission_bg(cls_id, asgn_id, str(body.get("studentId"))))
     return {"ok": True}
 
@@ -1501,43 +1555,143 @@ async def get_assignment_submissions(cls_id: str, asgn_id: str):
 @app.delete("/api/classes/{cls_id}/assignments/{asgn_id}/submissions/{student_id}")
 async def delete_assignment_submission(cls_id: str, asgn_id: str, student_id: str):
     """Giáo viên xóa bài nộp (file) của một học sinh cho bài tập trong lớp."""
+    err = {}
+
+    def mutate(cls):
+        target = next((a for a in cls.get("assignments", []) if a["id"] == asgn_id), None)
+        if not target:
+            err["msg"] = "Không tìm thấy bài tập"
+            return False
+        target["submissions"] = [
+            s for s in target.get("submissions", [])
+            if str(s.get("studentId")) != str(student_id)
+        ]
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if err:
+        return JSONResponse({"error": err["msg"]}, status_code=404)
+    return {"ok": True}
+
+
+# ─── IELTS Writing AI grading ────────────────────────────────────────────────
+# (Khôi phục từ commit aaffdbb — bị mất trong commit Big_Update b27b040 khiến
+#  nộp bài Writing văng NameError và nút "Chấm AI"/bảng điểm trả 404.)
+
+def _find_assignment(cls: dict, asgn_id: str):
+    return next((a for a in cls.get("assignments", []) if a.get("id") == asgn_id), None)
+
+
+def _save_ai_grade(cls_id: str, asgn_id: str, student_id: str, grade: dict) -> None:
+    """Ghi kết quả chấm vào submission (khóa dòng để không ghi đè bài nộp song song)."""
+    def mutate(cls):
+        asgn = _find_assignment(cls, asgn_id)
+        if not asgn:
+            return False
+        for s in asgn.get("submissions", []):
+            if str(s.get("studentId")) == str(student_id):
+                s["aiGrade"] = grade
+                return None
+        return False
+    db.update_class_atomic(cls_id, mutate)
+
+
+def _grade_submission_sync(cls_id: str, asgn_id: str, student_id: str) -> dict:
+    """Chạy toàn bộ pipeline chấm (blocking) và lưu kết quả."""
+    cls = db.get_class(cls_id)
+    if not cls:
+        return {"status": "error", "error": "Không tìm thấy lớp."}
+    asgn = _find_assignment(cls, asgn_id)
+    if not asgn:
+        return {"status": "error", "error": "Không tìm thấy bài tập."}
+    if not asgn.get("writingTask"):
+        return {"status": "error", "error": "Bài tập này không bật chấm AI (IELTS Writing)."}
+    sub = next((s for s in asgn.get("submissions", [])
+                if str(s.get("studentId")) == str(student_id)), None)
+    if not sub:
+        return {"status": "error", "error": "Học sinh chưa nộp bài."}
+    try:
+        grade = ielts.run_grading(_get_groq(), asgn, sub, CLASS_DOCS_DIR)
+    except Exception as e:
+        grade = {"status": "error", "error": f"Lỗi khi chấm: {e}", "gradedAt": _now_iso()}
+    _save_ai_grade(cls_id, asgn_id, student_id, grade)
+    return grade
+
+
+async def _grade_submission_bg(cls_id: str, asgn_id: str, student_id: str) -> None:
+    """Tự động chấm ở background sau khi học sinh nộp bài."""
+    try:
+        await asyncio.to_thread(_grade_submission_sync, cls_id, asgn_id, student_id)
+    except Exception as e:
+        _save_ai_grade(cls_id, asgn_id, student_id,
+                       {"status": "error", "error": str(e), "gradedAt": _now_iso()})
+
+
+@app.post("/api/classes/{cls_id}/assignments/{asgn_id}/grade/{student_id}")
+async def grade_submission_endpoint(cls_id: str, asgn_id: str, student_id: str):
+    """Chấm (hoặc chấm lại) bài IELTS Writing của một học sinh."""
+    _save_ai_grade(cls_id, asgn_id, student_id, {"status": "pending"})
+    grade = await asyncio.to_thread(_grade_submission_sync, cls_id, asgn_id, student_id)
+    if grade.get("status") == "error":
+        return JSONResponse({"error": grade.get("error", "Chấm thất bại"), "aiGrade": grade}, status_code=422)
+    return {"ok": True, "aiGrade": grade}
+
+
+@app.get("/api/classes/{cls_id}/assignments/{asgn_id}/grades-summary")
+async def grades_summary_endpoint(cls_id: str, asgn_id: str):
+    """Bảng tóm tắt thống kê điểm AI từng học sinh (học sinh & giáo viên đều xem được)."""
     cls = db.get_class(cls_id)
     if not cls:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    asgns = cls.get("assignments", [])
-    found = False
-    for i, a in enumerate(asgns):
-        if a["id"] == asgn_id:
-            a["submissions"] = [
-                s for s in a.get("submissions", [])
-                if str(s.get("studentId")) != str(student_id)
-            ]
-            asgns[i] = a
-            found = True
-            break
-    if not found:
+    asgn = _find_assignment(cls, asgn_id)
+    if not asgn:
         return JSONResponse({"error": "Không tìm thấy bài tập"}, status_code=404)
-    cls["assignments"] = asgns
-    db.upsert_class(cls_id, cls)
-    return {"ok": True}
+    rows, bands = [], []
+    for s in asgn.get("submissions", []):
+        g = s.get("aiGrade") or {}
+        crit = g.get("criteria") or {}
+        row = {
+            "studentId": s.get("studentId"), "studentName": s.get("studentName", ""),
+            "submittedAt": s.get("submittedAt"), "status": g.get("status") or "none",
+            "wordCount": g.get("wordCount"), "overallBand": g.get("overallBand"),
+        }
+        for k in ielts.CRITERIA_KEYS:
+            row[k] = (crit.get(k) or {}).get("band")
+        rows.append(row)
+        if g.get("status") == "done" and g.get("overallBand") is not None:
+            bands.append(g["overallBand"])
+    rows.sort(key=lambda r: (-(r["overallBand"] or -1), r["studentName"]))
+    stats = {
+        "graded": len(bands), "total": len(rows),
+        "avg": round(sum(bands) / len(bands), 2) if bands else None,
+        "max": max(bands) if bands else None,
+        "min": min(bands) if bands else None,
+    }
+    return {"writingTask": asgn.get("writingTask"), "criterionLabel":
+            ("Task Achievement" if asgn.get("writingTask") == "task1" else "Task Response"),
+            "rows": rows, "stats": stats}
+
+
+# ─── End IELTS Writing AI grading ────────────────────────────────────────────
 
 
 @app.post("/api/classes/{cls_id}/documents")
 async def add_class_doc_endpoint(cls_id: str, request: Request):
     body = await request.json()
-    cls = db.get_class(cls_id)
-    if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    cls.setdefault("documents", []).append(body)
-    db.upsert_class(cls_id, cls)
+
+    def mutate(cls):
+        cls.setdefault("documents", []).append(body)
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     return {"ok": True}
 
 
 @app.delete("/api/classes/{cls_id}/documents/{doc_id}")
 async def remove_class_doc_endpoint(cls_id: str, doc_id: str):
-    cls = db.get_class(cls_id)
-    if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    cls["documents"] = [d for d in cls.get("documents", []) if d.get("id") != doc_id]
-    db.upsert_class(cls_id, cls)
+    def mutate(cls):
+        cls["documents"] = [d for d in cls.get("documents", []) if d.get("id") != doc_id]
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     return {"ok": True}
 
 
