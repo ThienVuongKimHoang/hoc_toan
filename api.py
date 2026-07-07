@@ -410,16 +410,63 @@ async def get_exam(exam_id: str):
     return exam
 
 
-def _exam_assignment(cls_id, exam_id):
-    """Lấy assignment (đề thi) phù hợp nhất của một lớp cho đề exam_id."""
+def _asgn_candidates(cls, exam_id):
+    """Các lần giao bài trong lớp dùng đề exam_id (một đề có thể giao nhiều lần)."""
+    return [a for a in (cls.get("assignments") or []) if a.get("examId") == exam_id]
+
+
+def _legacy_owner_id(cands):
+    """Bài nộp cũ (chưa gắn assignmentId) được tính cho lần giao bài SỚM NHẤT."""
+    if not cands:
+        return None
+    return min(cands, key=lambda a: a.get("createdAt") or "").get("id")
+
+
+def _sub_belongs_to_asgn(sub, asgn_id, legacy_owner):
+    """Bài nộp thuộc lần giao bài asgn_id? Bài cũ không có assignmentId
+    được quy về lần giao bài sớm nhất (legacy_owner)."""
+    sa = sub.get("assignmentId")
+    if sa:
+        return str(sa) == str(asgn_id)
+    return legacy_owner is not None and str(asgn_id) == str(legacy_owner)
+
+
+def _is_class_member(cls, student_id, email=None):
+    """Học sinh có thuộc lớp không — khớp theo userId hoặc email."""
+    if student_id is None:
+        return False
+    sid = str(student_id)
+    em = (email or "").strip().lower()
+    if not em:
+        try:
+            u = db.get_user_by_id(sid)
+            em = ((u or {}).get("email") or "").strip().lower()
+        except Exception:
+            em = ""
+    for m in cls.get("members", []):
+        if str(m.get("userId")) == sid:
+            return True
+        if em and (m.get("email") or "").strip().lower() == em:
+            return True
+    return False
+
+
+def _exam_assignment(cls_id, exam_id, asgn_id=None):
+    """Lấy assignment của một lớp cho đề exam_id.
+    Trả về (cls, asgn, legacy_owner_id). asgn_id có giá trị → lấy đúng lần giao
+    bài đó; không có → lấy lần giao mới nhất (tương thích link cũ)."""
     cls = db.get_class(cls_id) if cls_id else None
     if not cls:
-        return None, None
-    cands = [a for a in cls.get("assignments", []) if a.get("examId") == exam_id]
+        return None, None, None
+    cands = _asgn_candidates(cls, exam_id)
     if not cands:
-        return cls, None
+        return cls, None, None
+    legacy = _legacy_owner_id(cands)
+    if asgn_id:
+        asgn = next((a for a in cands if str(a.get("id")) == str(asgn_id)), None)
+        return cls, asgn, legacy
     cands.sort(key=lambda a: a.get("createdAt") or "", reverse=True)
-    return cls, cands[0]
+    return cls, cands[0], legacy
 
 
 @app.post("/api/exams/{exam_id}/submit")
@@ -429,11 +476,22 @@ async def submit_exam(exam_id: str, request: Request):
     if not db.get_exam(exam_id):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
 
-    # Nếu nộp qua LỚP: kiểm tra cửa sổ thời gian & số lần làm tối đa.
-    cls_id = body.get("classId")
+    # Nếu nộp qua LỚP: học sinh phải là thành viên; kiểm tra cửa sổ thời gian
+    # & số lần làm tối đa THEO TỪNG LẦN GIAO BÀI (một đề có thể giao nhiều lần).
+    cls_id  = body.get("classId")
+    asgn_id = body.get("assignmentId") or None
     if cls_id:
-        _, asgn = _exam_assignment(cls_id, exam_id)
+        cls, asgn, legacy_owner = _exam_assignment(cls_id, exam_id, asgn_id)
+        if not cls:
+            return JSONResponse({"error": "Lớp học không còn tồn tại."}, status_code=403)
+        if not _is_class_member(cls, body.get("studentId")):
+            return JSONResponse(
+                {"error": "Bạn không (còn) thuộc lớp này nên không thể nộp bài qua lớp."},
+                status_code=403)
+        if asgn_id and not asgn:
+            return JSONResponse({"error": "Bài tập này đã bị gỡ khỏi lớp."}, status_code=403)
         if asgn:
+            asgn_id = asgn.get("id")   # link cũ không kèm assignmentId → gắn theo lần giao phù hợp
             now = datetime.now(_tz.utc)
             close = asgn.get("closeTime") or asgn.get("dueDate")
             try:
@@ -447,6 +505,7 @@ async def submit_exam(exam_id: str, request: Request):
                     1 for s in db.get_submissions(exam_id)
                     if str(s.get("studentId")) == str(body.get("studentId"))
                     and str(s.get("classId")) == str(cls_id)
+                    and _sub_belongs_to_asgn(s, asgn_id, legacy_owner)
                 )
                 if used >= int(max_attempts):
                     return JSONResponse(
@@ -465,6 +524,7 @@ async def submit_exam(exam_id: str, request: Request):
         "maxScore":     body.get("maxScore"),
         "className":    body.get("className"),
         "classId":      body.get("classId"),
+        "assignmentId": asgn_id if cls_id else None,
     }
     idx = db.add_submission(exam_id, submission)
     return {"ok": True, "submissionIndex": idx}
@@ -500,9 +560,18 @@ async def delete_student_submissions(exam_id: str, request: Request):
     body = await request.json()
     student_id = body.get("studentId")
     class_id   = body.get("classId") or None
+    asgn_id    = body.get("assignmentId") or None
     if student_id is None:
         return JSONResponse({"error": "Thiếu studentId"}, status_code=400)
-    n = db.delete_submissions_for_student(exam_id, student_id, class_id)
+    # Bài nộp cũ (chưa gắn assignment_id) chỉ bị xóa kèm khi xóa từ lần giao bài
+    # sớm nhất — khớp với cách chúng được hiển thị.
+    include_legacy = True
+    if class_id and asgn_id:
+        cls = db.get_class(class_id)
+        if cls:
+            cands = _asgn_candidates(cls, exam_id)
+            include_legacy = not cands or str(_legacy_owner_id(cands)) == str(asgn_id)
+    n = db.delete_submissions_for_student(exam_id, student_id, class_id, asgn_id, include_legacy)
     return {"ok": True, "deleted": n}
 
 
@@ -1131,17 +1200,25 @@ async def student_pending(studentId: str = None, email: str = None):
             return None
 
     items = []
+    subs_cache = {}   # examId -> submissions (tránh query lặp)
     for cls in db.list_classes_by_student(studentId, email):
         cid = cls.get("id")
-        for a in cls.get("assignments", []):
+        asgns = cls.get("assignments", [])
+        for a in asgns:
             close = _parse(a.get("closeTime") or a.get("dueDate"))
             if a.get("examId"):
                 if close and now > close:
                     continue                                  # đã đóng
+                eid = a["examId"]
+                if eid not in subs_cache:
+                    subs_cache[eid] = db.get_submissions(eid)
+                # Đếm theo TỪNG LẦN GIAO BÀI — cùng một đề giao 2 lần là 2 bài khác nhau
+                legacy_owner = _legacy_owner_id(_asgn_candidates(cls, eid))
                 used = sum(
-                    1 for s in db.get_submissions(a["examId"])
+                    1 for s in subs_cache[eid]
                     if str(s.get("studentId")) == str(studentId)
                     and str(s.get("classId")) == str(cid)
+                    and _sub_belongs_to_asgn(s, a.get("id"), legacy_owner)
                 )
                 if used > 0:
                     continue                                  # đã làm rồi
@@ -1178,7 +1255,10 @@ async def join_class_by_code(request: Request):
     if cls.get("joinPassword") and cls["joinPassword"] != password:
         return JSONResponse({"error": "Sai mật khẩu."}, status_code=401)
     members = cls.get("members", [])
-    if not any(str(m.get("userId")) == str(uid) for m in members):
+    em = (uemail or "").strip().lower()
+    if not any(str(m.get("userId")) == str(uid)
+               or (em and (m.get("email") or "").strip().lower() == em)
+               for m in members):
         members.append({"userId": uid, "name": uname, "email": uemail, "addedAt": _now_iso()})
         cls["members"] = members
         db.upsert_class(cls["id"], cls)
@@ -1218,7 +1298,10 @@ async def add_member_endpoint(cls_id: str, request: Request):
     if str(cls.get("teacherId")) == str(body.get("userId")):
         return JSONResponse({"error": "Không thể thêm giáo viên của lớp vào danh sách học sinh."}, status_code=403)
     members = cls.get("members", [])
-    if not any(str(m.get("userId")) == str(body.get("userId")) for m in members):
+    em = (body.get("email") or "").strip().lower()
+    if not any(str(m.get("userId")) == str(body.get("userId"))
+               or (em and (m.get("email") or "").strip().lower() == em)
+               for m in members):
         members.append({"userId": body.get("userId"), "name": body.get("name", ""),
                         "email": body.get("email", ""), "addedAt": _now_iso()})
         cls["members"] = members
@@ -1283,24 +1366,22 @@ async def add_assignment_endpoint(cls_id: str, request: Request):
 
 
 @app.get("/api/classes/{cls_id}/exam-window/{exam_id}")
-async def get_class_exam_window(cls_id: str, exam_id: str, studentId: str = None, email: str = None):
+async def get_class_exam_window(cls_id: str, exam_id: str, studentId: str = None,
+                                email: str = None, assignmentId: str = None):
     """
     Trả về cửa sổ thời gian (mở/đóng) của một ĐỀ THI được giao trong lớp,
     để trang làm bài giới hạn theo lớp thay vì theo link công khai.
+    assignmentId có giá trị → lấy đúng lần giao bài đó (một đề có thể giao nhiều lần).
     """
     cls = db.get_class(cls_id)
     if not cls:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
 
-    if studentId is not None and not email:
-        u = db.get_user_by_id(str(studentId))
-        email = (u or {}).get("email")
-    em = (email or "").strip().lower()
-    is_member = any(
-        str(m.get("userId")) == str(studentId)
-        or (em and (m.get("email") or "").strip().lower() == em)
-        for m in cls.get("members", [])
-    ) if studentId is not None else None
+    is_member = _is_class_member(cls, studentId, email) if studentId is not None else None
+
+    # Học sinh không (còn) thuộc lớp → KHÔNG cấp cửa sổ làm bài của lớp.
+    if studentId is not None and not is_member:
+        return {"assigned": False, "isMember": False, "className": cls.get("name", "")}
 
     # Có thể có nhiều lần giao cùng một đề → chọn lần phù hợp nhất:
     #   đang mở > sắp mở (gần nhất) > đã đóng (mới nhất).
@@ -1322,13 +1403,17 @@ async def get_class_exam_window(cls_id: str, exam_id: str, studentId: str = None
             return (2, -(op.timestamp()))             # sắp mở (gần nhất)
         return (1, created)                           # đã đóng (mới nhất)
 
-    candidates = [a for a in cls.get("assignments", []) if a.get("examId") == exam_id]
-    asgn = max(candidates, key=_rank) if candidates else None
+    candidates = _asgn_candidates(cls, exam_id)
+    legacy_owner = _legacy_owner_id(candidates)
+    if assignmentId:
+        asgn = next((a for a in candidates if str(a.get("id")) == str(assignmentId)), None)
+    else:
+        asgn = max(candidates, key=_rank) if candidates else None
     if not asgn:
         return JSONResponse({"assigned": False, "isMember": is_member,
                              "className": cls.get("name", "")}, status_code=200)
 
-    # Số lần học sinh đã làm (mỗi bài nộp = 1 lần) trong lớp này
+    # Số lần học sinh đã làm LẦN GIAO BÀI NÀY (mỗi bài nộp = 1 lần) trong lớp này
     attempts_used = 0
     if studentId is not None:
         try:
@@ -1336,6 +1421,7 @@ async def get_class_exam_window(cls_id: str, exam_id: str, studentId: str = None
                 1 for s in db.get_submissions(exam_id)
                 if str(s.get("studentId")) == str(studentId)
                 and str(s.get("classId")) == str(cls_id)
+                and _sub_belongs_to_asgn(s, asgn.get("id"), legacy_owner)
             )
         except Exception:
             attempts_used = 0

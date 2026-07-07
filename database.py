@@ -97,6 +97,9 @@ CREATE INDEX IF NOT EXISTS idx_sub_exam ON submissions(exam_id);
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS time_spent INTEGER;
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS violation_count INTEGER;
+-- Mỗi bài nộp gắn với MỘT lần giao bài (assignment) — phân biệt khi cùng một đề
+-- được giao nhiều lần trong một lớp. NULL = bài nộp cũ / qua link công khai.
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS assignment_id VARCHAR(50);
 
 CREATE TABLE IF NOT EXISTS classes (
     id            VARCHAR(50)  PRIMARY KEY,
@@ -414,6 +417,7 @@ def _sub_from_row(row: dict) -> dict:
         "maxScore":    r["max_score"],
         "className":   r["class_name"],
         "classId":     r["class_id"],
+        "assignmentId": r.get("assignment_id"),
     }
 
 
@@ -571,8 +575,8 @@ def add_submission(exam_id: str, sub: dict) -> int:
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO submissions(exam_id,submitted_at,started_at,time_spent,violation_count,student_name,student_id,
-                    answers,score,max_score,class_name,class_id)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                    answers,score,max_score,class_name,class_id,assignment_id)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
             """, (
                 exam_id, sub.get("submittedAt"),
                 sub.get("startedAt"), sub.get("timeSpent"), sub.get("violationCount"),
@@ -580,6 +584,7 @@ def add_submission(exam_id: str, sub: dict) -> int:
                 json.dumps(sub.get("answers") or {}, ensure_ascii=False),
                 sub.get("score"), sub.get("maxScore"),
                 sub.get("className"), sub.get("classId"),
+                sub.get("assignmentId") or None,
             ))
             new_id = cur.fetchone()[0]
             cur.execute(
@@ -622,21 +627,30 @@ def delete_submission(sub_id) -> bool:
     return deleted is not None
 
 
-def delete_submissions_for_student(exam_id: str, student_id, class_id=None) -> int:
+def delete_submissions_for_student(exam_id: str, student_id, class_id=None,
+                                   assignment_id=None, include_legacy=True) -> int:
     """Xóa TẤT CẢ bài nộp (mọi lần làm) của một học sinh cho một đề.
     - class_id có giá trị: chỉ xóa bài nộp trong lớp đó.
     - class_id None: chỉ xóa bài nộp qua link công khai (class_id IS NULL).
+    - assignment_id có giá trị: chỉ xóa bài nộp của lần giao bài đó;
+      include_legacy=True thì gom cả bài nộp cũ chưa gắn assignment_id.
     Trả về số dòng đã xóa."""
+    q = "DELETE FROM submissions WHERE exam_id=%s AND student_id=%s"
+    params = [exam_id, str(student_id)]
+    if class_id:
+        q += " AND class_id=%s"
+        params.append(str(class_id))
+    else:
+        q += " AND class_id IS NULL"
+    if assignment_id:
+        if include_legacy:
+            q += " AND (assignment_id=%s OR assignment_id IS NULL)"
+        else:
+            q += " AND assignment_id=%s"
+        params.append(str(assignment_id))
     with _C() as conn:
         with conn.cursor() as cur:
-            if class_id:
-                cur.execute(
-                    "DELETE FROM submissions WHERE exam_id=%s AND student_id=%s AND class_id=%s",
-                    (exam_id, str(student_id), str(class_id)))
-            else:
-                cur.execute(
-                    "DELETE FROM submissions WHERE exam_id=%s AND student_id=%s AND class_id IS NULL",
-                    (exam_id, str(student_id)))
+            cur.execute(q, params)
             n = cur.rowcount
         conn.commit()
     return n
@@ -857,7 +871,9 @@ def list_classes_by_student(student_id: str, email: str = None) -> list:
             if healed:
                 cls["members"] = members
                 try:
-                    upsert_class(cls["id"], cls)
+                    # Chỉ UPDATE cột members của dòng còn tồn tại — không upsert cả
+                    # dòng, tránh hồi sinh lớp vừa bị xóa hoặc ghi đè thay đổi khác.
+                    update_class_members(cls["id"], members)
                 except Exception:
                     pass
             out.append(cls)
@@ -897,11 +913,27 @@ def upsert_class(cid: str, cls: dict) -> None:
         conn.commit()
 
 
+def update_class_members(cid: str, members: list) -> bool:
+    """Chỉ cập nhật danh sách thành viên của một lớp CÒN TỒN TẠI (không insert)."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE classes SET members=%s WHERE id=%s RETURNING id",
+                (json.dumps(members or [], ensure_ascii=False), cid),
+            )
+            found = cur.fetchone() is not None
+        conn.commit()
+    return found
+
+
 def delete_class(cid: str) -> bool:
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM classes WHERE id=%s RETURNING id", (cid,))
             found = cur.fetchone() is not None
+            if found:
+                # Dọn thông báo của lớp để học sinh không còn thấy/đi vào lớp đã xóa
+                cur.execute("DELETE FROM notifications WHERE class_id=%s", (cid,))
         conn.commit()
     return found
 

@@ -167,7 +167,7 @@ function FileChip({ file, onRemove, onView }) {
 }
 
 /* ─── Submissions panel ─── */
-function SubmissionsPanel({ classId, assignment, members, onClose }) {
+function SubmissionsPanel({ classId, assignment, members, allAssignments, onClose }) {
   const [data, setData] = useState(null)
   const [viewing, setViewing] = useState(null)
   const [confirmDel, setConfirmDel] = useState(null)   // học sinh đang chờ xác nhận xóa
@@ -180,14 +180,24 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
 
   const reload = useCallback(() => {
     if (isExam) {
-      // Đề thi: kết quả nằm ở bài nộp của ĐỀ, lọc theo lớp; gộp nhiều lần làm theo cách tính điểm.
+      // Đề thi: kết quả nằm ở bài nộp của ĐỀ, lọc theo lớp VÀ theo LẦN GIAO BÀI
+      // (một đề có thể được giao nhiều lần trong cùng lớp — mỗi lần là một bài tập riêng).
+      // Bài nộp cũ chưa gắn assignmentId được quy về lần giao bài sớm nhất.
       const mode = assignment.scoreMode || 'highest'
+      const sameExam = (allAssignments || []).filter(x => x.examId === assignment.examId)
+      const legacyOwner = sameExam.length
+        ? [...sameExam].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))[0].id
+        : assignment.id
       Promise.all([
         getExamSubmissions(assignment.examId),
         fetchExamById(assignment.examId),
       ])
         .then(([d, examObj]) => {
-          const all = (d.submissions || []).filter(s => String(s.classId) === String(classId))
+          const all = (d.submissions || []).filter(s =>
+            String(s.classId) === String(classId) &&
+            (s.assignmentId
+              ? String(s.assignmentId) === String(assignment.id)
+              : legacyOwner === assignment.id))
           const byStudent = new Map()
           all.forEach(s => {
             const k = String(s.studentId)
@@ -229,7 +239,7 @@ function SubmissionsPanel({ classId, assignment, members, onClose }) {
     setDelBusy(true)
     try {
       if (isExam) {
-        await deleteStudentSubmissions(assignment.examId, confirmDel.studentId, classId)
+        await deleteStudentSubmissions(assignment.examId, confirmDel.studentId, classId, assignment.id)
       } else {
         await deleteAssignmentSubmission(classId, assignment.id, confirmDel.studentId)
       }
@@ -1035,7 +1045,8 @@ function ClassDetail({ cls, teacherId, onBack, onUpdated }) {
         <AssignmentModal teacherId={teacherId} cls={cls} onClose={() => setShowAssignment(false)} onSave={handleAddAssignment} />
       )}
       {viewSubs && (
-        <SubmissionsPanel classId={cls.id} assignment={viewSubs} members={cls.members||[]} onClose={() => setViewSubs(null)} />
+        <SubmissionsPanel classId={cls.id} assignment={viewSubs} members={cls.members||[]}
+          allAssignments={cls.assignments||[]} onClose={() => setViewSubs(null)} />
       )}
       {viewingFile && <FileViewerModal file={viewingFile} onClose={() => setViewingFile(null)} />}
     </div>

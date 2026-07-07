@@ -42,10 +42,10 @@ const USER_KEY = 'hoctoan_user'
 function parseHash() {
   const hash = window.location.hash.slice(1)
   if (hash.startsWith('take/')) {
-    const rest = hash.slice(5)
-    const slash = rest.indexOf('/')
-    if (slash !== -1) return { view: 'take-exam', examId: rest.slice(0, slash), classId: rest.slice(slash + 1) }
-    return { view: 'take-exam', examId: rest, classId: null }
+    // take/<examId>[/<classId>[/<assignmentId>]] — assignmentId phân biệt
+    // 2 lần giao cùng một đề trong cùng một lớp
+    const [examId, classId, assignmentId] = hash.slice(5).split('/')
+    return { view: 'take-exam', examId, classId: classId || null, assignmentId: assignmentId || null }
   }
   if (hash.startsWith('join/')) return { view: 'my-classes', examId: null, classId: hash.slice(5) }
   if (hash.startsWith('class/')) return { view: 'my-classes', examId: null, classId: null, openClassId: hash.slice(6) }
@@ -189,6 +189,7 @@ export default function App() {
   const [view, setView] = useState(() => parseHash().view)
   const [examId, setExamId] = useState(() => parseHash().examId)
   const [classId, setClassId] = useState(() => parseHash().classId ?? null)
+  const [assignmentId, setAssignmentId] = useState(() => parseHash().assignmentId ?? null)
   const [openClassId, setOpenClassId] = useState(() => parseHash().openClassId ?? null)
   const [editingExam, setEditingExam] = useState(null)
   const [resultsExam, setResultsExam] = useState(null)
@@ -200,8 +201,8 @@ export default function App() {
 
   useEffect(() => {
     const onHash = () => {
-      const { view: v, examId: id, classId: cid, openClassId: ocid } = parseHash()
-      setView(v); setExamId(id); setClassId(cid ?? null); setOpenClassId(ocid ?? null)
+      const { view: v, examId: id, classId: cid, assignmentId: aid, openClassId: ocid } = parseHash()
+      setView(v); setExamId(id); setClassId(cid ?? null); setAssignmentId(aid ?? null); setOpenClassId(ocid ?? null)
     }
     window.addEventListener('popstate', onHash)
     window.addEventListener('hashchange', onHash)
@@ -534,7 +535,7 @@ export default function App() {
   )
 
   if (view === 'take-exam') return (
-    <ExamTakePage examId={examId} classId={classId} user={user} onGoHome={goHome} onGoLogin={() => goLoginFromExam(examId)} />
+    <ExamTakePage examId={examId} classId={classId} assignmentId={assignmentId} user={user} onGoHome={goHome} onGoLogin={() => goLoginFromExam(examId)} />
   )
 
   if (view === 'practice-exam') return (

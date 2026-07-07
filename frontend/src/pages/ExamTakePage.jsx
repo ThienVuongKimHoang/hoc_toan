@@ -357,7 +357,7 @@ function SectionNav({ sections, sectionList, active, onChange }) {
 }
 
 /* ── Main exam view ── */
-function ExamView({ exam, studentName, studentId, className, classId, onGoHome }) {
+function ExamView({ exam, studentName, studentId, className, classId, assignmentId, onGoHome }) {
   const hideResults    = exam.settings?.hideResults || false
   const sectionList    = getSectionList(exam)
   const [activeSection, setActiveSection] = useState(sectionList[0] || 'PHẦN I')
@@ -405,7 +405,7 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
     const maxScore = calcMaxScore(exam)
     const timeSpent = Math.max(0, Math.round((Date.now() - effStart) / 1000))  // giây
     try {
-      await submitResult(exam.id, { studentName, studentId, answers, score, maxScore, className, classId,
+      await submitResult(exam.id, { studentName, studentId, answers, score, maxScore, className, classId, assignmentId,
                                     startedAt: new Date(effStart).toISOString(), timeSpent,
                                     violationCount: lockOn ? violations : null })
       setFinalScore(score)
@@ -500,23 +500,23 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
           </div>
         </div>
       )}
-      {lockActive && (
-        <>
-          <div className="et-lock-status">🔒 Chế độ khóa màn hình đang bật · Vi phạm: <strong>{violations}</strong></div>
-          {warning && !blocked && (
-            <div className="et-lock-warning" onClick={dismissWarning}>
-              ⚠️ {warning} <span className="et-lock-warning-count">(lần thứ {violations})</span>
-              <button className="et-lock-warning-x" onClick={dismissWarning}>✕</button>
-            </div>
-          )}
-        </>
-      )}
-      <TimerBar endIso={endIso} durationMins={exam.settings.duration} />
-
-      <div className="app" style={{ paddingTop: 16 }}>
-        <div className="result-meta">
-          <div className="result-title">
-            <h2>📋 {exam.title}</h2>
+      {/* Khối dính trên cùng: khóa màn hình + đồng hồ + thông tin bài làm — cuộn theo trang */}
+      <div className="et-sticky-top">
+        {lockActive && (
+          <>
+            <div className="et-lock-status">🔒 Chế độ khóa màn hình đang bật · Vi phạm: <strong>{violations}</strong></div>
+            {warning && !blocked && (
+              <div className="et-lock-warning" onClick={dismissWarning}>
+                ⚠️ {warning} <span className="et-lock-warning-count">(lần thứ {violations})</span>
+                <button className="et-lock-warning-x" onClick={dismissWarning}>✕</button>
+              </div>
+            )}
+          </>
+        )}
+        <TimerBar endIso={endIso} durationMins={exam.settings.duration} />
+        <div className="et-info-bar">
+          <div className="et-info-left">
+            <span className="et-info-title">📋 {exam.title}</span>
             <span className="total-badge">{exam.totalQuestions} câu hỏi</span>
           </div>
           <div className="et-meta-right">
@@ -528,7 +528,9 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
             </button>
           </div>
         </div>
+      </div>
 
+      <div className="app" style={{ paddingTop: 16 }}>
         {submitErr && <div className="pm-error" style={{ margin: '8px 0' }}>⚠️ {submitErr}</div>}
 
         {sectionList.length > 1 && (
@@ -602,7 +604,7 @@ function ExamView({ exam, studentName, studentId, className, classId, onGoHome }
 }
 
 /* ── Root component ── */
-export default function ExamTakePage({ examId, classId, user, onGoHome, onGoLogin }) {
+export default function ExamTakePage({ examId, classId, assignmentId, user, onGoHome, onGoLogin }) {
   const [exam,        setExam]        = useState(null)
   const [notFound,    setNotFound]    = useState(false)
   const [status,      setStatus]      = useState('pending')
@@ -617,10 +619,11 @@ export default function ExamTakePage({ examId, classId, user, onGoHome, onGoLogi
       if (!e) { setNotFound(true); return }
 
       // Làm bài qua LỚP: dùng cửa sổ thời gian của bài được giao, không cần link công khai.
+      let keepClassTag = false   // lớp cũ giao qua "Phát đề" (không có assignment) — vẫn gắn lớp nếu là thành viên
       if (classId) {
-        const win = await getExamWindow(classId, examId, user?.id, user?.email)
+        const win = await getExamWindow(classId, examId, user?.id, user?.email, assignmentId)
         if (cancelled) return
-        if (win && win.assigned) {
+        if (win && win.assigned && win.isMember !== false) {
           const merged = {
             ...e,
             published: true,
@@ -634,6 +637,7 @@ export default function ExamTakePage({ examId, classId, user, onGoHome, onGoLogi
             },
             _classGated:   true,
             _className:    win.className,
+            _assignmentId: win.assignmentId || assignmentId || null,
             _maxAttempts:  win.maxAttempts ?? null,
             _attemptsUsed: win.attemptsUsed ?? 0,
             _scoreMode:    win.scoreMode || 'highest',
@@ -642,15 +646,18 @@ export default function ExamTakePage({ examId, classId, user, onGoHome, onGoLogi
           setStatus(examStatus(merged))
           return
         }
+        // Lớp không giao bài này nhưng học sinh LÀ thành viên → cho phép gắn lớp (luồng cũ).
+        // Không thuộc lớp / lớp đã xóa → làm như link công khai, KHÔNG gắn lớp.
+        keepClassTag = !!(win && win.isMember === true)
       }
 
       // Link công khai (như cũ): cần đề đã xuất bản.
       if (!e.published) { setNotFound(true); return }
-      setExam(e)
+      setExam({ ...e, _classTag: keepClassTag })
       setStatus(examStatus(e))
     })()
     return () => { cancelled = true }
-  }, [examId, classId, user?.id])
+  }, [examId, classId, assignmentId, user?.id])
 
   useEffect(() => {
     if (!exam) return
@@ -753,10 +760,14 @@ export default function ExamTakePage({ examId, classId, user, onGoHome, onGoLogi
     )
   }
 
-  const classInfo = classId && exam?.classes?.length
-    ? (exam.classes.find(c => c.id === classId) || null)
+  // Chỉ gắn bài nộp vào lớp khi: được giao qua lớp (đã xác minh thành viên)
+  // hoặc luồng cũ mà học sinh là thành viên. Lớp đã xóa / bị mời ra khỏi lớp
+  // → nộp như link công khai (không classId).
+  const effectiveClassId = (exam._classGated || exam._classTag) ? classId : null
+  const classInfo = effectiveClassId && exam?.classes?.length
+    ? (exam.classes.find(c => c.id === effectiveClassId) || null)
     : null
-  const resolvedClassName = classInfo?.name || exam?._className || null
+  const resolvedClassName = effectiveClassId ? (classInfo?.name || exam?._className || null) : null
 
   return (
     <ExamView
@@ -764,7 +775,8 @@ export default function ExamTakePage({ examId, classId, user, onGoHome, onGoLogi
       studentName={studentName}
       studentId={String(user.id)}
       className={resolvedClassName}
-      classId={classId}
+      classId={effectiveClassId}
+      assignmentId={exam._classGated ? (exam._assignmentId || null) : null}
       onGoHome={onGoHome}
     />
   )

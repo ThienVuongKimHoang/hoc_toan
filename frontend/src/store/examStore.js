@@ -161,7 +161,7 @@ export async function fetchExamById(id) {
 }
 
 /** Học sinh nộp bài */
-export async function submitResult(examId, { studentName, studentId, answers, score, maxScore, className, classId, startedAt, timeSpent, violationCount }) {
+export async function submitResult(examId, { studentName, studentId, answers, score, maxScore, className, classId, assignmentId, startedAt, timeSpent, violationCount }) {
   const body = {
     studentName,
     studentId,
@@ -170,6 +170,7 @@ export async function submitResult(examId, { studentName, studentId, answers, sc
     maxScore,
     className: className || null,
     classId:   classId   || null,
+    assignmentId: assignmentId || null,   // lần giao bài (khi cùng đề giao nhiều lần)
     submittedAt: new Date().toISOString(),
     startedAt: startedAt || null,
     timeSpent: timeSpent ?? null,   // giây làm bài
@@ -203,11 +204,11 @@ export async function deleteSubmission(examId, subId) {
 }
 
 /** Giáo viên xóa TẤT CẢ bài làm của một học sinh (mọi lần làm) cho đề này */
-export async function deleteStudentSubmissions(examId, studentId, classId = null) {
+export async function deleteStudentSubmissions(examId, studentId, classId = null, assignmentId = null) {
   const res = await fetch(`/api/exams/${examId}/submissions/delete-student`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ studentId, classId }),
+    body:    JSON.stringify({ studentId, classId, assignmentId }),
   })
   if (!res.ok) throw new Error('Không thể xóa bài làm của học sinh')
   return res.json()

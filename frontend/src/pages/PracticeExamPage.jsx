@@ -295,30 +295,32 @@ export default function PracticeExamPage({ examId, onGoHome }) {
 
   return (
     <div className="et-exam">
-      {timerMs !== null ? (
-        <PracticeTimerBar
-          totalMs={timerMs}
-          onTimeUp={() => setStep('ended')}
-          onStop={() => { if (confirm('Kết thúc tập luyện?')) setStep('ended') }}
-        />
-      ) : (
-        <div className="practice-no-timer-bar">
-          <span>🏋️ Chế độ Tập Luyện — Không giới hạn thời gian</span>
-          <button className="tb-stop-btn" onClick={() => { if (confirm('Kết thúc tập luyện?')) setStep('ended') }}>
-            ⏹ Kết thúc
-          </button>
-        </div>
-      )}
-
-      <div className="app" style={{ paddingTop: 16 }}>
-        <div className="result-meta">
-          <div className="result-title">
-            <h2>🏋️ {exam.title}</h2>
+      {/* Khối dính trên cùng: đồng hồ + thông tin bài tập — cuộn theo trang */}
+      <div className="et-sticky-top">
+        {timerMs !== null ? (
+          <PracticeTimerBar
+            totalMs={timerMs}
+            onTimeUp={() => setStep('ended')}
+            onStop={() => { if (confirm('Kết thúc tập luyện?')) setStep('ended') }}
+          />
+        ) : (
+          <div className="practice-no-timer-bar">
+            <span>🏋️ Chế độ Tập Luyện — Không giới hạn thời gian</span>
+            <button className="tb-stop-btn" onClick={() => { if (confirm('Kết thúc tập luyện?')) setStep('ended') }}>
+              ⏹ Kết thúc
+            </button>
+          </div>
+        )}
+        <div className="et-info-bar">
+          <div className="et-info-left">
+            <span className="et-info-title">🏋️ {exam.title}</span>
             <span className="total-badge practice-badge">Tập luyện</span>
           </div>
           <button className="mec-btn" onClick={onGoHome}>← Trang chủ</button>
         </div>
+      </div>
 
+      <div className="app" style={{ paddingTop: 16 }}>
         {sectionList.length > 1 && (
           <div className="section-tabs">
             {sectionList.map(sec => {

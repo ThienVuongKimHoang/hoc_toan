@@ -101,11 +101,13 @@ export async function getPendingForStudent(studentId, email) {
   return res.json()
 }
 
-/** Cửa sổ thời gian của một đề thi được giao trong lớp (cho trang làm bài). */
-export async function getExamWindow(classId, examId, studentId, email) {
+/** Cửa sổ thời gian của một đề thi được giao trong lớp (cho trang làm bài).
+    assignmentId phân biệt lần giao bài khi cùng một đề được giao nhiều lần. */
+export async function getExamWindow(classId, examId, studentId, email, assignmentId) {
   const qs = new URLSearchParams()
   if (studentId != null) qs.set('studentId', String(studentId))
   if (email) qs.set('email', email)
+  if (assignmentId) qs.set('assignmentId', String(assignmentId))
   const s = qs.toString()
   const res = await fetch(`${API}/${classId}/exam-window/${examId}${s ? `?${s}` : ''}`)
   if (!res.ok) return null

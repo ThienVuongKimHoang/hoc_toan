@@ -178,7 +178,7 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
                   <div className="mc-elb-title">Bài tập này yêu cầu làm đề thi</div>
                   <div className="mc-elb-sub">Click nút bên dưới để mở đề thi và làm bài.</div>
                 </div>
-                <a className="btn-primary" href={`#take/${assignment.examId}/${cls.id}`} onClick={onClose}>
+                <a className="btn-primary" href={`#take/${assignment.examId}/${cls.id}/${assignment.id}`} onClick={onClose}>
                   {IC.play(14)} Làm bài thi
                 </a>
               </div>
@@ -270,14 +270,14 @@ function ExamAssignmentCard({ assignment, cls, user }) {
   const maxAttempts = assignment.maxAttempts || null
   const scoreMode   = assignment.scoreMode || 'highest'
 
-  const [used, setUsed] = useState(null)   // số lần đã làm
+  const [used, setUsed] = useState(null)   // số lần đã làm (riêng cho lần giao bài này)
   useEffect(() => {
     let alive = true
-    getExamWindow(cls.id, assignment.examId, user?.id, user?.email)
+    getExamWindow(cls.id, assignment.examId, user?.id, user?.email, assignment.id)
       .then(w => { if (alive && w) setUsed(w.attemptsUsed ?? 0) })
       .catch(() => {})
     return () => { alive = false }
-  }, [cls.id, assignment.examId, user?.id])
+  }, [cls.id, assignment.examId, assignment.id, user?.id])
 
   const exhausted = maxAttempts != null && used != null && used >= maxAttempts
 
@@ -305,7 +305,7 @@ function ExamAssignmentCard({ assignment, cls, user }) {
         </div>
       </div>
       {st === 'open' && !exhausted ? (
-        <a className="btn-primary mc-submit-btn" href={`#take/${assignment.examId}/${cls.id}`}>
+        <a className="btn-primary mc-submit-btn" href={`#take/${assignment.examId}/${cls.id}/${assignment.id}`}>
           {IC.play(14)} {used > 0 ? 'Làm lại' : 'Làm bài'}
         </a>
       ) : (
