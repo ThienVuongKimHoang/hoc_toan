@@ -187,7 +187,7 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
                 {assignment.writingTask && (
                   <div className="cm-info-note ielts-submit-note" style={{marginBottom:12}}>
                     🤖 Bài <strong>IELTS Writing {assignment.writingTask === 'task1' ? 'Task 1' : 'Task 2'}</strong> —
-                    AI sẽ tự động chấm điểm (band 0–9) ngay sau khi bạn nộp.
+                    giáo viên sẽ dùng AI chấm điểm (band 0–9) sau khi bạn nộp.
                     Nộp file <strong>.txt / .docx / .pdf</strong> hoặc <strong>ảnh chụp bài viết tay</strong> đều được.
                   </div>
                 )}

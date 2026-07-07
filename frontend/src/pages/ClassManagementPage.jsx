@@ -753,7 +753,7 @@ function AssignmentModal({ teacherId, cls, onClose, onSave }) {
                         {writingTask === 'task1'
                           ? <>📊 <strong>Task 1</strong>: AI chấm theo band descriptors Task 1. Hãy <strong>đính kèm ảnh đề bài</strong> (biểu đồ/bảng/sơ đồ) bên dưới — AI sẽ trích xuất hình ảnh đề để chấm chính xác.</>
                           : <>📝 <strong>Task 2</strong>: AI chấm theo band descriptors Task 2. Ghi đề bài vào phần Mô tả hoặc đính kèm ảnh đề.</>}
-                        {' '}Bài nộp của học sinh sẽ được chấm tự động (band 0–9, 4 tiêu chí, nhận xét chi tiết).
+                        {' '}Sau khi học sinh nộp, bạn bấm <strong>🤖 Chấm AI</strong> trong phần bài nộp để chấm từng bài (band 0–9, 4 tiêu chí, nhận xét chi tiết).
                       </div>
                     )}
                   </>

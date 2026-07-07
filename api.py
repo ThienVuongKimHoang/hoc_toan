@@ -1502,10 +1502,11 @@ async def delete_assignment_endpoint(cls_id: str, asgn_id: str):
 async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request):
     body = await request.json()
     err = {}
-    graded = {"writing": False}
 
     # Toàn bộ đọc-sửa-ghi chạy trong MỘT transaction có khóa dòng — hai học sinh
     # nộp cùng lúc không còn ghi đè mất bài của nhau.
+    # Bài IELTS Writing KHÔNG tự chấm khi nộp — giáo viên bấm "Chấm AI" mới chấm
+    # (bài nộp mới/nộp lại chưa có aiGrade cho đến khi giáo viên chấm).
     def mutate(cls):
         asgns = cls.get("assignments", [])
         target = next((a for a in asgns if a["id"] == asgn_id), None)
@@ -1522,9 +1523,6 @@ async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request
         subs = target.get("submissions", [])
         sub = {"studentId": body.get("studentId"), "studentName": body.get("studentName", ""),
                "submittedAt": _now_iso(), "files": body.get("files", []), "note": body.get("note", "")}
-        if target.get("writingTask"):
-            sub["aiGrade"] = {"status": "pending"}   # AI sẽ chấm ở background
-            graded["writing"] = True
         idx = next((j for j, s in enumerate(subs) if str(s.get("studentId")) == str(body.get("studentId"))), None)
         if idx is not None: subs[idx] = sub
         else: subs.append(sub)
@@ -1536,9 +1534,6 @@ async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request
     if "resp" in err:
         msg, status = err["resp"]
         return JSONResponse({"error": msg}, status_code=status)
-    # Bài IELTS Writing → tự động chấm AI ở background sau khi nộp
-    if graded["writing"]:
-        asyncio.create_task(_grade_submission_bg(cls_id, asgn_id, str(body.get("studentId"))))
     return {"ok": True}
 
 
@@ -1616,15 +1611,6 @@ def _grade_submission_sync(cls_id: str, asgn_id: str, student_id: str) -> dict:
         grade = {"status": "error", "error": f"Lỗi khi chấm: {e}", "gradedAt": _now_iso()}
     _save_ai_grade(cls_id, asgn_id, student_id, grade)
     return grade
-
-
-async def _grade_submission_bg(cls_id: str, asgn_id: str, student_id: str) -> None:
-    """Tự động chấm ở background sau khi học sinh nộp bài."""
-    try:
-        await asyncio.to_thread(_grade_submission_sync, cls_id, asgn_id, student_id)
-    except Exception as e:
-        _save_ai_grade(cls_id, asgn_id, student_id,
-                       {"status": "error", "error": str(e), "gradedAt": _now_iso()})
 
 
 @app.post("/api/classes/{cls_id}/assignments/{asgn_id}/grade/{student_id}")
