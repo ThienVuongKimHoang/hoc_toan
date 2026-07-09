@@ -1,6 +1,9 @@
 import React from 'react'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
+// Mở rộng mhchem: hỗ trợ công thức hoá học \ce{...} (đề Hóa, nhất là các mệnh đề
+// Đúng/Sai ở PHẦN II). Thiếu import này thì mọi \ce sẽ hiện chữ đỏ báo lỗi.
+import 'katex/dist/contrib/mhchem.mjs'
 
 // ── LaTeX control-char recovery ───────────────────────────────────────────────
 // The backend JSON parser used to corrupt \frac → form-feed (\x0c) and
