@@ -185,10 +185,17 @@ function ReadingQuestion({ q, examMode, isCloze, selected, onSelect, flash, regi
 
 const FONT_STEPS = [0.9, 1, 1.12, 1.28, 1.45, 1.65]
 
-export default function ReadingTakeView({ questions, examMode = false, onAnswerChange }) {
+export default function ReadingTakeView({ questions, examMode = false, onAnswerChange, savedAnswers }) {
   const groups = groupByPassage(questions)
   const [cur, setCur] = useState(0)
-  const [answers, setAnswers] = useState({})       // { questionNumber: 'A' }
+  // Khôi phục đáp án đã lưu ở cha (dạng RD_<num>) — giữ lựa chọn khi chuyển phần rồi quay lại
+  const [answers, setAnswers] = useState(() => {
+    const init = {}
+    for (const [k, v] of Object.entries(savedAnswers || {})) {
+      if (k.startsWith('RD_')) init[Number(k.slice(3))] = v
+    }
+    return init
+  })       // { questionNumber: 'A' }
   const [flashQ, setFlashQ] = useState(null)
   const [fontIdx, setFontIdx] = useState(1)
   const [reader, setReader] = useState(false)       // chế độ đọc toàn màn hình

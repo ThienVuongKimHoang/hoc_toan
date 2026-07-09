@@ -79,8 +79,9 @@ function PassageBlock({ title, text }) {
 }
 
 /* ── Trắc nghiệm 1 đáp án (PHẦN I Toán + Tiếng Anh) ── */
-function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false }) {
-  const [selected, setSelected] = useState(null)
+function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, saved }) {
+  // Khởi tạo từ đáp án đã lưu ở component cha — giữ lựa chọn khi học sinh chuyển phần rồi quay lại
+  const [selected, setSelected] = useState(saved ?? null)
   const correct = q.answer  // null nếu không có đáp án
 
   const handleSelect = (key) => {
@@ -137,8 +138,9 @@ function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false }
 }
 
 /* ── PHẦN II: Đúng/Sai ── */
-function TrueFalseCard({ q, examMode, onAnswerChange }) {
-  const [answers, setAnswers] = useState({})
+function TrueFalseCard({ q, examMode, onAnswerChange, saved }) {
+  // Khởi tạo từ đáp án đã lưu — nếu không, quay lại phần này rồi tick tiếp sẽ ghi đè mất các ý đã chọn
+  const [answers, setAnswers] = useState(saved ?? {})
   const subs = q.sub_questions || []
 
   const toggle = (label, val) => {
@@ -189,8 +191,8 @@ function TrueFalseCard({ q, examMode, onAnswerChange }) {
 }
 
 /* ── PHẦN III: trả lời ngắn ── */
-function ShortAnswerCard({ q, examMode, onAnswerChange }) {
-  const [value, setValue]       = useState('')
+function ShortAnswerCard({ q, examMode, onAnswerChange, saved }) {
+  const [value, setValue]       = useState(saved ?? '')
   const [submitted, setSubmitted] = useState(false)
   const correct = q.answer
 
@@ -266,13 +268,15 @@ function _isMultipleChoice(q) {
   return q.section === 'PHẦN I' || q.section === 'TIẾNG ANH' || q.section === 'READING'
 }
 
-export default function QuestionCard({ q, index, examMode = false, onAnswerChange, hidePassage = false }) {
+export default function QuestionCard({ q, index, examMode = false, onAnswerChange, hidePassage = false, answers }) {
   const [expanded, setExpanded] = useState(true)
   const points   = q.points ? `${q.points}đ` : ''
   const secClass = SECTION_CLASS[q.section] || 'phan-1'
   const prefix   = SECTION_PREFIX[q.section] || 'I'
   const qKey     = `${prefix}_${q.question_number}`
 
+  // Đáp án đã lưu ở cha cho câu này — dùng để khôi phục khi card mount lại (đổi phần)
+  const saved        = answers?.[qKey]
   const handleChange = (ans) => onAnswerChange?.(qKey, ans)
 
   const hasAnswer = q.answer != null
@@ -292,11 +296,11 @@ export default function QuestionCard({ q, index, examMode = false, onAnswerChang
 
       {expanded && (
         _isMultipleChoice(q) ? (
-          <MultipleChoiceCard q={q} examMode={examMode} onAnswerChange={handleChange} hidePassage={hidePassage} />
+          <MultipleChoiceCard q={q} examMode={examMode} onAnswerChange={handleChange} hidePassage={hidePassage} saved={saved} />
         ) : q.section === 'PHẦN II' ? (
-          <TrueFalseCard q={q} examMode={examMode} onAnswerChange={handleChange} />
+          <TrueFalseCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} />
         ) : (
-          <ShortAnswerCard q={q} examMode={examMode} onAnswerChange={handleChange} />
+          <ShortAnswerCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} />
         )
       )}
     </div>

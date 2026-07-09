@@ -144,8 +144,11 @@ function RichText({ text }) {
 // ── Public component ──────────────────────────────────────────────────────────
 
 export default function MathText({ text, className = '' }) {
-  if (!text) return null
-  const blocks = splitTableBlocks(text)
+  if (text == null || text === '') return null
+  // Ép về chuỗi: đáp án trả lời ngắn có thể là số (vd 42, 2.5) — nếu để nguyên,
+  // các hàm chuỗi (matchAll/split) sẽ ném lỗi và làm trắng cả trang.
+  const str = typeof text === 'string' ? text : String(text)
+  const blocks = splitTableBlocks(str)
   return (
     <span className={className}>
       {blocks.map((b, i) =>

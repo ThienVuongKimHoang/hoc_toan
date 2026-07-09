@@ -568,6 +568,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
             <ReadingTakeView
               questions={questions}
               examMode={true}
+              savedAnswers={answers}
               onAnswerChange={handleAnswerChange}
             />
           ) : (
@@ -576,6 +577,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
                 key={`${q.section}-${q.question_number}-${i}`}
                 q={q} index={i}
                 examMode={true}
+                answers={answers}
                 onAnswerChange={handleAnswerChange}
               />
             ))
