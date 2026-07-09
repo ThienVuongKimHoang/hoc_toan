@@ -1053,7 +1053,7 @@ async def api_login(request: Request):
     return {k: v for k, v in user.items() if k != "password"}
 
 
-GOOGLE_CLIENT_ID = "281468345667-tb1nqlo78f06blu5m1t7qapd08ruc916.apps.googleusercontent.com"  
+GOOGLE_CLIENT_ID = "397583765451-5i31p5rc3dk9ug7ld4c0qpd8nclu3d1g.apps.googleusercontent.com"
 
 @app.post("/api/auth/google")
 async def api_auth_google(request: Request):

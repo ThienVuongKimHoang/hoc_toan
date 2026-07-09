@@ -44,7 +44,7 @@ function LoginForm({ onLogin, onSwitchToRegister }) {
       if (!btn) return
 
       window.google.accounts.id.initialize({
-        client_id: "281468345667-tb1nqlo78f06blu5m1t7qapd08ruc916.apps.googleusercontent.com",
+        client_id: "397583765451-5i31p5rc3dk9ug7ld4c0qpd8nclu3d1g.apps.googleusercontent.com",
         auto_select: false,
         cancel_on_tap_outside: true,
         callback: async (response) => {
@@ -349,7 +349,7 @@ function LoginPage({ onLogin, onGoHome }) {
 }
 export default function LoginPageWithGoogle(props) {
   return (
-    <GoogleOAuthProvider clientId="281468345667-tb1nqlo78f06blu5m1t7qapd08ruc916.apps.googleusercontent.com">
+    <GoogleOAuthProvider clientId="397583765451-5i31p5rc3dk9ug7ld4c0qpd8nclu3d1g.apps.googleusercontent.com">
       <LoginPage {...props} />
     </GoogleOAuthProvider>
   )
