@@ -33,7 +33,9 @@ from extract_questions import (  # noqa: E402
     auto_detect_section_counts,
     build_section_context,
     extract_embedded_images,
+    extract_math_answers_from_page,
     extract_page,
+    find_answer_key_page,
     load_api_keys,
     repair_truncated_json,
     sanitize_json_escapes,
@@ -114,6 +116,78 @@ def _classify_inplace(groq_client, questions: list, task: dict) -> None:
         task["progress"].append({"type": "classifying", "done": done, "total": total})
 
 
+def _question_richness(q: dict) -> int:
+    """Điểm 'độ đầy đủ' của một câu hỏi để chọn bản tốt nhất khi trùng (section, số câu)."""
+    score = len((q.get("question_text") or "").strip())
+    for v in (q.get("choices") or {}).values():
+        score += len((v or "").strip())
+    score += 20 * len(q.get("sub_questions") or [])
+    return score
+
+
+def _section_answer_type(sec_data: dict) -> str:
+    """Loại đáp án của một phần: 'multiple_choice' | 'true_false' | 'short_answer'.
+
+    Ưu tiên field 'type'; nếu không rõ (đề không theo tên PHẦN I/II/III) thì suy ra từ
+    HÌNH DẠNG câu hỏi: có sub_questions → Đúng/Sai; có choices → trắc nghiệm; còn lại → trả lời ngắn.
+    """
+    stype = sec_data.get("type")
+    if stype in ("multiple_choice", "true_false", "short_answer"):
+        return stype
+    qs = sec_data.get("questions") or []
+    if any(q.get("sub_questions") for q in qs):
+        return "true_false"
+    if any(q.get("choices") for q in qs):
+        return "multiple_choice"
+    return "short_answer"
+
+
+def _all_questions_answered(result: dict, answers: dict) -> bool:
+    """True nếu MỌI câu đã trích đều có đáp án tương ứng trong `answers`.
+
+    Không giả định cấu trúc/số câu: đề thuần trắc nghiệm (chỉ PHẦN I) hay đủ 3 phần đều đúng.
+    Phần rỗng (không có câu) tự thỏa mãn.
+    """
+    for sec_data in result.get("sections", {}).values():
+        amap = answers.get(_section_answer_type(sec_data)) or {}
+        for q in sec_data.get("questions", []):
+            if q.get("question_number") not in amap:
+                return False
+    return True
+
+
+def _apply_math_answer_key(result: dict, answers: dict) -> int:
+    """Ghi đè đáp án chính thức (từ trang ĐÁP ÁN) vào câu hỏi. Trả về số câu được điền.
+
+    answers: {"multiple_choice": {num: "A"}, "true_false": {num: {"a": bool,...}},
+              "short_answer": {num: "val"}} — keyed theo LOẠI phần (khớp field "type").
+    """
+    filled = 0
+    for sec_data in result.get("sections", {}).values():
+        atype = _section_answer_type(sec_data)
+        amap = answers.get(atype)
+        if not amap:
+            continue
+        for q in sec_data.get("questions", []):
+            num = q.get("question_number")
+            if num not in amap:
+                continue
+            val = amap[num]
+            if atype == "true_false":
+                changed = False
+                for sub in q.get("sub_questions") or []:
+                    lbl = str(sub.get("label", "")).strip().lower()
+                    if lbl in val:
+                        sub["correct_answer"] = val[lbl]
+                        changed = True
+                if changed:
+                    filled += 1
+            else:
+                q["answer"] = val
+                filled += 1
+    return filled
+
+
 def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "") -> None:
     """Chạy trong thread pool; cập nhật TASKS[task_id] theo thời gian thực."""
     task = TASKS[task_id]
@@ -146,6 +220,16 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "") -> No
             return
 
         # ── Đề Toán (mặc định) ────────────────────────────────────────────
+        # Phát hiện phần ĐÁP ÁN (thường ở các trang cuối). Nếu có → chỉ trích câu hỏi
+        # ở các trang TRƯỚC đáp án, rồi lấy đáp án chính thức từ trang đáp án (không để
+        # Groq tự "giải" từng câu).
+        ak_page = find_answer_key_page(doc)
+        # ak_page >= 1: phải có ít nhất 1 trang câu hỏi trước phần đáp án.
+        # Trang ranh giới (ak_page) thường HỖN HỢP (đuôi câu hỏi + đầu bảng đáp án),
+        # nên VẪN trích câu hỏi ở trang này (prompt sẽ tự dừng ở mốc "ĐÁP ÁN"/"HẾT").
+        has_answer_key = ak_page >= 1
+        q_page_count = (ak_page + 1) if has_answer_key else doc.page_count
+
         section_header_page, section_q_start_page, page_active_sections, detected_sections = scan_pdf_layout(doc)
         q_starts = scan_question_starts(doc, section_q_start_page, section_header_page)
         detected_counts = auto_detect_section_counts(doc, section_q_start_page, section_header_page)
@@ -153,7 +237,7 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "") -> No
         all_questions: list[dict] = []
         last_q_per_section: dict[str, int] = {}
 
-        for i in range(doc.page_count):
+        for i in range(q_page_count):
             active = page_active_sections[i]
             section_ctx = build_section_context(i, active, section_header_page, q_starts, detected_sections)
             page_images = extract_embedded_images(doc, i, IMAGES_DIR)
@@ -183,7 +267,8 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "") -> No
                 "sections": active,
             })
 
-        # Dedup: với mỗi (section, q_num) giữ bản cuối cùng (đầy đủ nhất)
+        # Dedup: với mỗi (section, q_num) giữ bản ĐẦY ĐỦ nhất (tránh bảng đáp án ở
+        # trang ranh giới ghi đè câu hỏi thật bằng bản rỗng).
         deduped: dict = {}
         for q in all_questions:
             sec = q.get("section", "")
@@ -196,7 +281,9 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "") -> No
                 max_num = SECTION_POINTS.get(sec, {}).get("count", 999)
             if not isinstance(num, int) or num < 1 or num > max_num:
                 continue
-            deduped[(sec, num)] = q
+            prev = deduped.get((sec, num))
+            if prev is None or _question_richness(q) >= _question_richness(prev):
+                deduped[(sec, num)] = q
 
         clean_questions = list(deduped.values())
 
@@ -224,6 +311,32 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "") -> No
             )
             result["sections"][sec] = {**info, "questions": qs}
 
+        # ── Trích đáp án từ phần ĐÁP ÁN & ghi đè vào câu hỏi ─────────────
+        result["has_answer_key"] = has_answer_key
+        if has_answer_key:
+            # Quét các trang đáp án cho tới khi MỌI câu đã trích đều có đáp án (bảng đáp
+            # án gọn thường nằm ngay đầu phần đáp án; các trang lời giải chi tiết phía sau
+            # là dư thừa → dừng sớm, khỏi gọi Vision thêm). Không giả định số câu/số phần,
+            # nên đề thuần trắc nghiệm hay đủ 3 phần đều xử lý đúng.
+            merged = {"multiple_choice": {}, "true_false": {}, "short_answer": {}}
+            has_questions = any(s.get("questions") for s in result["sections"].values())
+            for i in range(ak_page, doc.page_count):
+                page_ans = extract_math_answers_from_page(client, doc[i], i + 1, fallback_clients)
+                for stype, amap in page_ans.items():
+                    merged[stype].update(amap)
+                found = sum(len(v) for v in page_ans.values())
+                task["progress"].append({
+                    "type": "page_done",
+                    "page": i + 1,
+                    "total": doc.page_count,
+                    "questions_found": found,
+                    "sections": ["ĐÁP ÁN"],
+                    "phase": "answers",
+                })
+                if has_questions and _all_questions_answered(result, merged):
+                    break
+            result["answers_filled"] = _apply_math_answer_key(result, merged)
+
         # ── Auto-classify topics & difficulty ────────────────────────────
         all_qs_flat = [q for sec_data in result["sections"].values() for q in sec_data["questions"]]
         if all_qs_flat:
@@ -232,7 +345,12 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "") -> No
 
         task["result"] = result
         task["status"] = "done"
-        task["progress"].append({"type": "done", "total_questions": len(clean_questions)})
+        task["progress"].append({
+            "type": "done",
+            "total_questions": len(clean_questions),
+            "has_answer_key": result.get("has_answer_key", False),
+            "answers_filled": result.get("answers_filled", 0),
+        })
 
     except Exception as exc:
         task["status"] = "error"
@@ -366,7 +484,25 @@ def _calc_max_score(exam: dict) -> float:
         if sec:
             ppq = sec.get("points_per_q") or default
             m += sum(1 for q in (sec.get("questions") or []) if q.get("answer")) * ppq
+    # TỰ LUẬN — điểm tối đa = tổng điểm GV đặt cho từng câu (chấm tay)
+    essay = secs.get("TỰ LUẬN")
+    if essay:
+        m += sum(_to_float(q.get("points")) for q in (essay.get("questions") or []))
     return _round2(m)
+
+
+def _to_float(v, default: float = 0.0) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _manual_total(manual_scores) -> float:
+    """Tổng điểm chấm tay hợp lệ từ dict {TL_n: điểm}."""
+    if not isinstance(manual_scores, dict):
+        return 0.0
+    return sum(_to_float(v) for v in manual_scores.values())
 
 
 def _recompute_submissions(exam_id: str, exam: dict) -> int:
@@ -374,7 +510,9 @@ def _recompute_submissions(exam_id: str, exam: dict) -> int:
     max_score = _calc_max_score(exam)
     updated = 0
     for sub in db.get_submissions(exam_id):
-        new_score = _calc_score(exam, sub.get("answers") or {})
+        # Điểm tự động chấm lại + giữ nguyên điểm tự luận GV đã chấm tay
+        new_score = _round2(_calc_score(exam, sub.get("answers") or {})
+                            + _manual_total(sub.get("manualScores")))
         if sub.get("score") != new_score or sub.get("maxScore") != max_score:
             db.update_submission_score(sub["id"], new_score, max_score)
             updated += 1
@@ -538,6 +676,7 @@ async def submit_exam(exam_id: str, request: Request):
         "className":    body.get("className"),
         "classId":      body.get("classId"),
         "assignmentId": asgn_id if cls_id else None,
+        "manualScores": {},   # GV chấm câu tự luận sau khi nộp
     }
     # Đếm số lần đã làm + insert trong CÙNG transaction (khóa advisory) — hai
     # request nộp song song không thể cùng lách qua giới hạn maxAttempts.
@@ -561,6 +700,40 @@ async def get_submissions(exam_id: str):
         "hideResults":     (exam.get("settings") or {}).get("hideResults", False),
         "classes":         exam.get("classes", []),
     }
+
+
+@app.post("/api/exams/{exam_id}/submissions/{sub_id}/grade")
+async def grade_essay_submission(exam_id: str, sub_id: str, request: Request):
+    """Giáo viên chấm tay câu tự luận (TỰ LUẬN) cho một bài nộp.
+    body: { manualScores: { "TL_1": 1.5, ... } }. Điểm mỗi câu bị kẹp trong [0, điểm tối đa của câu].
+    Điểm tổng = điểm tự động (trắc nghiệm/trả lời ngắn) + tổng điểm tự luận."""
+    body = await request.json()
+    manual_in = body.get("manualScores") or {}
+    exam = db.get_exam(exam_id)
+    if not exam:
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+
+    # Điểm tối đa hợp lệ theo từng câu tự luận
+    essay = (exam.get("sections") or {}).get("TỰ LUẬN") or {}
+    max_by_key = {f"TL_{q.get('question_number')}": _to_float(q.get("points"))
+                  for q in (essay.get("questions") or [])}
+
+    clean: dict = {}
+    for key, val in (manual_in.items() if isinstance(manual_in, dict) else []):
+        if key not in max_by_key:
+            continue
+        v = max(0.0, min(_to_float(val), max_by_key[key]))
+        clean[key] = _round2(v)
+
+    sub = next((s for s in db.get_submissions(exam_id) if str(s.get("id")) == str(sub_id)), None)
+    if not sub:
+        return JSONResponse({"error": "Không tìm thấy bài nộp"}, status_code=404)
+
+    auto  = _calc_score(exam, sub.get("answers") or {})
+    total = _round2(auto + _manual_total(clean))
+    if not db.update_submission_grade(sub_id, clean, total):
+        return JSONResponse({"error": "Không cập nhật được điểm"}, status_code=500)
+    return {"ok": True, "score": total, "maxScore": _calc_max_score(exam), "manualScores": clean}
 
 
 @app.delete("/api/exams/{exam_id}/submissions/{sub_id}")
@@ -1744,6 +1917,48 @@ async def delete_class_document(filename: str):
 
 # ─── End Class document upload ───────────────────────────────────────────────
 
+# ─── Submission image upload (bài làm tự luận) ───────────────────────────────
+
+UPLOADS_DIR = Path(__file__).parent / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+_IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".heif"}
+_MAX_UPLOAD_BYTES = 15 * 1024 * 1024   # 15 MB / ảnh (ảnh chụp điện thoại)
+
+
+@app.post("/api/submissions/upload")
+async def upload_submission_image(file: UploadFile = File(...)):
+    """Học sinh upload ảnh bài làm tự luận (chụp / thư viện / kéo thả).
+    Trả về URL để lưu trong answers của bài nộp."""
+    original = file.filename or "anh.jpg"
+    ext = Path(original).suffix.lower()
+    if ext not in _IMG_EXTS:
+        ext = ".jpg"
+    content = await file.read()
+    if not content:
+        return JSONResponse({"error": "Tệp rỗng."}, status_code=400)
+    if len(content) > _MAX_UPLOAD_BYTES:
+        return JSONResponse({"error": "Ảnh quá lớn (tối đa 15 MB)."}, status_code=413)
+    filename = f"{uuid.uuid4().hex[:16]}{ext}"
+    (UPLOADS_DIR / filename).write_bytes(content)
+    return {
+        "url":  f"/uploads/{filename}",
+        "name": original,
+        "size": len(content),
+    }
+
+
+@app.delete("/api/submissions/upload/{filename}")
+async def delete_submission_image(filename: str):
+    """Xóa ảnh bài làm đã upload (khi học sinh bỏ ảnh trước lúc nộp)."""
+    safe = Path(filename).name
+    target = UPLOADS_DIR / safe
+    if target.exists():
+        target.unlink()
+    return {"ok": True}
+
+# ─── End submission image upload ─────────────────────────────────────────────
+
 # ─── Exercise Solver ─────────────────────────────────────────────────────────
 
 import re as _re
@@ -2228,6 +2443,7 @@ async def generate_questions_api(request: Request):
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
 app.mount("/class-docs", StaticFiles(directory=str(CLASS_DOCS_DIR)), name="class-docs")
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 THPT_TOPIC_LIST = [
     'Tập xác định','Tính đơn điệu','Cực trị','Giá trị lớn nhất, nhỏ nhất','Tiệm cận',

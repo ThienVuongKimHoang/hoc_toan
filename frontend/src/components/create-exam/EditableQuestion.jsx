@@ -628,6 +628,28 @@ function ShortEditor({ q, onChange }) {
 }
 
 /* ═══════════════════════════════════════════
+   TỰ LUẬN — học sinh upload ảnh bài làm, GV chấm tay
+═══════════════════════════════════════════ */
+function EssayEditor({ q, onChange }) {
+  return (
+    <div className="eq-body">
+      <div className="eq-essay-note">
+        📸 Học sinh sẽ <strong>upload ảnh bài làm</strong> (chụp ảnh / chọn thư viện / kéo thả) ở câu này.
+        Giáo viên chấm tay sau khi nộp — điểm tối đa đặt ở huy hiệu điểm phía trên.
+      </div>
+      <div className="eq-short-ans-row">
+        <span className="eq-short-label">Gợi ý chấm / đáp án mẫu (tùy chọn):</span>
+        <MathEditField
+          value={q.answer || ''}
+          onChange={v => onChange({ ...q, answer: v })}
+          placeholder="Ghi chú barem / lời giải mẫu để chấm nhanh hơn…"
+        />
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════
    Editable points badge
 ═══════════════════════════════════════════ */
 function PointsBadge({ value, onChange }) {
@@ -679,6 +701,7 @@ const SECTION_COLOR = {
   'PHẦN I': '#2563eb',
   'PHẦN II': '#7c3aed',
   'PHẦN III': '#059669',
+  'TỰ LUẬN': '#d97706',
   'TIẾNG ANH': '#0f766e',
   'READING': '#0e7490',
 }
@@ -1313,10 +1336,12 @@ export default function EditableQuestion({
               {q.section === 'PHẦN I' && 'Đáp án (click chữ cái để đánh dấu đúng)'}
               {q.section === 'PHẦN II' && 'Các ý phụ (Đ = Đúng, S = Sai)'}
               {q.section === 'PHẦN III' && 'Đáp án đúng'}
+              {q.section === 'TỰ LUẬN' && 'Câu tự luận — học sinh upload ảnh, GV chấm tay'}
             </div>
             {q.section === 'PHẦN I' && <MCQEditor q={q} onChange={onUpdate} />}
             {q.section === 'PHẦN II' && <TFEditor q={q} onChange={onUpdate} />}
             {q.section === 'PHẦN III' && <ShortEditor q={q} onChange={onUpdate} />}
+            {q.section === 'TỰ LUẬN' && <EssayEditor q={q} onChange={onUpdate} />}
           </div>
         </>
       )}

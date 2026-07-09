@@ -6,14 +6,16 @@ import MixExamModal from '../MixExamModal.jsx'
 function isUnanswered(q, sec) {
   if (sec === 'PHẦN I' || sec === 'TIẾNG ANH' || sec === 'READING') return q.answer === null || q.answer === undefined
   if (sec === 'PHẦN III') return !q.answer || !q.answer.toString().trim()
+  // TỰ LUẬN chấm tay — không có "đáp án" nên không tính là thiếu đáp án
   return false
 }
 
-const MATH_SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III']
+const MATH_SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III', 'TỰ LUẬN']
 const SECTION_META = {
   'PHẦN I':    { label: 'Trắc nghiệm',   color: '#2563eb', shortLabel: 'Phần I' },
   'PHẦN II':   { label: 'Đúng / Sai',    color: '#7c3aed', shortLabel: 'Phần II' },
   'PHẦN III':  { label: 'Trả lời ngắn',  color: '#059669', shortLabel: 'Phần III' },
+  'TỰ LUẬN':   { label: 'Tự luận (upload ảnh)', color: '#d97706', shortLabel: 'Tự luận' },
   'TIẾNG ANH': { label: 'Trắc nghiệm',   color: '#0f766e', shortLabel: 'Tiếng Anh' },
   'READING':   { label: 'Bài đọc',       color: '#0e7490', shortLabel: 'Reading' },
 }
@@ -40,10 +42,15 @@ function emptyShort(num) {
   return { _uid: nextUid(), question_number: num, section: 'PHẦN III', question_text: '', has_figure: false,
     answer: '', points: null }
 }
+function emptyEssay(num) {
+  return { _uid: nextUid(), question_number: num, section: 'TỰ LUẬN', question_text: '', has_figure: false,
+    answer: '', points: 1.0 }   // points = điểm tối đa GV chấm tay; answer = gợi ý chấm (tùy chọn)
+}
 const EMPTY_FN = {
   'PHẦN I':    (n) => emptyMCQ(n, 'PHẦN I'),
   'PHẦN II':   emptyTF,
   'PHẦN III':  emptyShort,
+  'TỰ LUẬN':   emptyEssay,
   'TIẾNG ANH': (n) => emptyMCQ(n, 'TIẾNG ANH'),
   'READING':   (n) => ({ ...emptyMCQ(n, 'READING'), passage_group: 1 }),
 }
@@ -75,7 +82,10 @@ function isDragTrigger(e, wrapperEl) {
 
 export default function ReviewStep({ result, title, onTitleChange, onPreview, onPublish, onSave }) {
   const effectiveSections = Object.keys(result.sections || {}).filter(sec => SECTION_META[sec])
-  const sectionList = effectiveSections.length > 0 ? effectiveSections : MATH_SECTIONS
+  let sectionList = effectiveSections.length > 0 ? effectiveSections : MATH_SECTIONS
+  // Đề Toán (kể cả trích từ PDF) luôn có sẵn tab Tự luận để GV thêm câu upload ảnh
+  const isMathExam = sectionList.some(s => ['PHẦN I', 'PHẦN II', 'PHẦN III'].includes(s))
+  if (isMathExam && !sectionList.includes('TỰ LUẬN')) sectionList = [...sectionList, 'TỰ LUẬN']
 
   const [activeSection, setActiveSection] = useState(sectionList[0] || 'PHẦN I')
   const [grade,         setGrade]         = useState('thpt')

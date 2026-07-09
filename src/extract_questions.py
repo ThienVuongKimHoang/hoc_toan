@@ -9,6 +9,8 @@ Cấu trúc đề:
 Chạy: python3 extract_questions.py [--pdf path/to/file.pdf] [--out output.json]
 """
 
+from __future__ import annotations
+
 import os
 import json
 import base64
@@ -425,6 +427,7 @@ Lưu ý bắt buộc:
 - "answer" ở PHẦN I = "A"/"B"/"C"/"D"; ở PHẦN III = đáp số; ở PHẦN II bỏ field này
 - "points": PHẦN I = 0.25 | PHẦN II = 1.0 (tối đa) | PHẦN III = 0.5
 - KHÔNG trích xuất dòng tiêu đề phần như "PHẦN II. (4,0 điểm)..."
+- DỪNG khi gặp mốc "ĐÁP ÁN", "HƯỚNG DẪN", "LỜI GIẢI" hoặc "----- HẾT -----": phần SAU các mốc này là đáp án/lời giải, KHÔNG phải câu hỏi — tuyệt đối không trích thành câu hỏi (kể cả bảng "Câu 1 2 3... Đáp án B D A...").
 - Nếu không có câu hỏi nào, trả về: {{"questions": []}}
 """
 
@@ -660,6 +663,125 @@ def extract_page(client: Groq, page: fitz.Page, page_num: int,
     print(f"\n  [WARN] Trang {page_num}: không parse được JSON sau 2 lần thử.")
     print(f"  Raw (400 ký tự cuối): ...{raw[-400:]}")
     return []
+
+
+# ---------------------------------------------------------------------------
+# Answer key (ĐÁP ÁN) detection & extraction
+# ---------------------------------------------------------------------------
+
+# Header cụm từ CHỈ xuất hiện ở phần đáp án (không nhầm với hướng dẫn "chọn đáp án đúng")
+_AK_STRONG_RE = re.compile(
+    r"BẢNG\s*ĐÁP\s*ÁN"
+    r"|ĐÁP\s*ÁN\s*(?:CHI\s*TIẾT|THAM\s*KHẢO|ĐỀ|VÀ)"
+    r"|HƯỚNG\s*DẪN\s*(?:CHẤM|GIẢI)"
+    r"|LỜI\s*GIẢI\s*(?:CHI\s*TIẾT|ĐỀ)",
+    re.IGNORECASE,
+)
+# Fallback: dòng chỉ có "ĐÁP ÁN" (neo đầu dòng → tránh khớp câu hướng dẫn giữa dòng)
+_AK_WEAK_RE = re.compile(r"(?m)^\s*(?:BẢNG\s+)?ĐÁP\s+ÁN\b", re.IGNORECASE)
+
+
+def find_answer_key_page(doc: fitz.Document) -> int:
+    """Tìm trang bắt đầu phần ĐÁP ÁN/HƯỚNG DẪN CHẤM. Trả về page_idx (0-indexed) hoặc -1.
+
+    Ưu tiên header rõ ràng ở bất kỳ trang nào; nếu không có thì tìm dòng "ĐÁP ÁN"
+    đứng riêng ở NỬA SAU tài liệu (tránh nhầm với chỉ dẫn "chọn 1 đáp án đúng" ở trang đầu).
+    """
+    for i in range(doc.page_count):
+        if _AK_STRONG_RE.search(doc[i].get_text()):
+            return i
+    start = max(1, (doc.page_count + 1) // 2)
+    for i in range(start, doc.page_count):
+        if _AK_WEAK_RE.search(doc[i].get_text()):
+            return i
+    return -1
+
+
+ANSWER_PROMPT_MATH = """Đây là trang {page_num} thuộc phần ĐÁP ÁN / HƯỚNG DẪN CHẤM của đề thi toán THPT Việt Nam.
+Nhiệm vụ: đọc và trích xuất TẤT CẢ đáp án ĐÚNG có trên trang này. Trả về CHỈ JSON, không giải thích:
+
+{{
+  "phan_1": {{"1": "A", "2": "C"}},
+  "phan_2": {{"1": {{"a": true, "b": false, "c": true, "d": false}}}},
+  "phan_3": {{"1": "5", "2": "3,14"}}
+}}
+
+Quy tắc BẮT BUỘC:
+- CHỈ đưa vào JSON những câu THỰC SỰ có đáp án nhìn thấy trên trang. Phần nào không có → object rỗng {{}}.
+- Khóa là SỐ CÂU trong phần đó (bắt đầu lại từ 1 ở mỗi phần).
+- phan_1 (Trắc nghiệm A/B/C/D): giá trị là một chữ cái "A"/"B"/"C"/"D". Bảng dạng "1.A 2.B" hay "Câu 1: A" → lấy đúng chữ cái.
+- phan_2 (Đúng/Sai, 4 ý a-b-c-d): mỗi ý là true nếu ĐÚNG (Đ/T/Đúng), false nếu SAI (S/F/Sai). Bỏ ý nào không thấy.
+- phan_3 (Trả lời ngắn): giữ nguyên đáp số dạng chuỗi (phân số/số thập phân giữ nguyên; công thức dùng LaTeX $...$).
+- TUYỆT ĐỐI KHÔNG bịa đáp án. Nếu trang không có đáp án nào: {{"phan_1": {{}}, "phan_2": {{}}, "phan_3": {{}}}}.
+"""
+
+
+def _coerce_answer_bool(val) -> bool | None:
+    """Chuẩn hóa giá trị Đúng/Sai từ đáp án về bool. Trả None nếu không xác định."""
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return bool(val)
+    s = str(val).strip().lower()
+    if s in ("true", "đ", "d", "t", "đúng", "dung", "1", "yes", "x"):
+        return True
+    if s in ("false", "s", "f", "sai", "0", "no"):
+        return False
+    return None
+
+
+def _answer_key_num(raw) -> int | None:
+    m = re.search(r"\d+", str(raw))
+    return int(m.group()) if m else None
+
+
+def extract_math_answers_from_page(client: Groq, page: fitz.Page, page_num: int,
+                                   fallback_clients: list = None) -> dict:
+    """Trích đáp án từ MỘT trang đáp án. Dùng Vision (bảng đáp án thường có highlight/layout phức tạp).
+
+    Trả về dict keyed theo LOẠI phần:
+      {"multiple_choice": {num: "A"}, "true_false": {num: {"a": bool,...}}, "short_answer": {num: "val"}}
+    """
+    out = {"multiple_choice": {}, "true_false": {}, "short_answer": {}}
+    img_b64 = page_to_base64(page)
+    prompt = ANSWER_PROMPT_MATH.format(page_num=page_num)
+    try:
+        raw = call_groq_vision(client, img_b64, prompt, MAX_TOKENS_DEFAULT, fallback_clients or [])
+        data = json.loads(raw)
+    except Exception:
+        try:
+            data = json.loads(repair_truncated_json(raw))
+        except Exception:
+            return out
+    if not isinstance(data, dict):
+        return out
+
+    for k, v in (data.get("phan_1") or {}).items():
+        num = _answer_key_num(k)
+        letter = str(v).strip().upper()[:1] if v is not None else ""
+        if num is not None and letter in ("A", "B", "C", "D"):
+            out["multiple_choice"][num] = letter
+
+    for k, v in (data.get("phan_2") or {}).items():
+        num = _answer_key_num(k)
+        if num is None or not isinstance(v, dict):
+            continue
+        subs = {}
+        for lbl, sval in v.items():
+            lbl2 = str(lbl).strip().lower()[:1]
+            b = _coerce_answer_bool(sval)
+            if lbl2 in ("a", "b", "c", "d") and b is not None:
+                subs[lbl2] = b
+        if subs:
+            out["true_false"][num] = subs
+
+    for k, v in (data.get("phan_3") or {}).items():
+        num = _answer_key_num(k)
+        sval = str(v).strip() if v is not None else ""
+        if num is not None and sval:
+            out["short_answer"][num] = sval
+
+    return out
 
 
 def run(pdf_path: Path, out_path: Path, start_page: int = 1) -> None:

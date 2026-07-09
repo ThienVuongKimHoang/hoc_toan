@@ -9,6 +9,7 @@ const SECTION_LABELS = {
   'PHẦN I':    { label: 'Phần I – Trắc nghiệm',         color: '#2563eb' },
   'PHẦN II':   { label: 'Phần II – Đúng / Sai',          color: '#7c3aed' },
   'PHẦN III':  { label: 'Phần III – Trả lời ngắn',       color: '#059669' },
+  'TỰ LUẬN':   { label: 'Tự luận – Upload bài làm',      color: '#d97706' },
   'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm',      color: '#0f766e' },
   'READING':   { label: 'Reading – Bài đọc',            color: '#0e7490' },
 }
@@ -360,6 +361,10 @@ function SectionNav({ sections, sectionList, active, onChange }) {
 function ExamView({ exam, studentName, studentId, className, classId, assignmentId, onGoHome }) {
   const hideResults    = exam.settings?.hideResults || false
   const sectionList    = getSectionList(exam)
+  // Đề có phần tự luận: điểm chấm tay đến sau, nên điểm hiện ngay chỉ là phần tự động (tạm tính)
+  const essayMax       = (exam.sections?.['TỰ LUẬN']?.questions || [])
+                           .reduce((s, q) => s + (Number(q.points) || 0), 0)
+  const hasEssay       = sectionList.includes('TỰ LUẬN')
   const [activeSection, setActiveSection] = useState(sectionList[0] || 'PHẦN I')
   const [answers,       setAnswers]       = useState({})
   const [submitted,     setSubmitted]     = useState(false)
@@ -431,6 +436,19 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
           {hideResults ? (
             <div className="etl-hide-msg">
               <p>Kết quả sẽ được công bố bởi giáo viên.</p>
+              <p className="etl-name-tag">Bài làm của: <strong>{studentName}</strong></p>
+            </div>
+          ) : hasEssay ? (
+            <div className="etl-score">
+              <div className="etl-essay-pending">
+                ✍️ Bài có phần <strong>tự luận</strong> — giáo viên sẽ chấm và cập nhật điểm sau.
+              </div>
+              {finalMax - essayMax > 0 && (
+                <>
+                  <div className="etl-score-num">{scaledScore(finalScore, finalMax - essayMax)} <span>/ 10</span></div>
+                  <div className="etl-score-label">điểm trắc nghiệm (tạm tính, chưa gồm tự luận)</div>
+                </>
+              )}
               <p className="etl-name-tag">Bài làm của: <strong>{studentName}</strong></p>
             </div>
           ) : (

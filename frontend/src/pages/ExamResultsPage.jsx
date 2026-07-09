@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { deleteSubmission, fetchExamById, getSubmissions, hideResultsToggle, revealResults, scaledScore } from '../store/examStore.js'
 import QuestionStats from '../components/QuestionStats.jsx'
+import GradeEssayModal from '../components/GradeEssayModal.jsx'
 
 function fmtDate(iso) {
   if (!iso) return '—'
@@ -153,6 +154,7 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
   const [err,         setErr]         = useState('')
   const [confirmDel,  setConfirmDel]  = useState(null)   // bài nộp đang chờ xác nhận xóa
   const [delBusy,     setDelBusy]     = useState(false)
+  const [gradingSub,  setGradingSub]  = useState(null)   // bài nộp đang chấm tự luận
 
   const load = () => {
     setLoading(true)
@@ -207,6 +209,7 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
   const rawSubs  = (data?.submissions || []).filter(s => !s.classId)
   const revealed = data?.resultsRevealed || false
   const hideMode = data?.hideResults || false
+  const hasEssay = (exam?.sections?.['TỰ LUẬN']?.questions?.length ?? 0) > 0
 
   // Quy đổi mọi điểm về thang 10 để hiển thị thống nhất.
   const maxScore = 10
@@ -336,6 +339,17 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
                       </td>
                       <td className="er-td-time">{fmtDate(s.submittedAt)}</td>
                       <td className="er-td-del">
+                        {hasEssay && (() => {
+                          const raw = rawSubs.find(r => r.id === s.id)
+                          const graded = raw?.manualScores && Object.keys(raw.manualScores).length > 0
+                          return (
+                            <button
+                              className={`er-grade-btn ${graded ? 'graded' : ''}`}
+                              title="Chấm câu tự luận (xem ảnh bài làm)"
+                              onClick={() => setGradingSub(raw || s)}
+                            >{graded ? '✅ Đã chấm' : '✍️ Chấm'}</button>
+                          )
+                        })()}
                         <button
                           className="er-del-btn"
                           title="Xóa bài làm này"
@@ -348,6 +362,15 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
             </table>
           </div>
         </>
+      )}
+
+      {gradingSub && exam && (
+        <GradeEssayModal
+          exam={exam}
+          submission={gradingSub}
+          onClose={() => setGradingSub(null)}
+          onSaved={() => { setGradingSub(null); load() }}
+        />
       )}
 
       {confirmDel && (

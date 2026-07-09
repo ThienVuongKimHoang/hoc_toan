@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import MathText from './MathText.jsx'
 
 const CONTENT_EDITABLE_TAG = /<(strong|em|u|b|i|div|br|span|p)\b/i
@@ -248,11 +248,117 @@ function ShortAnswerCard({ q, examMode, onAnswerChange, saved }) {
   )
 }
 
+/* ── TỰ LUẬN: học sinh upload ảnh bài làm (chụp / thư viện / kéo thả) ── */
+async function uploadImage(file) {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/api/submissions/upload', { method: 'POST', body: form })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Upload thất bại (HTTP ${res.status})`)
+  }
+  return res.json()   // { url, name, size }
+}
+
+function EssayUploadCard({ q, examMode, onAnswerChange, saved }) {
+  const [images, setImages]     = useState(Array.isArray(saved) ? saved : [])
+  const [uploading, setUploading] = useState(false)
+  const [error, setError]       = useState('')
+  const [dragOver, setDragOver] = useState(false)
+  const cameraRef  = useRef(null)
+  const libraryRef = useRef(null)
+
+  const commit = (next) => { setImages(next); onAnswerChange?.(next) }
+
+  const addFiles = async (files) => {
+    const imgs = Array.from(files || []).filter(f => f.type.startsWith('image/'))
+    if (imgs.length === 0) return
+    setError(''); setUploading(true)
+    try {
+      const uploaded = []
+      for (const f of imgs) {
+        if (f.size > 15 * 1024 * 1024) { setError(`"${f.name}" quá lớn (tối đa 15 MB).`); continue }
+        uploaded.push(await uploadImage(f))
+      }
+      if (uploaded.length) commit([...images, ...uploaded])
+    } catch (e) {
+      setError(e.message || 'Upload thất bại. Thử lại.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const removeAt = (idx) => {
+    const img = images[idx]
+    commit(images.filter((_, i) => i !== idx))
+    // Xóa file trên server (best-effort) — chưa nộp nên gỡ luôn cho gọn
+    const fname = img?.url?.split('/').pop()
+    if (fname) fetch(`/api/submissions/upload/${fname}`, { method: 'DELETE' }).catch(() => {})
+  }
+
+  const onDrop = (e) => { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files) }
+
+  return (
+    <div className="q-body">
+      <p className="q-text"><QuestionText q={q} /></p>
+      <FigureImages path={q.figure_path} />
+
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment"
+        style={{ display: 'none' }}
+        onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+      <input ref={libraryRef} type="file" accept="image/*" multiple
+        style={{ display: 'none' }}
+        onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+
+      <div
+        className={`essay-dropzone ${dragOver ? 'drag-over' : ''}`}
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+      >
+        <div className="essay-dz-icon">📸</div>
+        <div className="essay-dz-text">
+          Chụp ảnh hoặc chọn ảnh bài làm — hoặc <strong>kéo &amp; thả ảnh vào đây</strong>
+        </div>
+        <div className="essay-dz-actions">
+          <button type="button" className="essay-btn essay-btn-camera"
+            onClick={() => cameraRef.current?.click()} disabled={uploading}>
+            📷 Chụp ảnh
+          </button>
+          <button type="button" className="essay-btn essay-btn-library"
+            onClick={() => libraryRef.current?.click()} disabled={uploading}>
+            🖼 Chọn từ thư viện
+          </button>
+        </div>
+        {uploading && <div className="essay-uploading">⏳ Đang tải ảnh lên…</div>}
+        {error && <div className="essay-error">⚠️ {error}</div>}
+      </div>
+
+      {images.length > 0 && (
+        <div className="essay-thumbs">
+          {images.map((img, i) => (
+            <div key={img.url || i} className="essay-thumb">
+              <img src={img.url} alt={img.name || `Ảnh ${i + 1}`} loading="lazy"
+                onClick={() => window.open(img.url, '_blank')} />
+              <button type="button" className="essay-thumb-del"
+                onClick={() => removeAt(i)} title="Xóa ảnh">✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {images.length > 0 && (
+        <p className="essay-count">✅ Đã đính kèm {images.length} ảnh</p>
+      )}
+    </div>
+  )
+}
+
 /* ── Card tổng hợp ── */
 const SECTION_CLASS = {
   'PHẦN I':    'phan-1',
   'PHẦN II':   'phan-2',
   'PHẦN III':  'phan-3',
+  'TỰ LUẬN':   'phan-essay',
   'TIẾNG ANH': 'phan-english',
   'READING':   'phan-english',
 }
@@ -260,6 +366,7 @@ const SECTION_PREFIX = {
   'PHẦN I':    'I',
   'PHẦN II':   'II',
   'PHẦN III':  'III',
+  'TỰ LUẬN':   'TL',
   'TIẾNG ANH': 'EN',
   'READING':   'RD',
 }
@@ -299,6 +406,8 @@ export default function QuestionCard({ q, index, examMode = false, onAnswerChang
           <MultipleChoiceCard q={q} examMode={examMode} onAnswerChange={handleChange} hidePassage={hidePassage} saved={saved} />
         ) : q.section === 'PHẦN II' ? (
           <TrueFalseCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} />
+        ) : q.section === 'TỰ LUẬN' ? (
+          <EssayUploadCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} />
         ) : (
           <ShortAnswerCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} />
         )

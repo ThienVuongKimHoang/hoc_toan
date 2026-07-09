@@ -196,6 +196,20 @@ export async function getSubmissions(examId) {
   return res.json()
 }
 
+/** Giáo viên chấm tay câu tự luận cho một bài nộp. manualScores = { TL_1: 1.5, ... } */
+export async function gradeSubmission(examId, subId, manualScores) {
+  const res = await fetch(`/api/exams/${examId}/submissions/${subId}/grade`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ manualScores }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || 'Không thể lưu điểm chấm')
+  }
+  return res.json()
+}
+
 /** Giáo viên xóa MỘT bài nộp (một lần làm) theo id — dùng cho link công khai */
 export async function deleteSubmission(examId, subId) {
   const res = await fetch(`/api/exams/${examId}/submissions/${subId}`, { method: 'DELETE' })
@@ -388,6 +402,12 @@ export function calcMaxScore(exam) {
     const ppq = rd.points_per_q || 0.25
     const answered = (rd.questions || []).filter(q => q.answer)
     max += answered.length * ppq
+  }
+
+  // TỰ LUẬN — điểm tối đa = tổng điểm GV đặt cho từng câu (chấm tay, không tự động)
+  const tl = secs['TỰ LUẬN']
+  if (tl) {
+    ;(tl.questions || []).forEach(q => { max += Number(q.points) || 0 })
   }
 
   return Math.round(max * 100) / 100

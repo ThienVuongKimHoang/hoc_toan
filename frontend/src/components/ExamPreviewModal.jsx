@@ -1,11 +1,12 @@
 import React, { useRef, useState } from 'react'
 import MathText from './MathText.jsx'
 
-const SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III']
+const SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III', 'TỰ LUẬN']
 const SECTION_META = {
   'PHẦN I':   { label: 'PHẦN I. TRẮC NGHIỆM', color: '#2563eb', points: '' },
   'PHẦN II':  { label: 'PHẦN II. ĐÚNG / SAI',  color: '#7c3aed', points: '' },
   'PHẦN III': { label: 'PHẦN III. TRẢ LỜI NGẮN', color: '#059669', points: '' },
+  'TỰ LUẬN':  { label: 'PHẦN TỰ LUẬN', color: '#d97706', points: '' },
 }
 
 /* ── MCQ Preview ── */
@@ -91,6 +92,21 @@ function ShortPreview({ q, showAnswers }) {
       {showAnswers && q.answer && (
         <div className="ep-short-ans">
           <span className="ep-short-ans-label">Đáp án:</span>
+          <span className="ep-short-ans-val"><MathText text={q.answer} /></span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Essay Preview ── */
+function EssayPreview({ q, showAnswers }) {
+  return (
+    <div className="ep-q-content">
+      <div className="ep-essay-note">✍️ Học sinh upload ảnh bài làm — chấm tay ({q.points ?? 1}đ)</div>
+      {showAnswers && q.answer && (
+        <div className="ep-short-ans">
+          <span className="ep-short-ans-label">Gợi ý chấm:</span>
           <span className="ep-short-ans-val"><MathText text={q.answer} /></span>
         </div>
       )}
@@ -215,6 +231,9 @@ export default function ExamPreviewModal({ result, title, onClose, onPublish, on
                       )}
                       {sec === 'PHẦN III' && (
                         <ShortPreview q={q} showAnswers={showAnswers} />
+                      )}
+                      {sec === 'TỰ LUẬN' && (
+                        <EssayPreview q={q} showAnswers={showAnswers} />
                       )}
                     </div>
                   ))}

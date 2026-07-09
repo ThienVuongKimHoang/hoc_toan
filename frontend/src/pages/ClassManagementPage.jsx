@@ -13,6 +13,7 @@ import ExerciseSolver from '../components/ExerciseSolver.jsx'
 import Geo3DViewer from '../components/Geo3DViewer.jsx'
 import SubjectBadge, { SubjectPicker, SUBJECTS } from '../components/SubjectBadge.jsx'
 import { BandChip, GradeButton, IeltsGradeModal, IeltsStatsTable } from '../components/IeltsGrade.jsx'
+import GradeEssayModal from '../components/GradeEssayModal.jsx'
 
 /* ─── SVG icons ─── */
 function Svg({ size = 16, children }) {
@@ -173,6 +174,7 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, onClos
   const [confirmDel, setConfirmDel] = useState(null)   // học sinh đang chờ xác nhận xóa
   const [delBusy, setDelBusy] = useState(false)
   const [viewGrade, setViewGrade] = useState(null)     // submission đang xem kết quả AI
+  const [gradingSub, setGradingSub] = useState(null)   // bài nộp đang chấm tự luận
   const [statsKey, setStatsKey] = useState(0)          // refresh bảng thống kê sau khi chấm
   const isExam = !!assignment.examId
   const isWriting = !!assignment.writingTask
@@ -264,6 +266,13 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, onClos
   const { submissions } = data
   const submittedIds = new Set(submissions.map(s => String(s.studentId)))
   const notSubmitted = members.filter(m => !submittedIds.has(String(m.userId)))
+  const hasEssay = (data?.examObj?.sections?.['TỰ LUẬN']?.questions?.length ?? 0) > 0
+  // Bài nộp mới nhất (đầy đủ answers/ảnh) của một học sinh — dùng để chấm tự luận
+  const latestRawSub = (studentId) => {
+    const list = (data?.rawSubs || []).filter(r => String(r.studentId) === String(studentId))
+    list.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt))
+    return list[list.length - 1] || null
+  }
   const formatDt = iso => iso ? new Date(iso).toLocaleString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
   const fmtDur = sec => (sec == null || sec < 0) ? null : (sec < 60 ? `${sec} giây` : (sec % 60 ? `${Math.floor(sec/60)} phút ${sec%60} giây` : `${Math.floor(sec/60)} phút`))
 
@@ -363,9 +372,22 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, onClos
                           onDone={() => { reload(); setStatsKey(k => k + 1) }} />
                       </div>
                     ) : isExam && s.score != null ? (
-                      <span className="sub-badge sub-badge--done">
-                        {s.score}/{s.maxScore ?? '—'} điểm
-                      </span>
+                      <>
+                        {hasEssay && (() => {
+                          const r = latestRawSub(s.studentId)
+                          const graded = r?.manualScores && Object.keys(r.manualScores).length > 0
+                          return (
+                            <button className={`er-grade-btn ${graded ? 'graded' : ''}`}
+                              title="Chấm câu tự luận (xem ảnh bài làm)"
+                              onClick={() => { if (r) setGradingSub(r) }}>
+                              {graded ? '✅ Đã chấm' : '✍️ Chấm TL'}
+                            </button>
+                          )
+                        })()}
+                        <span className="sub-badge sub-badge--done">
+                          {s.score}/{s.maxScore ?? '—'} điểm
+                        </span>
+                      </>
                     ) : (
                       <span className="sub-badge sub-badge--done">{IC.check(11)} Đã nộp</span>
                     )}
@@ -407,6 +429,14 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, onClos
       {viewGrade && (
         <IeltsGradeModal grade={viewGrade.aiGrade} studentName={viewGrade.studentName}
           taskLabel={taskLabel} onClose={() => setViewGrade(null)} />
+      )}
+      {gradingSub && data?.examObj && (
+        <GradeEssayModal
+          exam={data.examObj}
+          submission={gradingSub}
+          onClose={() => setGradingSub(null)}
+          onSaved={() => { setGradingSub(null); reload() }}
+        />
       )}
       {confirmDel && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !delBusy && setConfirmDel(null)}>

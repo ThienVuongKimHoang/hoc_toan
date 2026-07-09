@@ -132,6 +132,8 @@ ALTER TABLE submissions ADD COLUMN IF NOT EXISTS violation_count INTEGER;
 -- Mỗi bài nộp gắn với MỘT lần giao bài (assignment) — phân biệt khi cùng một đề
 -- được giao nhiều lần trong một lớp. NULL = bài nộp cũ / qua link công khai.
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS assignment_id VARCHAR(50);
+-- Điểm chấm tay cho câu tự luận (GV nhập): { "TL_1": 1.5, ... }. Cộng vào score.
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS manual_scores JSONB DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS classes (
     id            VARCHAR(50)  PRIMARY KEY,
@@ -480,6 +482,7 @@ def _sub_from_row(row: dict) -> dict:
         "className":   r["class_name"],
         "classId":     r["class_id"],
         "assignmentId": r.get("assignment_id"),
+        "manualScores": r.get("manual_scores") or {},
     }
 
 
@@ -691,8 +694,8 @@ def add_submission(exam_id: str, sub: dict) -> int:
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO submissions(exam_id,submitted_at,started_at,time_spent,violation_count,student_name,student_id,
-                    answers,score,max_score,class_name,class_id,assignment_id)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                    answers,score,max_score,class_name,class_id,assignment_id,manual_scores)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
             """, (
                 exam_id, sub.get("submittedAt"),
                 sub.get("startedAt"), sub.get("timeSpent"), sub.get("violationCount"),
@@ -701,6 +704,7 @@ def add_submission(exam_id: str, sub: dict) -> int:
                 sub.get("score"), sub.get("maxScore"),
                 sub.get("className"), sub.get("classId"),
                 sub.get("assignmentId") or None,
+                json.dumps(sub.get("manualScores") or {}, ensure_ascii=False),
             ))
             new_id = cur.fetchone()[0]
             cur.execute(
@@ -723,6 +727,23 @@ def update_submission_score(sub_id, score, max_score) -> bool:
             cur.execute(
                 "UPDATE submissions SET score=%s, max_score=%s WHERE id=%s RETURNING id",
                 (score, max_score, sid),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    return row is not None
+
+
+def update_submission_grade(sub_id, manual_scores: dict, score) -> bool:
+    """Lưu điểm chấm tay câu tự luận + điểm tổng đã cộng cho 1 bài nộp."""
+    try:
+        sid = int(sub_id)
+    except (TypeError, ValueError):
+        return False
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE submissions SET manual_scores=%s, score=%s WHERE id=%s RETURNING id",
+                (json.dumps(manual_scores or {}, ensure_ascii=False), score, sid),
             )
             row = cur.fetchone()
         conn.commit()

@@ -51,6 +51,7 @@ const EMPTY_RESULT = {
     'PHẦN I':   { questions: [], points_per_q: 0.25 },
     'PHẦN II':  { questions: [], points_per_q: 1.0  },
     'PHẦN III': { questions: [], points_per_q: 0.5  },
+    'TỰ LUẬN':  { questions: [], points_per_q: 1.0  },
   },
 }
 

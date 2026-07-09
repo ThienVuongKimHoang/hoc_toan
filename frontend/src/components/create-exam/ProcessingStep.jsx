@@ -24,8 +24,11 @@ export default function ProcessingStep({ events, source }) {
   const pagesDone   = events.filter(e => e.type === 'page_done').length
   const isDone      = events.some(e => e.type === 'done')
   const isError     = events.some(e => e.type === 'error')
-  const totalFound  = events.filter(e => e.type === 'page_done')
+  // Số câu hỏi: chỉ tính các trang câu hỏi, KHÔNG tính trang đáp án (phase 'answers')
+  const totalFound  = events.filter(e => e.type === 'page_done' && e.phase !== 'answers')
                             .reduce((s, e) => s + (e.questions_found ?? 0), 0)
+  const doneEvt     = events.find(e => e.type === 'done')
+  const answersFilled = doneEvt?.answers_filled ?? 0
 
   // Classification phase (after extraction)
   const classifyEvts  = events.filter(e => e.type === 'classifying')
@@ -36,9 +39,9 @@ export default function ProcessingStep({ events, source }) {
   const classifyPct   = classifyTotal > 0 ? Math.round((classifyDone / classifyTotal) * 100) : 0
 
   const extractionDone = pagesDone >= totalPages && totalPages > 0
-  const pct = isClassifying
-    ? 100   // extraction bar stays full during classification
-    : totalPages > 0 ? Math.round((pagesDone / totalPages) * 100) : (isDone ? 100 : 0)
+  const pct = (isDone || isClassifying)
+    ? 100   // đã xong (hoặc đang phân loại): thanh trích xuất đầy 100%
+    : totalPages > 0 ? Math.round((pagesDone / totalPages) * 100) : 0
 
   const pageLog = events
     .filter(e => e.type === 'page_done')
@@ -70,7 +73,10 @@ export default function ProcessingStep({ events, source }) {
         {isError ? (
           <p className="ps-msg error">❌ {errorEvt?.message || 'Đã xảy ra lỗi.'}</p>
         ) : isDone ? (
-          <p className="ps-msg done">✅ Hoàn tất! Trích xuất <strong>{totalFound}</strong> câu hỏi và phân loại chủ đề xong.</p>
+          <p className="ps-msg done">
+            ✅ Hoàn tất! Trích xuất <strong>{totalFound}</strong> câu hỏi và phân loại chủ đề xong.
+            {answersFilled > 0 && <> Tự điền <strong>{answersFilled}</strong> đáp án từ phần ĐÁP ÁN.</>}
+          </p>
         ) : isClassifying ? (
           <p className="ps-msg classifying">🏷️ AI đang phân loại chủ đề và độ khó… ({classifyDone}/{classifyTotal})</p>
         ) : (
