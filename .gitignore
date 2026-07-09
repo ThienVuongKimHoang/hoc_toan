@@ -23,9 +23,17 @@ class_docs/
 src/output/
 src/*.pdf
 
+# Logs
+*.log
+
 # macOS
 .DS_Store
 
 # IDE
 .vscode/
 .idea/
+
+# Claude Code
+.claude/
+CLAUDE.md
+.mcp.json
