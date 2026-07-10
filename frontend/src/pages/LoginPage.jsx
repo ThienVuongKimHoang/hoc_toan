@@ -290,7 +290,7 @@ function LoginPage({ onLogin, onGoHome }) {
         {/* Left panel */}
         <div className="login-left">
           <button className="login-logo" onClick={onGoHome}>
-            <span>☀️</span>
+            <img className="login-logo-icon" src="/img/logo.png" alt="Trung tâm Ánh Sáng" />
             <span>Trung tâm <b>Ánh Sáng</b></span>
           </button>
           <h2>Luyện đề thi Toán THPT<br />thông minh hơn mỗi ngày</h2>
