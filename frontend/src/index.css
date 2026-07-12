@@ -4037,6 +4037,52 @@ button { font-family: inherit; }
   font-size: 0.92rem;
   margin: -4px 0 20px;
 }
+/* Bước 1 — chọn môn */
+.cec-subject-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.cec-subject-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 22px 12px;
+  border: none;
+  border-radius: 14px;
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s, box-shadow 0.12s, filter 0.12s;
+}
+.cec-subject-card:hover { transform: translateY(-3px); filter: brightness(1.05); }
+.cec-subject-icon  { font-size: 1.9rem; line-height: 1; }
+.cec-subject-label { font-size: 0.95rem; font-weight: 800; }
+/* Bước 2 — đầu trang: đổi môn + môn đã chọn */
+.cec-step2-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.cec-back-btn {
+  border: 1.5px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.12s;
+}
+.cec-back-btn:hover { background: #e2e8f0; }
+@media (max-width: 520px) {
+  .cec-subject-grid { grid-template-columns: repeat(2, 1fr); }
+}
 .cec-choices {
   display: flex;
   flex-direction: column;
@@ -7815,6 +7861,17 @@ button { font-family: inherit; }
   align-items: center;
   gap: 10px;
   margin-top: 4px;
+}
+.rs-subject-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 .rs-grade-toggle {
   display: flex;

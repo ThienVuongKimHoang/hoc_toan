@@ -54,12 +54,13 @@ export async function fetchExamsByTeacher(userId) {
 }
 
 /** Tạo đề thi mới từ kết quả extraction */
-export function createExam({ title, result, userId }) {
+export function createExam({ title, result, userId, subject = 'toan' }) {
   const id = genId()
   const exam = {
     id,
     title,
     createdBy:      userId,
+    subject,
     createdAt:      new Date().toISOString(),
     source:         result.source,
     totalQuestions: result.total_questions,

@@ -237,3 +237,372 @@ export const THPT_TOPICS = THPT_LABEL_GROUPS.flatMap(g =>
 export const THCS_TOPICS = THCS_LABEL_GROUPS.flatMap(g =>
   g.topics.map(t => ({ topic: t, group: g.group, grade: 'thcs' }))
 )
+
+/* ══════════════════════════════════════════════════════════════════════
+   VẬT LÝ
+══════════════════════════════════════════════════════════════════════ */
+export const LY_THPT_LABEL_GROUPS = [
+  {
+    group: 'Động học',
+    topics: [
+      'Chuyển động thẳng', 'Chuyển động biến đổi đều', 'Chuyển động rơi tự do',
+      'Chuyển động tròn đều', 'Đồ thị chuyển động',
+    ],
+  },
+  {
+    group: 'Động lực học',
+    topics: [
+      'Ba định luật Newton', 'Các loại lực', 'Lực ma sát', 'Lực đàn hồi',
+      'Lực hấp dẫn', 'Lực hướng tâm', 'Cân bằng lực',
+    ],
+  },
+  {
+    group: 'Công – Năng lượng',
+    topics: [
+      'Công', 'Công suất', 'Động năng', 'Thế năng', 'Cơ năng',
+      'Định luật bảo toàn năng lượng', 'Hiệu suất',
+    ],
+  },
+  {
+    group: 'Động lượng',
+    topics: ['Động lượng', 'Xung lượng', 'Va chạm', 'Định luật bảo toàn động lượng'],
+  },
+  {
+    group: 'Dao động',
+    topics: [
+      'Dao động điều hòa', 'Con lắc lò xo', 'Con lắc đơn', 'Pha dao động',
+      'Năng lượng dao động', 'Dao động tắt dần', 'Dao động cưỡng bức', 'Cộng hưởng',
+    ],
+  },
+  {
+    group: 'Sóng cơ',
+    topics: [
+      'Sóng cơ', 'Bước sóng', 'Tần số', 'Giao thoa', 'Sóng dừng',
+      'Sóng âm', 'Hiệu ứng Doppler',
+    ],
+  },
+  {
+    group: 'Nhiệt học',
+    topics: [
+      'Nội năng', 'Chất khí', 'Phương trình trạng thái',
+      'Các quá trình nhiệt', 'Nguyên lý nhiệt động lực học',
+    ],
+  },
+  {
+    group: 'Điện trường',
+    topics: [
+      'Điện tích', 'Định luật Coulomb', 'Điện trường', 'Cường độ điện trường',
+      'Điện thế', 'Hiệu điện thế', 'Tụ điện',
+    ],
+  },
+  {
+    group: 'Dòng điện một chiều',
+    topics: [
+      'Dòng điện', 'Định luật Ohm', 'Ghép điện trở', 'Suất điện động',
+      'Công của dòng điện', 'Công suất điện',
+    ],
+  },
+  {
+    group: 'Từ trường',
+    topics: ['Nam châm', 'Từ trường', 'Cảm ứng từ', 'Lực từ', 'Lực Lorentz'],
+  },
+  {
+    group: 'Cảm ứng điện từ',
+    topics: ['Từ thông', 'Định luật Faraday', 'Định luật Lenz', 'Suất điện động cảm ứng'],
+  },
+  {
+    group: 'Dòng điện xoay chiều',
+    topics: [
+      'Mạch RLC', 'Cộng hưởng điện', 'Công suất AC', 'Hệ số công suất',
+      'Máy biến áp', 'Truyền tải điện năng',
+    ],
+  },
+  {
+    group: 'Quang học',
+    topics: [
+      'Phản xạ', 'Khúc xạ', 'Thấu kính', 'Mắt', 'Dụng cụ quang',
+      'Giao thoa ánh sáng', 'Nhiễu xạ', 'Tán sắc',
+    ],
+  },
+  {
+    group: 'Lượng tử ánh sáng',
+    topics: ['Photon', 'Hiệu ứng quang điện', 'Quang phổ', 'Laser'],
+  },
+  {
+    group: 'Vật lý hạt nhân',
+    topics: [
+      'Cấu tạo hạt nhân', 'Độ hụt khối', 'Năng lượng liên kết', 'Phóng xạ',
+      'Phản ứng hạt nhân', 'Phân hạch', 'Nhiệt hạch',
+    ],
+  },
+  {
+    group: 'Thực hành và xử lý số liệu',
+    topics: ['Sai số', 'Đồ thị', 'Thí nghiệm', 'Phân tích kết quả'],
+  },
+]
+
+export const LY_THCS_LABEL_GROUPS = [
+  {
+    group: 'Đo lường',
+    topics: [
+      'Đơn vị đo (SI)', 'Đo chiều dài', 'Đo khối lượng', 'Đo thời gian',
+      'Đo nhiệt độ', 'Sai số đo', 'Dụng cụ đo',
+    ],
+  },
+  {
+    group: 'Chuyển động',
+    topics: [
+      'Chuyển động và đứng yên', 'Quãng đường', 'Tốc độ', 'Vận tốc',
+      'Đồ thị chuyển động (cơ bản)',
+    ],
+  },
+  {
+    group: 'Lực',
+    topics: [
+      'Khái niệm lực', 'Biểu diễn lực', 'Hợp lực', 'Cân bằng lực',
+      'Lực ma sát', 'Lực đàn hồi', 'Trọng lực', 'Áp suất',
+    ],
+  },
+  {
+    group: 'Công và năng lượng',
+    topics: [
+      'Công cơ học', 'Công suất', 'Cơ năng', 'Động năng', 'Thế năng',
+      'Chuyển hóa năng lượng', 'Hiệu suất',
+    ],
+  },
+  {
+    group: 'Nhiệt học',
+    topics: [
+      'Nhiệt năng', 'Nhiệt lượng', 'Dẫn nhiệt', 'Đối lưu', 'Bức xạ nhiệt',
+      'Nở vì nhiệt', 'Sự nóng chảy', 'Sự đông đặc', 'Bay hơi', 'Ngưng tụ', 'Sôi',
+    ],
+  },
+  {
+    group: 'Âm học',
+    topics: [
+      'Nguồn âm', 'Độ cao của âm', 'Độ to của âm', 'Môi trường truyền âm',
+      'Phản xạ âm', 'Chống ô nhiễm tiếng ồn',
+    ],
+  },
+  {
+    group: 'Quang học',
+    topics: [
+      'Nguồn sáng', 'Tia sáng', 'Bóng tối', 'Nhật thực, nguyệt thực',
+      'Phản xạ ánh sáng', 'Gương phẳng', 'Gương cầu lồi', 'Gương cầu lõm',
+      'Khúc xạ ánh sáng', 'Thấu kính hội tụ', 'Thấu kính phân kỳ', 'Mắt', 'Kính lúp',
+    ],
+  },
+  {
+    group: 'Điện học',
+    topics: [
+      'Điện tích', 'Dòng điện', 'Nguồn điện', 'Mạch điện', 'Cường độ dòng điện',
+      'Hiệu điện thế', 'Điện trở', 'Định luật Ôm (mức cơ bản)', 'Công suất điện',
+      'Điện năng', 'An toàn điện',
+    ],
+  },
+  {
+    group: 'Từ học',
+    topics: ['Nam châm', 'Từ trường', 'Đường sức từ', 'Từ trường của dòng điện', 'Nam châm điện'],
+  },
+  {
+    group: 'Điện từ học',
+    topics: [
+      'Cảm ứng điện từ (giới thiệu)', 'Máy phát điện', 'Động cơ điện',
+      'Máy biến áp (giới thiệu)',
+    ],
+  },
+  {
+    group: 'Năng lượng và ứng dụng',
+    topics: [
+      'Các dạng năng lượng', 'Chuyển hóa năng lượng', 'Năng lượng tái tạo',
+      'Tiết kiệm năng lượng',
+    ],
+  },
+]
+
+/* ══════════════════════════════════════════════════════════════════════
+   HÓA HỌC
+══════════════════════════════════════════════════════════════════════ */
+export const HOA_THPT_LABEL_GROUPS = [
+  {
+    group: 'Cấu tạo nguyên tử',
+    topics: ['Thành phần nguyên tử', 'Đồng vị', 'Cấu hình electron', 'Electron hóa trị', 'Số oxi hóa'],
+  },
+  {
+    group: 'Bảng tuần hoàn các nguyên tố hóa học',
+    topics: [
+      'Ô nguyên tố', 'Chu kỳ', 'Nhóm', 'Quy luật biến đổi', 'Bán kính nguyên tử',
+      'Độ âm điện', 'Năng lượng ion hóa',
+    ],
+  },
+  {
+    group: 'Liên kết hóa học',
+    topics: [
+      'Liên kết ion', 'Liên kết cộng hóa trị', 'Liên kết kim loại',
+      'Liên kết hiđro', 'Lewis', 'Hình học phân tử',
+    ],
+  },
+  {
+    group: 'Phản ứng hóa học',
+    topics: ['Phản ứng oxi hóa – khử', 'Cân bằng phương trình', 'Nhiệt hóa học', 'Entanpi (mức cơ bản)'],
+  },
+  {
+    group: 'Tốc độ phản ứng và cân bằng hóa học',
+    topics: ['Tốc độ phản ứng', 'Các yếu tố ảnh hưởng', 'Cân bằng hóa học', 'Nguyên lý Le Chatelier'],
+  },
+  {
+    group: 'Dung dịch và điện li',
+    topics: ['Chất điện li', 'Axit', 'Bazơ', 'Muối', 'pH', 'Thủy phân muối', 'Chuẩn độ axit – bazơ'],
+  },
+  {
+    group: 'Điện hóa học',
+    topics: ['Pin điện', 'Điện phân', 'Ăn mòn kim loại', 'Bảo vệ kim loại'],
+  },
+  {
+    group: 'Kim loại',
+    topics: [
+      'Tính chất vật lí', 'Tính chất hóa học', 'Dãy hoạt động hóa học', 'Điều chế kim loại',
+      'Hợp kim', 'Kim loại kiềm', 'Kim loại kiềm thổ', 'Nhôm', 'Sắt', 'Crom',
+    ],
+  },
+  {
+    group: 'Phi kim',
+    topics: [
+      'Halogen', 'Oxi', 'Lưu huỳnh', 'Nitơ', 'Photpho', 'Cacbon', 'Silic',
+      'Một số hợp chất quan trọng',
+    ],
+  },
+  {
+    group: 'Đại cương hóa học hữu cơ',
+    topics: ['Đặc điểm hợp chất hữu cơ', 'Đồng đẳng', 'Đồng phân', 'Danh pháp', 'Công thức cấu tạo'],
+  },
+  {
+    group: 'Hiđrocacbon',
+    topics: ['Ankan', 'Anken', 'Ankin', 'Aren (Benzen)'],
+  },
+  {
+    group: 'Dẫn xuất hiđrocacbon',
+    topics: [
+      'Dẫn xuất halogen', 'Ancol', 'Phenol', 'Andehit', 'Xeton',
+      'Axit cacboxylic', 'Este',
+    ],
+  },
+  {
+    group: 'Hợp chất chứa nitơ',
+    topics: ['Amin', 'Amino axit', 'Peptit', 'Protein'],
+  },
+  {
+    group: 'Carbohydrate',
+    topics: ['Glucozơ', 'Fructozơ', 'Saccarozơ', 'Tinh bột', 'Xenlulozơ'],
+  },
+  {
+    group: 'Polime',
+    topics: ['Trùng hợp', 'Trùng ngưng', 'Chất dẻo', 'Cao su', 'Tơ'],
+  },
+  {
+    group: 'Hóa học và đời sống',
+    topics: ['Phân bón', 'Hóa học môi trường', 'Hóa học xanh', 'Vật liệu mới', 'Năng lượng'],
+  },
+  {
+    group: 'Tính toán hóa học',
+    topics: [
+      'Mol', 'Hiệu suất phản ứng', 'Nồng độ dung dịch', 'Bảo toàn khối lượng',
+      'Bảo toàn nguyên tố', 'Bảo toàn electron', 'Bài toán hỗn hợp',
+      'Bài toán khí', 'Bài toán dung dịch',
+    ],
+  },
+]
+
+export const HOA_THCS_LABEL_GROUPS = [
+  {
+    group: 'Chất và sự biến đổi của chất',
+    topics: [
+      'Chất', 'Tính chất của chất', 'Chất tinh khiết', 'Hỗn hợp', 'Tách chất',
+      'Hiện tượng vật lí', 'Hiện tượng hóa học',
+    ],
+  },
+  {
+    group: 'Nguyên tử và nguyên tố hóa học',
+    topics: [
+      'Nguyên tử', 'Cấu tạo nguyên tử', 'Nguyên tố hóa học', 'Ký hiệu hóa học',
+      'Nguyên tử khối', 'Phân tử', 'Phân tử khối',
+    ],
+  },
+  {
+    group: 'Công thức hóa học',
+    topics: ['Hóa trị', 'Lập công thức hóa học', 'Tính theo công thức hóa học', 'Ý nghĩa của công thức hóa học'],
+  },
+  {
+    group: 'Phản ứng hóa học',
+    topics: [
+      'Phương trình hóa học', 'Cân bằng phương trình', 'Định luật bảo toàn khối lượng',
+      'Các loại phản ứng hóa học',
+    ],
+  },
+  {
+    group: 'Mol và tính toán hóa học',
+    topics: [
+      'Mol', 'Khối lượng mol', 'Thể tích mol chất khí',
+      'Chuyển đổi giữa mol – khối lượng – thể tích', 'Tính theo phương trình hóa học',
+    ],
+  },
+  {
+    group: 'Oxi – Không khí',
+    topics: ['Tính chất của oxi', 'Điều chế oxi', 'Không khí', 'Ozon', 'Sự cháy', 'Sự oxi hóa'],
+  },
+  {
+    group: 'Hiđro và nước',
+    topics: [
+      'Hiđro', 'Điều chế hiđro', 'Phản ứng oxi hóa – khử (mức cơ bản)',
+      'Nước', 'Vai trò của nước',
+    ],
+  },
+  {
+    group: 'Dung dịch',
+    topics: ['Dung môi', 'Chất tan', 'Độ tan', 'Nồng độ phần trăm', 'Nồng độ mol', 'Pha chế dung dịch'],
+  },
+  {
+    group: 'Axit – Bazơ – Muối',
+    topics: [
+      'Axit', 'Bazơ', 'Muối', 'Thang pH', 'Chỉ thị màu',
+      'Phản ứng trung hòa', 'Phản ứng trao đổi',
+    ],
+  },
+  {
+    group: 'Kim loại',
+    topics: [
+      'Tính chất vật lí', 'Tính chất hóa học', 'Dãy hoạt động hóa học',
+      'Điều chế kim loại', 'Hợp kim', 'Ăn mòn kim loại',
+    ],
+  },
+  {
+    group: 'Phi kim',
+    topics: ['Tính chất của phi kim', 'Clo', 'Cacbon', 'Silic', 'Một số hợp chất quan trọng'],
+  },
+  {
+    group: 'Hóa học hữu cơ',
+    topics: ['Hợp chất hữu cơ', 'Metan', 'Etilen', 'Axetilen', 'Benzen', 'Nhiên liệu'],
+  },
+]
+
+/* ══════════════════════════════════════════════════════════════════════
+   Tra cứu nhãn theo môn + cấp học.
+   Mỗi môn có bộ nhãn THPT và THCS riêng. Môn không có nhãn (anh, văn…) → null.
+══════════════════════════════════════════════════════════════════════ */
+export const SUBJECT_LABEL_GROUPS = {
+  toan: { thpt: THPT_LABEL_GROUPS,     thcs: THCS_LABEL_GROUPS },
+  ly:   { thpt: LY_THPT_LABEL_GROUPS,  thcs: LY_THCS_LABEL_GROUPS },
+  hoa:  { thpt: HOA_THPT_LABEL_GROUPS, thcs: HOA_THCS_LABEL_GROUPS },
+}
+
+/** Nhãn chủ đề cho môn + cấp học. Trả [] nếu môn chưa có bộ nhãn (Anh, Văn…). */
+export function getLabelGroups(subject = 'toan', grade = 'thpt') {
+  const bySubject = SUBJECT_LABEL_GROUPS[subject]
+  if (!bySubject) return []
+  return bySubject[grade === 'thcs' ? 'thcs' : 'thpt'] || []
+}
+
+/** Môn có bộ nhãn chủ đề để phân loại hay không (Toán/Lý/Hóa có; Anh/Văn chưa). */
+export function subjectHasLabels(subject) {
+  return !!SUBJECT_LABEL_GROUPS[subject]
+}

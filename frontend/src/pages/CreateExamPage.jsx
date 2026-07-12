@@ -63,10 +63,12 @@ const EMPTY_RESULT = {
  *   manualMode    — bắt đầu ở bước soạn thảo với đề trống (optional)
  *   mixResult     — pre-filled result từ Phối đề ngẫu nhiên (optional)
  */
-export default function CreateExamPage({ user, onGoMyExams, editingExam, manualMode, mixResult }) {
+export default function CreateExamPage({ user, onGoMyExams, editingExam, manualMode, mixResult, subject = 'toan' }) {
   const isEditing = !!editingExam
   const isManual  = !!manualMode && !isEditing
   const isMix     = !!mixResult && !isEditing && !isManual
+  // Môn của đề: khi sửa lấy từ đề đã lưu, khi tạo mới lấy từ lựa chọn ban đầu
+  const examSubject = (isEditing ? editingExam.subject : subject) || 'toan'
 
   const initialResult = isEditing
     ? { source: editingExam.source, total_questions: editingExam.totalQuestions, sections: editingExam.sections }
@@ -92,6 +94,7 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
 
     const form = new FormData()
     form.append('file', file)
+    form.append('subject', examSubject)
     let taskId
     try {
       const res  = await fetch('/api/extract', { method: 'POST', body: form })
@@ -120,7 +123,7 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
       sse.close(); setPhase('upload')
       setEvents(prev => [...prev, { type: 'error', message: 'Mất kết nối với server.' }])
     }
-  }, [])
+  }, [examSubject])
 
   /* ── Helpers để sync exam lên server ── */
   const syncToServer = (exam) =>
@@ -138,7 +141,7 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
       exam = updateExam(editingExam.id, { title: t, result: edited })
     } else {
       // Manual mode: tạo đề mới và lưu vào localStorage (chưa publish)
-      exam = createExam({ title: t, result: edited, userId: user.id })
+      exam = createExam({ title: t, result: edited, userId: user.id, subject: examSubject })
     }
     const res = await syncToServer(exam)
     if (res?.rescored > 0) {
@@ -155,7 +158,7 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
       exam = updateExam(editingExam.id, { title: t, result: edited })
       syncToServer(exam)
     } else {
-      exam = createExam({ title: t, result: edited, userId: user.id })
+      exam = createExam({ title: t, result: edited, userId: user.id, subject: examSubject })
     }
     setEditedResult(edited)
     setSavedExam(exam)
@@ -204,6 +207,7 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
           <ReviewStep
             result={result}
             title={title}
+            subject={examSubject}
             onTitleChange={setTitle}
             onPreview={handlePreview}
             onPublish={handlePublish}

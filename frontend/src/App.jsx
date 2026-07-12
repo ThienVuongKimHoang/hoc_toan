@@ -198,6 +198,7 @@ export default function App() {
   const [editingExam, setEditingExam] = useState(null)
   const [resultsExam, setResultsExam] = useState(null)
   const [manualMode, setManualMode] = useState(false)
+  const [examSubject, setExamSubject] = useState('toan')
   const [mixResult, setMixResult] = useState(null)
   const [showMixStandalone, setShowMixStandalone] = useState(false)
   const [showCreateChoice, setShowCreateChoice] = useState(false)
@@ -273,8 +274,9 @@ export default function App() {
     setShowCreateChoice(true)
   }
 
-  const handleCreateChoice = (choice) => {
+  const handleCreateChoice = (choice, subject = 'toan') => {
     setShowCreateChoice(false)
+    setExamSubject(subject)
     if (choice === 'mix') {
       setShowMixStandalone(true)
       return
@@ -435,6 +437,7 @@ export default function App() {
   const mixStandaloneModal = showMixStandalone && (
     <MixExamModal
       standalone
+      subject={examSubject}
       onClose={() => setShowMixStandalone(false)}
       onAddQuestions={handleMixComplete}
     />
@@ -573,6 +576,7 @@ export default function App() {
           onGoMyExams={() => { setMixResult(null); goMyExams() }}
           manualMode={manualMode}
           mixResult={mixResult}
+          subject={examSubject}
         />
         {mixStandaloneModal}
         {teacherToolOverlays}

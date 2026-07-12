@@ -1,4 +1,8 @@
-import React from 'react'
+import React, { useState } from 'react'
+import { SUBJECTS } from './SubjectBadge.jsx'
+
+/* Các môn có thể tạo đề (giống loại hình lớp học) */
+const SUBJECT_CHOICES = ['toan', 'ly', 'hoa', 'anh', 'van']
 
 const CHOICES = [
   {
@@ -34,6 +38,8 @@ const CHOICES = [
 ]
 
 export default function CreateExamChoiceModal({ onChoice, onClose }) {
+  const [subject, setSubject] = useState(null)
+
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-box cec-box">
@@ -42,30 +48,61 @@ export default function CreateExamChoiceModal({ onChoice, onClose }) {
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
-        <p className="cec-subtitle">Chọn cách bạn muốn tạo đề thi</p>
+        {!subject ? (
+          <>
+            {/* Bước 1 — chọn môn */}
+            <p className="cec-subtitle">Bạn muốn tạo đề môn gì?</p>
+            <div className="cec-subject-grid">
+              {SUBJECT_CHOICES.map(key => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`cec-subject-card subject-badge--${key}`}
+                  onClick={() => setSubject(key)}
+                >
+                  <span className="cec-subject-icon">{SUBJECTS[key].icon}</span>
+                  <span className="cec-subject-label">{SUBJECTS[key].label}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Bước 2 — chọn cách tạo */}
+            <div className="cec-step2-head">
+              <button className="cec-back-btn" type="button" onClick={() => setSubject(null)}>
+                ← Đổi môn
+              </button>
+              <span className={`rs-subject-pill subject-badge--${subject}`}>
+                {SUBJECTS[subject].icon} {SUBJECTS[subject].label}
+              </span>
+            </div>
+            <p className="cec-subtitle">Chọn cách bạn muốn tạo đề thi</p>
 
-        <div className="cec-choices">
-          {CHOICES.map(c => (
-            <button
-              key={c.id}
-              className="cec-card"
-              style={{ '--cec-color': c.color, '--cec-bg': c.bg, '--cec-border': c.border }}
-              onClick={() => onChoice(c.id)}
-            >
-              <div className="cec-card-icon">{c.icon}</div>
-              <div className="cec-card-body">
-                <div className="cec-card-title">{c.title}</div>
-                <div className="cec-card-desc">{c.desc}</div>
-                <div className="cec-card-tags">
-                  {c.tags.map(t => (
-                    <span key={t} className="cec-tag">{t}</span>
-                  ))}
-                </div>
-              </div>
-              <div className="cec-card-arrow">→</div>
-            </button>
-          ))}
-        </div>
+            <div className="cec-choices">
+              {CHOICES.map(c => (
+                <button
+                  key={c.id}
+                  className="cec-card"
+                  style={{ '--cec-color': c.color, '--cec-bg': c.bg, '--cec-border': c.border }}
+                  onClick={() => onChoice(c.id, subject)}
+                >
+                  <div className="cec-card-icon">{c.icon}</div>
+                  <div className="cec-card-body">
+                    <div className="cec-card-title">{c.title}</div>
+                    <div className="cec-card-desc">{c.desc}</div>
+                    <div className="cec-card-tags">
+                      {c.tags.map(t => (
+                        <span key={t} className="cec-tag">{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="cec-card-arrow">→</div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

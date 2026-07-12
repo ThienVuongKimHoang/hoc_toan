@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { DIFFICULTY_LEVELS, THPT_LABEL_GROUPS, THCS_LABEL_GROUPS } from '../data/labels.js'
+import { DIFFICULTY_LEVELS, getLabelGroups, subjectHasLabels } from '../data/labels.js'
+import { SUBJECTS } from './SubjectBadge.jsx'
 
 function CloseIcon() {
   return (
@@ -163,7 +164,7 @@ function ResultPreview({ questions, onAdd, onClose, confirmLabel = 'Thêm vào �
 }
 
 /* ── Main Modal ── */
-export default function MixExamModal({ grade: initialGrade = 'thpt', onClose, onAddQuestions, standalone = false }) {
+export default function MixExamModal({ subject = 'toan', grade: initialGrade = 'thpt', onClose, onAddQuestions, standalone = false }) {
   const [grade,      setGrade]      = useState(initialGrade)
   const [criteria,   setCriteria]   = useState([
     { topic: '', level: null, count: 3 },
@@ -172,7 +173,7 @@ export default function MixExamModal({ grade: initialGrade = 'thpt', onClose, on
   const [result,     setResult]     = useState(null)
   const [error,      setError]      = useState(null)
 
-  const groups = grade === 'thcs' ? THCS_LABEL_GROUPS : THPT_LABEL_GROUPS
+  const groups = getLabelGroups(subject, grade)
 
   const addCriterion = () =>
     setCriteria(prev => [...prev, { topic: '', level: null, count: 3 }])
@@ -195,6 +196,7 @@ export default function MixExamModal({ grade: initialGrade = 'thpt', onClose, on
         if (!c.topic) continue
         const params = new URLSearchParams({ limit: c.count })
         params.set('topic', c.topic)
+        if (subject) params.set('subject', subject)
         if (c.level) params.set('level', c.level)
         const res = await fetch(`/api/questions/bank?${params}`)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -219,15 +221,24 @@ export default function MixExamModal({ grade: initialGrade = 'thpt', onClose, on
           <button className="mix-modal-close" onClick={onClose} type="button"><CloseIcon /></button>
         </div>
 
-        {/* Grade toggle */}
+        {/* Subject + grade toggle */}
         <div className="mix-grade-row">
-          <span className="mix-grade-label">Cấp học:</span>
-          <div className="mix-grade-toggle">
-            <button className={`rs-grade-btn ${grade === 'thpt' ? 'active' : ''}`}
-              onClick={() => setGrade('thpt')} type="button">THPT</button>
-            <button className={`rs-grade-btn ${grade === 'thcs' ? 'active' : ''}`}
-              onClick={() => setGrade('thcs')} type="button">THCS</button>
-          </div>
+          {SUBJECTS[subject] && (
+            <span className={`rs-subject-pill subject-badge--${subject}`}>
+              {SUBJECTS[subject].icon} {SUBJECTS[subject].label}
+            </span>
+          )}
+          {subjectHasLabels(subject) && (
+            <>
+              <span className="mix-grade-label">Cấp học:</span>
+              <div className="mix-grade-toggle">
+                <button className={`rs-grade-btn ${grade === 'thpt' ? 'active' : ''}`}
+                  onClick={() => setGrade('thpt')} type="button">THPT</button>
+                <button className={`rs-grade-btn ${grade === 'thcs' ? 'active' : ''}`}
+                  onClick={() => setGrade('thcs')} type="button">THCS</button>
+              </div>
+            </>
+          )}
           <span className="mix-hint">
             Hệ thống sẽ chọn ngẫu nhiên từ ngân hàng câu hỏi đã được gán nhãn.
           </span>

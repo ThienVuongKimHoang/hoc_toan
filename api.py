@@ -71,8 +71,10 @@ async def _startup():
 
 _CLASSIFY_BATCH = 15   # câu mỗi lần gọi Groq
 
-def _classify_inplace(groq_client, questions: list, task: dict) -> None:
-    """Phân loại topic + difficulty cho toàn bộ questions (sửa in-place). Non-fatal."""
+def _classify_inplace(groq_client, questions: list, task: dict, subject: str = "toan") -> None:
+    """Phân loại topic + difficulty cho toàn bộ questions (sửa in-place). Non-fatal.
+    Đề trích từ PDF mặc định là cấp THPT."""
+    topic_list, subject_name = _topic_list_for(subject, "thpt")
     total = len(questions)
     done  = 0
     for batch_start in range(0, total, _CLASSIFY_BATCH):
@@ -83,9 +85,9 @@ def _classify_inplace(groq_client, questions: list, task: dict) -> None:
                 text = (q.get("question_text") or "").strip()[:250]
                 lines.append(f"{i+1}. {text}")
             q_str     = "\n".join(lines)
-            topics_str = "\n".join(f"- {t}" for t in THPT_TOPIC_LIST)
+            topics_str = "\n".join(f"- {t}" for t in topic_list)
             prompt = (
-                f"Phân loại {len(batch)} câu hỏi toán THPT theo 4 mức độ nhận thức của Bộ GD&ĐT Việt Nam. "
+                f"Phân loại {len(batch)} câu hỏi {subject_name} THPT theo 4 mức độ nhận thức của Bộ GD&ĐT Việt Nam. "
                 f"Trả về JSON array có đúng {len(batch)} phần tử, không giải thích.\n\n"
                 f"Câu hỏi:\n{q_str}\n\n"
                 f"Chủ đề hợp lệ:\n{topics_str}\n\n"
@@ -188,10 +190,13 @@ def _apply_math_answer_key(result: dict, answers: dict) -> int:
     return filled
 
 
-def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "") -> None:
-    """Chạy trong thread pool; cập nhật TASKS[task_id] theo thời gian thực."""
+def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "", exam_subject: str = "toan") -> None:
+    """Chạy trong thread pool; cập nhật TASKS[task_id] theo thời gian thực.
+    `exam_subject` (toan|ly|hoa…) do GV chọn khi tạo — quyết định bộ nhãn khi auto-phân loại;
+    khác với `subject` phát hiện từ nội dung PDF (math|english) dùng để chọn pipeline trích xuất."""
     task = TASKS[task_id]
     task["status"] = "running"
+    task["subject"] = exam_subject
     source_name = original_name or pdf_path.name
     try:
         IMAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -341,7 +346,7 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "") -> No
         all_qs_flat = [q for sec_data in result["sections"].values() for q in sec_data["questions"]]
         if all_qs_flat:
             task["progress"].append({"type": "classifying", "done": 0, "total": len(all_qs_flat)})
-            _classify_inplace(client, all_qs_flat, task)
+            _classify_inplace(client, all_qs_flat, task, exam_subject)
 
         task["result"] = result
         task["status"] = "done"
@@ -361,7 +366,11 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "") -> No
 
 
 @app.post("/api/extract")
-async def extract(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def extract(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    subject: str = Form("toan"),
+):
     """Nhận PDF upload, bắt đầu trích xuất nền, trả về task_id."""
     task_id = str(uuid.uuid4())
     TASKS[task_id] = {"status": "pending", "progress": [], "result": None, "error": None}
@@ -373,7 +382,7 @@ async def extract(background_tasks: BackgroundTasks, file: UploadFile = File(...
     tmp.write(content)
     tmp.close()
 
-    background_tasks.add_task(_run_extraction, task_id, Path(tmp.name), original_name)
+    background_tasks.add_task(_run_extraction, task_id, Path(tmp.name), original_name, subject)
     return {"task_id": task_id}
 
 
@@ -2492,6 +2501,117 @@ THCS_TOPIC_LIST = [
     'Chuyển động','Năng suất','Công việc','Lãi suất','Hình học thực tế','Thống kê thực tế',
 ]
 
+# ── VẬT LÝ ──────────────────────────────────────────────────────────────────────
+LY_THPT_TOPIC_LIST = [
+    'Chuyển động thẳng','Chuyển động biến đổi đều','Chuyển động rơi tự do',
+    'Chuyển động tròn đều','Đồ thị chuyển động',
+    'Ba định luật Newton','Các loại lực','Lực ma sát','Lực đàn hồi',
+    'Lực hấp dẫn','Lực hướng tâm','Cân bằng lực',
+    'Công','Công suất','Động năng','Thế năng','Cơ năng',
+    'Định luật bảo toàn năng lượng','Hiệu suất',
+    'Động lượng','Xung lượng','Va chạm','Định luật bảo toàn động lượng',
+    'Dao động điều hòa','Con lắc lò xo','Con lắc đơn','Pha dao động',
+    'Năng lượng dao động','Dao động tắt dần','Dao động cưỡng bức','Cộng hưởng',
+    'Sóng cơ','Bước sóng','Tần số','Giao thoa','Sóng dừng','Sóng âm','Hiệu ứng Doppler',
+    'Nội năng','Chất khí','Phương trình trạng thái','Các quá trình nhiệt',
+    'Nguyên lý nhiệt động lực học',
+    'Điện tích','Định luật Coulomb','Điện trường','Cường độ điện trường',
+    'Điện thế','Hiệu điện thế','Tụ điện',
+    'Dòng điện','Định luật Ohm','Ghép điện trở','Suất điện động',
+    'Công của dòng điện','Công suất điện',
+    'Nam châm','Từ trường','Cảm ứng từ','Lực từ','Lực Lorentz',
+    'Từ thông','Định luật Faraday','Định luật Lenz','Suất điện động cảm ứng',
+    'Mạch RLC','Cộng hưởng điện','Công suất AC','Hệ số công suất',
+    'Máy biến áp','Truyền tải điện năng',
+    'Phản xạ','Khúc xạ','Thấu kính','Mắt','Dụng cụ quang',
+    'Giao thoa ánh sáng','Nhiễu xạ','Tán sắc',
+    'Photon','Hiệu ứng quang điện','Quang phổ','Laser',
+    'Cấu tạo hạt nhân','Độ hụt khối','Năng lượng liên kết','Phóng xạ',
+    'Phản ứng hạt nhân','Phân hạch','Nhiệt hạch',
+    'Sai số','Đồ thị','Thí nghiệm','Phân tích kết quả',
+]
+LY_THCS_TOPIC_LIST = [
+    'Đơn vị đo (SI)','Đo chiều dài','Đo khối lượng','Đo thời gian',
+    'Đo nhiệt độ','Sai số đo','Dụng cụ đo',
+    'Chuyển động và đứng yên','Quãng đường','Tốc độ','Vận tốc','Đồ thị chuyển động (cơ bản)',
+    'Khái niệm lực','Biểu diễn lực','Hợp lực','Cân bằng lực',
+    'Lực ma sát','Lực đàn hồi','Trọng lực','Áp suất',
+    'Công cơ học','Công suất','Cơ năng','Động năng','Thế năng',
+    'Chuyển hóa năng lượng','Hiệu suất',
+    'Nhiệt năng','Nhiệt lượng','Dẫn nhiệt','Đối lưu','Bức xạ nhiệt',
+    'Nở vì nhiệt','Sự nóng chảy','Sự đông đặc','Bay hơi','Ngưng tụ','Sôi',
+    'Nguồn âm','Độ cao của âm','Độ to của âm','Môi trường truyền âm',
+    'Phản xạ âm','Chống ô nhiễm tiếng ồn',
+    'Nguồn sáng','Tia sáng','Bóng tối','Nhật thực, nguyệt thực',
+    'Phản xạ ánh sáng','Gương phẳng','Gương cầu lồi','Gương cầu lõm',
+    'Khúc xạ ánh sáng','Thấu kính hội tụ','Thấu kính phân kỳ','Mắt','Kính lúp',
+    'Điện tích','Dòng điện','Nguồn điện','Mạch điện','Cường độ dòng điện',
+    'Hiệu điện thế','Điện trở','Định luật Ôm (mức cơ bản)','Công suất điện',
+    'Điện năng','An toàn điện',
+    'Nam châm','Từ trường','Đường sức từ','Từ trường của dòng điện','Nam châm điện',
+    'Cảm ứng điện từ (giới thiệu)','Máy phát điện','Động cơ điện','Máy biến áp (giới thiệu)',
+    'Các dạng năng lượng','Năng lượng tái tạo','Tiết kiệm năng lượng',
+]
+
+# ── HÓA HỌC ─────────────────────────────────────────────────────────────────────
+HOA_THPT_TOPIC_LIST = [
+    'Thành phần nguyên tử','Đồng vị','Cấu hình electron','Electron hóa trị','Số oxi hóa',
+    'Ô nguyên tố','Chu kỳ','Nhóm','Quy luật biến đổi','Bán kính nguyên tử',
+    'Độ âm điện','Năng lượng ion hóa',
+    'Liên kết ion','Liên kết cộng hóa trị','Liên kết kim loại',
+    'Liên kết hiđro','Lewis','Hình học phân tử',
+    'Phản ứng oxi hóa – khử','Cân bằng phương trình','Nhiệt hóa học','Entanpi (mức cơ bản)',
+    'Tốc độ phản ứng','Các yếu tố ảnh hưởng','Cân bằng hóa học','Nguyên lý Le Chatelier',
+    'Chất điện li','Axit','Bazơ','Muối','pH','Thủy phân muối','Chuẩn độ axit – bazơ',
+    'Pin điện','Điện phân','Ăn mòn kim loại','Bảo vệ kim loại',
+    'Tính chất vật lí','Tính chất hóa học','Dãy hoạt động hóa học','Điều chế kim loại',
+    'Hợp kim','Kim loại kiềm','Kim loại kiềm thổ','Nhôm','Sắt','Crom',
+    'Halogen','Oxi','Lưu huỳnh','Nitơ','Photpho','Cacbon','Silic','Một số hợp chất quan trọng',
+    'Đặc điểm hợp chất hữu cơ','Đồng đẳng','Đồng phân','Danh pháp','Công thức cấu tạo',
+    'Ankan','Anken','Ankin','Aren (Benzen)',
+    'Dẫn xuất halogen','Ancol','Phenol','Andehit','Xeton','Axit cacboxylic','Este',
+    'Amin','Amino axit','Peptit','Protein',
+    'Glucozơ','Fructozơ','Saccarozơ','Tinh bột','Xenlulozơ',
+    'Trùng hợp','Trùng ngưng','Chất dẻo','Cao su','Tơ',
+    'Phân bón','Hóa học môi trường','Hóa học xanh','Vật liệu mới','Năng lượng',
+    'Mol','Hiệu suất phản ứng','Nồng độ dung dịch','Bảo toàn khối lượng',
+    'Bảo toàn nguyên tố','Bảo toàn electron','Bài toán hỗn hợp','Bài toán khí','Bài toán dung dịch',
+]
+HOA_THCS_TOPIC_LIST = [
+    'Chất','Tính chất của chất','Chất tinh khiết','Hỗn hợp','Tách chất',
+    'Hiện tượng vật lí','Hiện tượng hóa học',
+    'Nguyên tử','Cấu tạo nguyên tử','Nguyên tố hóa học','Ký hiệu hóa học',
+    'Nguyên tử khối','Phân tử','Phân tử khối',
+    'Hóa trị','Lập công thức hóa học','Tính theo công thức hóa học','Ý nghĩa của công thức hóa học',
+    'Phương trình hóa học','Cân bằng phương trình','Định luật bảo toàn khối lượng',
+    'Các loại phản ứng hóa học',
+    'Mol','Khối lượng mol','Thể tích mol chất khí',
+    'Chuyển đổi giữa mol – khối lượng – thể tích','Tính theo phương trình hóa học',
+    'Tính chất của oxi','Điều chế oxi','Không khí','Ozon','Sự cháy','Sự oxi hóa',
+    'Hiđro','Điều chế hiđro','Phản ứng oxi hóa – khử (mức cơ bản)','Nước','Vai trò của nước',
+    'Dung môi','Chất tan','Độ tan','Nồng độ phần trăm','Nồng độ mol','Pha chế dung dịch',
+    'Axit','Bazơ','Muối','Thang pH','Chỉ thị màu','Phản ứng trung hòa','Phản ứng trao đổi',
+    'Tính chất vật lí','Tính chất hóa học','Dãy hoạt động hóa học','Điều chế kim loại',
+    'Hợp kim','Ăn mòn kim loại',
+    'Tính chất của phi kim','Clo','Cacbon','Silic','Một số hợp chất quan trọng',
+    'Hợp chất hữu cơ','Metan','Etilen','Axetilen','Benzen','Nhiên liệu',
+]
+
+# Tra cứu danh sách chủ đề theo môn + cấp học, kèm tên môn hiển thị trong prompt.
+SUBJECT_TOPIC_LISTS = {
+    'toan': {'thpt': THPT_TOPIC_LIST,     'thcs': THCS_TOPIC_LIST,     'name': 'toán'},
+    'ly':   {'thpt': LY_THPT_TOPIC_LIST,  'thcs': LY_THCS_TOPIC_LIST,  'name': 'vật lí'},
+    'hoa':  {'thpt': HOA_THPT_TOPIC_LIST, 'thcs': HOA_THCS_TOPIC_LIST, 'name': 'hóa học'},
+}
+
+
+def _topic_list_for(subject: str, grade: str):
+    """(danh sách chủ đề, tên môn) cho phân loại. Mặc định về Toán khi môn lạ."""
+    conf = SUBJECT_TOPIC_LISTS.get(subject) or SUBJECT_TOPIC_LISTS['toan']
+    topics = conf['thcs'] if grade == 'thcs' else conf['thpt']
+    return topics, conf['name']
+
+
 _GROQ_CLIENT_CACHE = None
 
 def _get_groq():
@@ -2507,16 +2627,17 @@ async def classify_question(request: Request):
     """AI phân loại chủ đề + độ khó cho 1 câu hỏi."""
     import random
     body = await request.json()
-    text  = (body.get("question_text") or "").strip()[:700]
-    grade = body.get("grade", "thpt")
+    text    = (body.get("question_text") or "").strip()[:700]
+    grade   = body.get("grade", "thpt")
+    subject = body.get("subject", "toan")
     if not text:
         return {"topic_label": None, "level_label": None}
 
-    topic_list = THPT_TOPIC_LIST if grade == "thpt" else THCS_TOPIC_LIST
+    topic_list, subject_name = _topic_list_for(subject, grade)
     topics_str = "\n".join(f"- {t}" for t in topic_list)
     level_name = "THPT" if grade == "thpt" else "THCS"
 
-    prompt = f"""Phân loại câu hỏi toán {level_name} sau theo chuẩn 4 mức độ nhận thức của Bộ GD&ĐT Việt Nam:
+    prompt = f"""Phân loại câu hỏi {subject_name} {level_name} sau theo chuẩn 4 mức độ nhận thức của Bộ GD&ĐT Việt Nam:
 
 Câu hỏi: {text}
 
@@ -2554,15 +2675,19 @@ Trả về JSON ĐÚNG ĐỊNH DẠNG, không giải thích thêm:
 
 @app.get("/api/questions/bank")
 async def get_questions_bank(
-    topic: str  = None,
-    level: str  = None,
-    limit: int  = 10,
+    topic: str   = None,
+    level: str   = None,
+    subject: str = None,
+    limit: int   = 10,
 ):
-    """Lấy ngẫu nhiên câu hỏi từ ngân hàng (toàn bộ exams đã lưu) theo nhãn."""
+    """Lấy ngẫu nhiên câu hỏi từ ngân hàng (toàn bộ exams đã lưu) theo nhãn.
+    Lọc theo môn nếu có (đề cũ chưa gắn môn được coi là Toán)."""
     import random as _random
     data = db.load_exams()
     pool = []
     for exam in data.values():
+        if subject and (exam.get("subject") or "toan") != subject:
+            continue
         exam_title = exam.get("title", "")
         for sec_name, sec_data in (exam.get("sections") or {}).items():
             for q in (sec_data.get("questions") or []):

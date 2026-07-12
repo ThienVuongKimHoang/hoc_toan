@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import EditableQuestion from './EditableQuestion.jsx'
 import ReadingSection from './ReadingSection.jsx'
 import MixExamModal from '../MixExamModal.jsx'
+import { SUBJECTS } from '../SubjectBadge.jsx'
+import { subjectHasLabels } from '../../data/labels.js'
 
 function isUnanswered(q, sec) {
   if (sec === 'PHẦN I' || sec === 'TIẾNG ANH' || sec === 'READING') return q.answer === null || q.answer === undefined
@@ -80,7 +82,7 @@ function isDragTrigger(e, wrapperEl) {
   return x < EDGE || x > r.width - EDGE || y < EDGE || y > r.height - EDGE
 }
 
-export default function ReviewStep({ result, title, onTitleChange, onPreview, onPublish, onSave }) {
+export default function ReviewStep({ result, title, onTitleChange, onPreview, onPublish, onSave, subject = 'toan' }) {
   const effectiveSections = Object.keys(result.sections || {}).filter(sec => SECTION_META[sec])
   let sectionList = effectiveSections.length > 0 ? effectiveSections : MATH_SECTIONS
   // Đề Toán (kể cả trích từ PDF) luôn có sẵn tab Tự luận để GV thêm câu upload ảnh
@@ -314,12 +316,19 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
             />
           </div>
           <div className="rs-meta-row">
-            <div className="rs-grade-toggle">
-              <button className={`rs-grade-btn ${grade === 'thpt' ? 'active' : ''}`}
-                onClick={() => setGrade('thpt')} type="button">THPT</button>
-              <button className={`rs-grade-btn ${grade === 'thcs' ? 'active' : ''}`}
-                onClick={() => setGrade('thcs')} type="button">THCS</button>
-            </div>
+            {SUBJECTS[subject] && (
+              <span className={`rs-subject-pill subject-badge--${subject}`}>
+                {SUBJECTS[subject].icon} {SUBJECTS[subject].label}
+              </span>
+            )}
+            {subjectHasLabels(subject) && (
+              <div className="rs-grade-toggle">
+                <button className={`rs-grade-btn ${grade === 'thpt' ? 'active' : ''}`}
+                  onClick={() => setGrade('thpt')} type="button">THPT</button>
+                <button className={`rs-grade-btn ${grade === 'thcs' ? 'active' : ''}`}
+                  onClick={() => setGrade('thcs')} type="button">THCS</button>
+              </div>
+            )}
             <button className="rs-mix-btn" type="button" onClick={() => setShowMix(true)}
               title="Tạo đề từ ngân hàng câu hỏi theo chủ đề">
               🎲 Phối đề
@@ -423,6 +432,7 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
                     <EditableQuestion
                       q={q}
                       index={idx}
+                      subject={subject}
                       grade={grade}
                       pointsPerQ={sections[activeSection]?.points_per_q}
                       onUpdate={updated => updateQuestion(activeSection, idx, updated)}
@@ -470,6 +480,7 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
 
       {showMix && (
         <MixExamModal
+          subject={subject}
           grade={grade}
           onClose={() => setShowMix(false)}
           onAddQuestions={(qs) => {

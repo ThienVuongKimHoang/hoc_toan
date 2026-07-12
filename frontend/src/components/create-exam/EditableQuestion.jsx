@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import MathText from '../MathText.jsx'
-import { DIFFICULTY_LEVELS, THPT_LABEL_GROUPS, THCS_LABEL_GROUPS } from '../../data/labels.js'
+import { DIFFICULTY_LEVELS, getLabelGroups } from '../../data/labels.js'
 import './EditableQuestion.css'
 const PASSAGE_SPLIT_THRESHOLD = 300
 /* ─── Convert plain text / old markers → HTML for display ─── */
@@ -480,10 +480,11 @@ function TopicDropdown({ groups, value, onChange, onClose }) {
   )
 }
 
-function LabelRow({ q, grade, onChange, onAutoClassify, classifying }) {
+function LabelRow({ q, subject, grade, onChange, onAutoClassify, classifying }) {
   const [topicOpen, setTopicOpen] = useState(false)
   const [hoveredDiff, setHoveredDiff] = useState(null)
-  const groups = grade === 'thcs' ? THCS_LABEL_GROUPS : THPT_LABEL_GROUPS
+  const groups = getLabelGroups(subject, grade)
+  const hasTopics = groups.length > 0
   const activeDiff = DIFFICULTY_LEVELS.find(d => d.id === (hoveredDiff ?? q.level_label))
 
   return (
@@ -515,37 +516,41 @@ function LabelRow({ q, grade, onChange, onAutoClassify, classifying }) {
         )}
       </div>
 
-      <div className="eq-label-section eq-label-section--topic">
-        <span className="eq-label-section-title">Chủ đề:</span>
-        <div style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className={`eq-topic-chip ${q.topic_label ? 'has-value' : ''}`}
-            onClick={() => setTopicOpen(v => !v)}
-          >
-            {q.topic_label || 'Chọn chủ đề…'}
-            <span className="eq-topic-arrow">▾</span>
-          </button>
-          {topicOpen && (
-            <TopicDropdown
-              groups={groups}
-              value={q.topic_label || null}
-              onChange={t => onChange({ ...q, topic_label: t })}
-              onClose={() => setTopicOpen(false)}
-            />
-          )}
+      {hasTopics && (
+        <div className="eq-label-section eq-label-section--topic">
+          <span className="eq-label-section-title">Chủ đề:</span>
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className={`eq-topic-chip ${q.topic_label ? 'has-value' : ''}`}
+              onClick={() => setTopicOpen(v => !v)}
+            >
+              {q.topic_label || 'Chọn chủ đề…'}
+              <span className="eq-topic-arrow">▾</span>
+            </button>
+            {topicOpen && (
+              <TopicDropdown
+                groups={groups}
+                value={q.topic_label || null}
+                onChange={t => onChange({ ...q, topic_label: t })}
+                onClose={() => setTopicOpen(false)}
+              />
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      <button
-        type="button"
-        className={`eq-autoclassify-btn ${classifying ? 'loading' : ''}`}
-        onClick={onAutoClassify}
-        disabled={classifying || !q.question_text?.trim()}
-        title="AI tự động nhận diện chủ đề và độ khó"
-      >
-        {classifying ? '⏳ Đang phân loại…' : '🤖 Tự phân loại'}
-      </button>
+      {hasTopics && (
+        <button
+          type="button"
+          className={`eq-autoclassify-btn ${classifying ? 'loading' : ''}`}
+          onClick={onAutoClassify}
+          disabled={classifying || !q.question_text?.trim()}
+          title="AI tự động nhận diện chủ đề và độ khó"
+        >
+          {classifying ? '⏳ Đang phân loại…' : '🤖 Tự phân loại'}
+        </button>
+      )}
     </div>
   )
 }
@@ -707,7 +712,8 @@ const SECTION_COLOR = {
 }
 
 export default function EditableQuestion({
-  q, index, pointsPerQ, onUpdate, onDelete, onReportSubmit, highlight, grade = 'thpt',
+  q, index, pointsPerQ, onUpdate, onDelete, onReportSubmit, highlight,
+  subject = 'toan', grade = 'thpt',
   readingMode = false, clozeMode = false,
 }) {
   const [editingText, setEditingText] = useState(() => hasSuspiciousLatex(q.question_text))
@@ -739,7 +745,7 @@ export default function EditableQuestion({
       const res = await fetch('/api/classify-question', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_text: q.question_text, grade }),
+        body: JSON.stringify({ question_text: q.question_text, subject, grade }),
       })
       if (res.ok) {
         const data = await res.json()
@@ -1108,6 +1114,7 @@ export default function EditableQuestion({
       {!readingMode && (
         <LabelRow
           q={q}
+          subject={subject}
           grade={grade}
           onChange={onUpdate}
           onAutoClassify={autoClassify}

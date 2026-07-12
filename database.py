@@ -112,6 +112,8 @@ CREATE TABLE IF NOT EXISTS exams (
     practice_settings JSONB,
     classes_data      JSONB         DEFAULT '[]'
 );
+-- Môn học của đề (toan | ly | hoa | anh | van…) — quyết định bộ nhãn chủ đề khi soạn/sửa
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS subject VARCHAR(20);
 
 CREATE TABLE IF NOT EXISTS submissions (
     id           SERIAL       PRIMARY KEY,
@@ -451,6 +453,7 @@ def _exam_from_row(row: dict) -> dict:
         "id":               r["id"],
         "title":            r["title"] or "",
         "createdBy":        r["created_by"],
+        "subject":          r.get("subject"),
         "createdAt":        r["created_at"].isoformat() if r.get("created_at") else None,
         "updatedAt":        r["updated_at"].isoformat() if r.get("updated_at") else None,
         "source":           r["source"] or "",
@@ -568,8 +571,8 @@ def load_exams_by_creator(uid: str) -> list:
             cur.execute("""
                 SELECT e.id, e.title, e.source, e.total_questions, e.published,
                        e.is_public, e.featured, e.results_revealed, e.created_by,
-                       e.created_at, e.updated_at, e.settings, e.practice_settings,
-                       e.classes_data,
+                       e.subject, e.created_at, e.updated_at, e.settings,
+                       e.practice_settings, e.classes_data,
                        COALESCE(s.cnt, 0) AS submission_count
                 FROM exams e
                 LEFT JOIN (
@@ -592,6 +595,7 @@ def load_exams_by_creator(uid: str) -> list:
             "featured":         bool(rd["featured"]),
             "resultsRevealed":  bool(rd["results_revealed"]),
             "createdBy":        rd["created_by"],
+            "subject":          rd.get("subject"),
             "createdAt":        rd["created_at"].isoformat() if rd.get("created_at") else None,
             "updatedAt":        rd["updated_at"].isoformat() if rd.get("updated_at") else None,
             "settings":         rd["settings"],
@@ -608,12 +612,13 @@ def upsert_exam(exam_id: str, exam: dict) -> None:
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO exams(id,title,created_by,created_at,updated_at,source,
+                INSERT INTO exams(id,title,created_by,subject,created_at,updated_at,source,
                     total_questions,sections,published,is_public,featured,
                     results_revealed,settings,practice_settings,classes_data)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT(id) DO UPDATE SET
                     title=EXCLUDED.title, created_by=EXCLUDED.created_by,
+                    subject=COALESCE(EXCLUDED.subject, exams.subject),
                     updated_at=EXCLUDED.updated_at, source=EXCLUDED.source,
                     total_questions=EXCLUDED.total_questions, sections=EXCLUDED.sections,
                     published=EXCLUDED.published, is_public=EXCLUDED.is_public,
@@ -622,6 +627,7 @@ def upsert_exam(exam_id: str, exam: dict) -> None:
                     classes_data=EXCLUDED.classes_data
             """, (
                 exam_id, exam.get("title", ""), str(exam.get("createdBy", "")),
+                exam.get("subject") or None,
                 exam.get("createdAt"), exam.get("updatedAt"), exam.get("source", ""),
                 exam.get("totalQuestions", 0),
                 json.dumps(exam.get("sections") or {}, ensure_ascii=False),
