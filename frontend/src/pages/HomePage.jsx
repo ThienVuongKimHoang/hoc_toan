@@ -44,6 +44,7 @@ const IconSun = p => <Svg {...p}><circle cx="12" cy="12" r="4.4" /><path d="M12 
 const IconSparkle = p => <Svg fill="currentColor" {...p}><path d="M12 2.5l1.7 5.8 5.8 1.7-5.8 1.7L12 17.5l-1.7-5.8L4.5 10l5.8-1.7L12 2.5Z" /></Svg>
 const IconArrowUpRight = p => <Svg {...p}><path d="M7 17 17 7M8.5 7H17v8.5" /></Svg>
 const IconFacebook = p => <Svg fill="currentColor" {...p}><path d="M14 8.2h2.2V5.3H14A3.3 3.3 0 0 0 10.7 8.6v1.6H8.7v2.9h2v6.6h3v-6.6h2.3l.6-2.9H13.7V8.9c0-.5.3-.7.8-.7Z" /></Svg>
+const IconMessenger = p => <Svg fill="currentColor" {...p}><path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.3 2 2 6.2 2 11.7c0 3 1.3 5.6 3.4 7.3.2.1.3.4.3.6l.1 1.9c0 .6.6 1 1.2.8l2.1-.9c.2-.1.4-.1.5 0 .9.3 1.9.4 2.9.4 5.7 0 10-4.2 10-9.7C22 6.2 17.7 2 12 2Zm6 7.5-2.9 4.7c-.5.7-1.5.9-2.2.4l-2.3-1.7c-.2-.2-.5-.2-.7 0l-3.1 2.4c-.4.3-1-.2-.7-.6l2.9-4.7c.5-.7 1.5-.9 2.2-.4l2.3 1.7c.2.2.5.2.7 0l3.1-2.4c.4-.3 1 .2.7.6Z" /></Svg>
 
 /* ── Nhãn phần (eyebrow) + tiêu đề phần ── */
 function Kicker({ children, light }) {
@@ -556,6 +557,76 @@ function Footer({ info }) {
   )
 }
 
+/* ── Facebook Messenger — khung chat TRỰC TIẾP trên web (Chat Plugin chính thức) ── */
+// ► ĐIỀN Page ID (dạng SỐ) của Facebook TRANG vào đây. Để trống = chưa bật khung chat.
+//   Lấy Page ID: vào Trang FB → "Giới thiệu" → "Thông tin minh bạch về Trang" → Mã trang (Page ID).
+//   BẮT BUỘC: whitelist domain https://anhsang.duckdns.org trong Meta Business Suite
+//   → Hộp thư → Cài đặt → "Chat Plugin" (thêm miền vào danh sách cho phép), nếu không khung chat sẽ không hiện.
+const FB_PAGE_ID = ''
+
+function MessengerChat() {
+  useEffect(() => {
+    if (!FB_PAGE_ID) return
+    if (document.querySelector('.fb-customerchat')) {
+      if (window.FB) window.FB.XFBML.parse()
+      return
+    }
+    if (!document.getElementById('fb-root')) {
+      const root = document.createElement('div')
+      root.id = 'fb-root'
+      document.body.appendChild(root)
+    }
+    const chat = document.createElement('div')
+    chat.className = 'fb-customerchat'
+    chat.setAttribute('attribution', 'biz_inbox')
+    chat.setAttribute('page_id', FB_PAGE_ID)
+    chat.setAttribute('greeting_dialog_display', 'fade')
+    document.body.appendChild(chat)
+
+    window.fbAsyncInit = function () {
+      window.FB.init({ xfbml: true, version: 'v19.0' })
+    }
+    if (!document.getElementById('facebook-jssdk')) {
+      const js = document.createElement('script')
+      js.id = 'facebook-jssdk'
+      js.async = true
+      js.defer = true
+      js.crossOrigin = 'anonymous'
+      js.src = 'https://connect.facebook.net/vi_VN/sdk/xfbml.customerchat.js'
+      document.body.appendChild(js)
+    } else if (window.FB) {
+      window.FB.XFBML.parse()
+    }
+  }, [])
+  return null
+}
+
+/* ── Nút liên hệ nổi (Zalo · Gọi) — góc trái, để chừa góc phải cho khung chat Messenger ── */
+function ContactDock({ info }) {
+  const digits = String(info.phone || '').replace(/\D/g, '')
+  const zalo = digits ? 'https://zalo.me/' + digits : null
+  const tel = digits ? 'tel:+84' + digits.replace(/^0/, '') : null
+
+  return (
+    <div className="cd" role="complementary" aria-label="Liên hệ nhanh với trung tâm">
+      {zalo && (
+        <a className="cd-btn cd-zalo" href={zalo} target="_blank" rel="noopener noreferrer" aria-label="Chat Zalo với trung tâm">
+          <span className="cd-ring" aria-hidden="true" />
+          <span className="cd-zalo-word">Zalo</span>
+          <span className="cd-label">Chat Zalo</span>
+        </a>
+      )}
+      {tel && (
+        <a className="cd-btn cd-call" href={tel} aria-label={`Gọi ${info.phone}`}>
+          <span className="cd-ring" aria-hidden="true" />
+          <IconPhone size={24} style={{ position: 'relative', zIndex: 1 }} />
+          <span className="cd-label">Gọi ngay</span>
+        </a>
+      )}
+    </div>
+  )
+}
+
 // ====== Trang chính ======
 export default function HomePage() {
   const [content, setContent] = useState(null)
@@ -612,6 +683,8 @@ export default function HomePage() {
       <Testimonials testimonials={testimonials} />
       <Contact info={info} courses={courses} />
       <Footer info={info} />
+      <ContactDock info={info} />
+      <MessengerChat />
       {showAdvice && <AdvicePopup info={info} onClose={() => setShowAdvice(false)} />}
     </div>
   )
@@ -870,4 +943,29 @@ const HP_CSS = `
   .hp-hero-badge{ padding:12px 16px; }
   .hp-hero-rating{ display:none; }
 }
+
+/* ── Nút liên hệ nổi (Zalo · Messenger · Gọi) ── */
+.cd{ position:fixed; left:16px; bottom:16px; z-index:900; display:flex; flex-direction:column; gap:14px;
+  padding-bottom:env(safe-area-inset-bottom); }
+.cd-btn{ position:relative; width:54px; height:54px; border-radius:50%; display:grid; place-items:center;
+  color:#fff; text-decoration:none; box-shadow:0 10px 24px -8px rgba(15,23,42,.45);
+  transition:transform .2s ease, box-shadow .2s ease; -webkit-tap-highlight-color:transparent; }
+.cd-btn:hover{ transform:scale(1.08); box-shadow:0 14px 28px -8px rgba(15,23,42,.55); }
+.cd-btn:focus-visible{ outline:3px solid ${C.accent}; outline-offset:3px; }
+.cd-btn:active{ transform:scale(.96); }
+.cd-zalo{ background:#0068FF; --rc:rgba(0,104,255,.5); }
+.cd-mess{ background:linear-gradient(135deg,#00B2FF 0%,#006AFF 35%,#A033FF 75%,#FF5285 100%); --rc:rgba(0,106,255,.5); }
+.cd-call{ background:#16A34A; --rc:rgba(22,163,74,.5); }
+.cd-zalo-word{ position:relative; z-index:1; font-family:${DISPLAY}; font-weight:800; font-size:15px; letter-spacing:-.02em; }
+.cd-ring{ position:absolute; inset:0; border-radius:50%; z-index:0; animation:cdPulse 2s cubic-bezier(.66,0,0,1) infinite; }
+@keyframes cdPulse{ 0%{ box-shadow:0 0 0 0 var(--rc); } 70%{ box-shadow:0 0 0 16px rgba(0,0,0,0); } 100%{ box-shadow:0 0 0 0 rgba(0,0,0,0); } }
+.cd-label{ position:absolute; left:64px; top:50%; transform:translateY(-50%) translateX(-6px);
+  white-space:nowrap; background:${C.dark}; color:#fff; padding:7px 12px; border-radius:9px;
+  font-family:${BODY}; font-size:13px; font-weight:700; opacity:0; pointer-events:none;
+  box-shadow:0 8px 18px -8px rgba(15,23,42,.5); transition:opacity .2s ease, transform .2s ease; }
+.cd-label::after{ content:""; position:absolute; left:-4px; top:50%; transform:translateY(-50%) rotate(45deg);
+  width:9px; height:9px; background:${C.dark}; border-radius:2px; }
+.cd-btn:hover .cd-label, .cd-btn:focus-visible .cd-label{ opacity:1; transform:translateY(-50%) translateX(0); }
+@media (prefers-reduced-motion:reduce){ .cd-ring{ animation:none; } }
+@media (max-width:600px){ .cd{ left:12px; bottom:12px; gap:12px; } .cd-btn{ width:50px; height:50px; } .cd-label{ display:none; } }
 `

@@ -581,12 +581,14 @@ function AddStudentModal({ classMembers, onClose, onAdd }) {
 
 /* ─── Assignment form modal ─── */
 function AssignmentModal({ teacherId, cls, onClose, onSave }) {
-  // Hiện cache localStorage ngay, rồi cập nhật bằng danh sách chuẩn từ server
-  const [exams, setExams] = useState(() => getExamsByTeacher(teacherId).filter(e => e.published))
+  // Hiện cache localStorage ngay, rồi cập nhật bằng danh sách chuẩn từ server.
+  // Hiện MỌI đề đã lưu (kể cả đề nháp chưa phát công khai) — đề đã "Lưu lại" đều
+  // được đồng bộ lên server nên vẫn giao trong lớp được.
+  const [exams, setExams] = useState(() => getExamsByTeacher(teacherId))
   useEffect(() => {
     let alive = true
     fetchExamsByTeacher(teacherId).then(list => {
-      if (alive) setExams(list.filter(e => e.published))
+      if (alive) setExams(list)
     })
     return () => { alive = false }
   }, [teacherId])
@@ -598,6 +600,7 @@ function AssignmentModal({ teacherId, cls, onClose, onSave }) {
   const [title,       setTitle]       = useState('')
   const [desc,        setDesc]        = useState('')
   const [examId,      setExamId]      = useState('')
+  const [duration,    setDuration]    = useState('')       // phút làm bài — tùy chỉnh cho từng lần giao
   // Homework deadline
   const [dueDate,     setDueDate]     = useState('')
   const [dueTime,     setDueTime]     = useState('23:59')
@@ -622,6 +625,8 @@ function AssignmentModal({ teacherId, cls, onClose, onSave }) {
     setExamId(id)
     const ex = exams.find(e => e.id === id)
     if (ex && !title.trim()) setTitle(ex.title)
+    // Gợi ý thời gian: lấy từ cài đặt publish nếu có, không thì mặc định 45'
+    if (ex) setDuration(prev => prev || String(ex.settings?.duration || 45))
   }
 
   const submit = () => {
@@ -631,12 +636,14 @@ function AssignmentModal({ teacherId, cls, onClose, onSave }) {
       const openIso  = new Date(`${openDate}T${openTime}`).toISOString()
       const closeIso = new Date(`${closeDate}T${closeTime}`).toISOString()
       if (new Date(closeIso) <= new Date(openIso)) { setErr('Thời gian đóng phải sau thời gian mở.'); return }
+      const durMins = parseInt(duration, 10)
+      if (!durMins || durMins < 1) { setErr('Vui lòng nhập thời gian làm bài (phút) lớn hơn 0.'); return }
       const ex = exams.find(e => e.id === examId)
       onSave({
         title: (title.trim() || ex?.title || 'Đề thi'),
         description: desc.trim(), examId,
         openTime: openIso, closeTime: closeIso,
-        dueDate: closeIso, duration: ex?.settings?.duration ?? null,
+        dueDate: closeIso, duration: durMins,
         maxAttempts: maxAttempts ? Math.max(1, parseInt(maxAttempts, 10) || 1) : null,
         scoreMode,
         lockScreen,
@@ -677,18 +684,28 @@ function AssignmentModal({ teacherId, cls, onClose, onSave }) {
               <>
                 <label className="cm-label">Chọn đề thi *</label>
                 {exams.length === 0 ? (
-                  <div className="cm-info-note">Bạn chưa có đề thi nào đã xuất bản. Hãy tạo & xuất bản đề trước.</div>
+                  <div className="cm-info-note">Bạn chưa có đề thi nào. Hãy tạo đề rồi bấm <strong>💾 Lưu lại</strong> trước.</div>
                 ) : (
                   <select className="cm-input cm-select" value={examId} onChange={e => pickExam(e.target.value)} autoFocus>
                     <option value="">— Chọn đề —</option>
-                    {exams.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
+                    {exams.map(e => (
+                      <option key={e.id} value={e.id}>{e.published ? e.title : `${e.title} — nháp`}</option>
+                    ))}
                   </select>
                 )}
                 {selectedExam && (
                   <div className="cm-info-note">
-                    📊 {selectedExam.totalQuestions} câu · ⏱ {selectedExam.settings?.duration ?? '—'} phút làm bài
+                    📊 {selectedExam.totalQuestions} câu{selectedExam.published ? '' : ' · 📝 đề nháp (chưa phát công khai, vẫn giao được)'}
                   </div>
                 )}
+
+                {/* Thời gian làm bài — tùy chỉnh riêng cho lần giao này, ngay kế bên đề */}
+                <label className="cm-label" style={{marginTop:14}}>⏱ Thời gian làm bài (phút) *</label>
+                <input type="number" min="1" className="cm-input" placeholder="VD: 45"
+                  value={duration} onChange={e => setDuration(e.target.value)} />
+                <div className="cm-info-note" style={{marginTop:6}}>
+                  Đồng hồ đếm ngược cho mỗi lần làm bài — đặt riêng cho lần giao này, không phụ thuộc cài đặt phát đề công khai của đề.
+                </div>
 
                 <label className="cm-label" style={{marginTop:14}}>🟢 Mở đề *</label>
                 <div style={{display:'flex',gap:10}}>
