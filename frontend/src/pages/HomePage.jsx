@@ -560,7 +560,7 @@ function Footer({ info }) {
 /* ── Facebook Messenger — khung chat TRỰC TIẾP trên web (Chat Plugin chính thức) ── */
 // ► ĐIỀN Page ID (dạng SỐ) của Facebook TRANG vào đây. Để trống = chưa bật khung chat.
 //   Lấy Page ID: vào Trang FB → "Giới thiệu" → "Thông tin minh bạch về Trang" → Mã trang (Page ID).
-//   BẮT BUỘC: whitelist domain https://anhsang.duckdns.org trong Meta Business Suite
+//   BẮT BUỘC: whitelist domain https://ttanhsang.edu.vn trong Meta Business Suite
 //   → Hộp thư → Cài đặt → "Chat Plugin" (thêm miền vào danh sách cho phép), nếu không khung chat sẽ không hiện.
 const FB_PAGE_ID = ''
 

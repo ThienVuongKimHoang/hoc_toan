@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://anhsang.duckdns.org/sitemap.xml
+Sitemap: https://ttanhsang.edu.vn/sitemap.xml
