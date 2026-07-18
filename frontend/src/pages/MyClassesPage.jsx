@@ -1,7 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { getClassesByStudent, getExamWindow, getPendingForStudent, joinClassByCode, submitAssignment, uploadFile } from '../store/classStore.js'
-import SubjectBadge, { SUBJECTS } from '../components/SubjectBadge.jsx'
+import { getClassByCode, getClassesByStudent, getExamWindow, getPendingForStudent, joinClassByCode, submitAssignment, uploadFile } from '../store/classStore.js'
+import SubjectBadge, { SUBJECTS, GradeBadge, gradeLabel } from '../components/SubjectBadge.jsx'
 import { BandChip, IeltsGradeModal, IeltsStatsModal } from '../components/IeltsGrade.jsx'
+
+/* Môn "chính" của lớp (fallback dữ liệu cũ chưa gắn môn) */
+const primarySubject = (cls) => cls?.subject || cls?.subjects?.[0] || null
+const inSubject = (item, subject, cls) => ((item?.subject || primarySubject(cls)) === subject)
+/* Các môn mà học sinh này ĐÃ ĐĂNG KÝ trong lớp */
+const myEnrolledSubjects = (cls, user) => {
+  const mine = (cls?.members || []).filter(m =>
+    String(m.userId) === String(user?.id) ||
+    ((m.email || '').toLowerCase() === (user?.email || '').toLowerCase()))
+  const prim = primarySubject(cls)
+  const set = new Set(mine.map(m => m.subject || prim).filter(Boolean))
+  if (set.size === 0) return (cls?.subjects?.length ? cls.subjects : (prim ? [prim] : []))
+  // Giữ thứ tự theo danh sách môn của lớp
+  const order = cls?.subjects?.length ? cls.subjects : [...set]
+  return order.filter(s => set.has(s))
+}
 
 /* ─── SVG icons ─── */
 function Svg({ size = 16, children }) {
@@ -409,38 +425,91 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
     return () => clearTimeout(t)
   }, [hasPendingGrade, refreshKey])
 
+  const subject = primarySubject(localCls)             // mỗi lớp = 1 môn
+  const [tab, setTab] = useState('assignments')       // 'assignments' | 'documents'
+  const [asgnTab, setAsgnTab] = useState('homework')  // 'homework' | 'exam'
+  const [viewingFile, setViewingFile] = useState(null)
+
+  const fmtSize = b => !b ? '' : b < 1048576 ? `${(b/1024).toFixed(1)} KB` : `${(b/1048576).toFixed(1)} MB`
+  const fmtDt = iso => iso ? new Date(iso).toLocaleString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : ''
+
+  /* ── Nội dung môn của lớp: Tài liệu + Bài tập (→ Đề thi) ── */
+  const subjAssignments = (localCls.assignments||[]).filter(a => inSubject(a, subject, localCls))
+  const subjDocs        = (localCls.documents||[]).filter(d => inSubject(d, subject, localCls))
+  const homeworks = subjAssignments.filter(a => !a.examId)
+  const exams     = subjAssignments.filter(a => !!a.examId)
+  const backToSubjects = onBack
+
   return (
     <div className="cm-detail">
       <div className="cm-detail-header">
-        <button className="cm-back-btn" onClick={onBack}>{IC.back(18)} Quay lại</button>
+        <button className="cm-back-btn" onClick={backToSubjects}>{IC.back(18)} Quay lại</button>
         <div style={{flex:1}}>
-          <h2 className="cm-detail-title">{localCls.name} <SubjectBadge subject={localCls.subject} /></h2>
-          {localCls.description && <p className="cm-detail-desc">{localCls.description}</p>}
+          <h2 className="cm-detail-title">
+            {localCls.name} <GradeBadge grade={localCls.grade} /> <SubjectBadge subject={subject} />
+          </h2>
           {localCls.teacherName && <p className="cm-detail-desc">Giáo viên: <strong>{localCls.teacherName}</strong></p>}
-        </div>
-        <div className="cm-detail-stats">
-          {pendingCount > 0 && (
-            <span className="cm-stat-chip" style={{background:'#fef3c7',color:'#92400e'}}>
-              {IC.clock(14)} {pendingCount} cần làm
-            </span>
-          )}
         </div>
       </div>
 
-      {(localCls.assignments?.length ?? 0) === 0 ? (
-        <div className="cm-empty-state">
-          <div className="cm-empty-icon">{IC.book(40)}</div>
-          <p>Lớp chưa có bài tập nào.</p>
-        </div>
-      ) : (
-        <div className="mc-asgn-list">
-          {[...localCls.assignments].sort((a,b) => new Date(a.dueDate)-new Date(b.dueDate)).map(a => (
-            <AssignmentCard key={a.id} assignment={a} cls={localCls} user={user}
-              onSubmit={setSubmitting} />
-          ))}
-        </div>
-      )}
+      <div className="cm-tabs">
+        <button className={`cm-tab ${tab==='assignments' ? 'cm-tab--active' : ''}`} onClick={() => setTab('assignments')}>📝 Bài tập</button>
+        <button className={`cm-tab ${tab==='documents' ? 'cm-tab--active' : ''}`} onClick={() => setTab('documents')}>📎 Tài liệu</button>
+      </div>
 
+      <div className="cm-tab-body">
+        {tab === 'assignments' && (
+          <div>
+            <div className="cm-subtabs" style={{display:'flex',gap:8,marginBottom:12}}>
+              <button className={`cm-tab ${asgnTab==='homework' ? 'cm-tab--active' : ''}`}
+                onClick={() => setAsgnTab('homework')}>📝 Bài tập ({homeworks.length})</button>
+              <button className={`cm-tab ${asgnTab==='exam' ? 'cm-tab--active' : ''}`}
+                onClick={() => setAsgnTab('exam')}>📋 Đề thi ({exams.length})</button>
+            </div>
+            {(() => {
+              const list = asgnTab === 'exam' ? exams : homeworks
+              if (list.length === 0) return (
+                <div className="cm-empty-state">
+                  <div className="cm-empty-icon">{IC.book(40)}</div>
+                  <p>{asgnTab === 'exam' ? 'Chưa có đề thi nào.' : 'Chưa có bài tập nào.'}</p>
+                </div>
+              )
+              return (
+                <div className="mc-asgn-list">
+                  {[...list].sort((a,b) => new Date(a.dueDate)-new Date(b.dueDate)).map(a => (
+                    <AssignmentCard key={a.id} assignment={a} cls={localCls} user={user} onSubmit={setSubmitting} />
+                  ))}
+                </div>
+              )
+            })()}
+          </div>
+        )}
+
+        {tab === 'documents' && (
+          subjDocs.length === 0 ? (
+            <div className="cm-empty-state">
+              <div className="cm-empty-icon">{IC.clip(40)}</div>
+              <p>Chưa có tài liệu nào.</p>
+            </div>
+          ) : (
+            <div className="cm-doc-list">
+              {subjDocs.map(d => (
+                <div key={d.id} className="cm-doc-row">
+                  <div className="cm-doc-icon" onClick={() => setViewingFile(d)} style={{cursor:'pointer'}}>{IC.file(20)}</div>
+                  <div className="cm-doc-info">
+                    <button className="cm-doc-name" onClick={() => setViewingFile(d)}>{d.name}</button>
+                    <div className="cm-doc-meta">{fmtSize(d.size)} · {fmtDt(d.uploadedAt)}</div>
+                  </div>
+                  <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống">{IC.download(14)}</a>
+                  <button className="cm-remove-btn" onClick={() => setViewingFile(d)} title="Xem">{IC.eye(14)}</button>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+
+      {viewingFile && <FileViewerModal file={viewingFile} onClose={() => setViewingFile(null)} />}
       {submitting && (
         <SubmitModal
           cls={localCls} assignment={submitting} user={user}
@@ -458,9 +527,22 @@ function JoinModal({ initialCode, user, onClose, onJoined }) {
   const [password, setPassword] = useState('')
   const [loading,  setLoading]  = useState(false)
   const [err,      setErr]      = useState('')
+  const [info,     setInfo]     = useState(null)   // lớp tra được theo mã (bước 2 xác nhận)
 
-  const submit = async () => {
+  const gradeMismatch = info?.grade && user?.grade && String(user.grade) !== String(info.grade)
+
+  // Bước 1: tra lớp theo mã → hiện thông tin lớp để xác nhận
+  const lookup = async () => {
     if (!code.trim()) { setErr('Vui lòng nhập mã lớp.'); return }
+    setLoading(true); setErr('')
+    const data = await getClassByCode(code.trim().toUpperCase())
+    setLoading(false)
+    if (data.error) { setErr(data.error); return }
+    setInfo(data)
+  }
+
+  // Bước 2: tham gia — mỗi lớp 1 môn nên vào thẳng môn của lớp
+  const doJoin = async () => {
     setLoading(true); setErr('')
     const result = await joinClassByCode(code.trim().toUpperCase(), password.trim() || null, user)
     setLoading(false)
@@ -470,29 +552,53 @@ function JoinModal({ initialCode, user, onClose, onJoined }) {
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{maxWidth:420}}>
+      <div className="modal-box" style={{maxWidth:440}}>
         <div className="modal-header"><h2>🏫 Tham gia lớp học</h2><button className="modal-close" onClick={onClose}>✕</button></div>
         <div style={{padding:'0 24px 24px'}}>
-          <label className="cm-label">{IC.key(13)} Mã lớp *</label>
-          <input className="cm-input" style={{letterSpacing:4,fontSize:'1.2rem',textAlign:'center'}}
-            placeholder="ABC123" maxLength={6}
-            value={code} onChange={e => setCode(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key === 'Enter' && submit()} autoFocus />
-
-          <label className="cm-label" style={{marginTop:14}}>
-            Mật khẩu <span style={{color:'#94a3b8',fontWeight:400}}>(nếu có)</span>
-          </label>
-          <input className="cm-input" type="password" placeholder="Nhập mật khẩu lớp"
-            value={password} onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && submit()} />
-
-          {err && <div className="cm-error">{err}</div>}
-          <div className="cm-footer">
-            <button className="pm-cancel" onClick={onClose}>Huỷ</button>
-            <button className="btn-primary cm-submit" onClick={submit} disabled={loading}>
-              {loading ? '⏳ Đang tham gia…' : '🏫 Tham gia lớp'}
-            </button>
-          </div>
+          {!info ? (
+            <>
+              <label className="cm-label">{IC.key(13)} Mã lớp *</label>
+              <input className="cm-input" style={{letterSpacing:4,fontSize:'1.2rem',textAlign:'center'}}
+                placeholder="ABC123" maxLength={6}
+                value={code} onChange={e => setCode(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === 'Enter' && lookup()} autoFocus />
+              {err && <div className="cm-error">{err}</div>}
+              <div className="cm-footer">
+                <button className="pm-cancel" onClick={onClose}>Huỷ</button>
+                <button className="btn-primary cm-submit" onClick={lookup} disabled={loading}>
+                  {loading ? '⏳ Đang tra…' : 'Tiếp tục →'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="cm-info-note" style={{marginBottom:12,display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
+                🏫 <strong>{info.name}</strong> {info.grade && <>· {gradeLabel(info.grade)}</>}
+                {info.subject && <SubjectBadge subject={info.subject} size="sm" />}
+                {info.teacherName && <span>· GV: {info.teacherName}</span>}
+              </div>
+              {gradeMismatch ? (
+                <div className="cm-error">
+                  Lớp này dành cho học sinh <strong>{gradeLabel(info.grade)}</strong>, không khớp cấp độ của bạn ({gradeLabel(user.grade) || 'chưa đặt'}).
+                </div>
+              ) : info.hasJoinPassword && (
+                <>
+                  <label className="cm-label">Mật khẩu lớp *</label>
+                  <input className="cm-input" type="password" placeholder="Nhập mật khẩu lớp"
+                    value={password} onChange={e => setPassword(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && doJoin()} />
+                </>
+              )}
+              {err && <div className="cm-error">{err}</div>}
+              <div className="cm-footer">
+                <button className="pm-cancel" onClick={() => { setInfo(null); setErr('') }}>← Quay lại</button>
+                <button className="btn-primary cm-submit" onClick={doJoin}
+                  disabled={loading || gradeMismatch}>
+                  {loading ? '⏳ Đang tham gia…' : '🏫 Tham gia'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -531,29 +637,16 @@ export default function MyClassesPage({ user, initialJoinCode, initialClassId })
     if (c) setSelected(c)
   }, [initialClassId, loading, classes])
 
-  // Tự động tham gia lớp khi truy cập qua link #join/<code>
+  // Vào bằng link #join/<code>: mở hộp thoại tham gia (điền sẵn mã) để học sinh
+  // CHỌN MÔN — việc tham gia giờ theo từng môn nên không thể tự động tham gia.
   useEffect(() => {
     if (!initialJoinCode) return
     const code = initialJoinCode.trim().toUpperCase()
-    // Xóa mã khỏi URL NGAY — nếu giữ nguyên #join/<code>, mỗi lần F5 hoặc
-    // đăng nhập lại ở tab này sẽ âm thầm tham gia lớp thêm lần nữa
-    // (kể cả sau khi giáo viên đã xóa học sinh khỏi lớp).
+    // Xóa mã khỏi URL NGAY để F5 không mở lại liên tục.
     window.history.replaceState(null, '', '#my-classes')
-    let cancelled = false
-    joinClassByCode(code, null, user).then(result => {
-      if (cancelled) return
-      setAutoJoining(false)
-      if (result.error) {
-        // Có thể cần mật khẩu hoặc lỗi khác → mở modal để người dùng xử lý
-        setJoinCode(code)
-        setShowJoin(true)
-      } else {
-        setToast(`✅ Đã tham gia lớp "${result.className}" thành công!`)
-        setTimeout(() => setToast(null), 3500)
-        reload()
-      }
-    })
-    return () => { cancelled = true }
+    setAutoJoining(false)
+    setJoinCode(code)
+    setShowJoin(true)
   }, []) // eslint-disable-line
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
@@ -616,18 +709,20 @@ export default function MyClassesPage({ user, initialJoinCode, initialClassId })
             return (
               <div key={cls.id} className="cm-class-card" style={{cursor:'pointer'}} onClick={() => setSelected(cls)}>
                 <div className="cm-class-card-header">
-                  <div className="cm-class-icon">{SUBJECTS[cls.subject]?.icon ?? '🏫'}</div>
+                  <div className="cm-class-icon">🏫</div>
                   <div style={{flex:1}}>
                     <div className="cm-class-title">{cls.name}</div>
                     {cls.teacherName && <div style={{fontSize:'0.78rem',color:'#64748b'}}>GV: {cls.teacherName}</div>}
                   </div>
                   {pending > 0 && <span className="mc-pending-badge">{pending} cần nộp</span>}
                 </div>
-                <div className="cm-class-subject-row"><SubjectBadge subject={cls.subject} /></div>
+                <div className="cm-class-subject-row" style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center'}}>
+                  <GradeBadge grade={cls.grade} size="sm" />
+                  {myEnrolledSubjects(cls, user).map(s => <SubjectBadge key={s} subject={s} size="sm" />)}
+                </div>
                 {cls.description && <div className="cm-class-desc-preview">{cls.description}</div>}
                 <div className="cm-class-stats">
                   <span>{IC.book(13)} {cls.assignments?.length ?? 0} bài tập</span>
-                  <span>{cls.members?.length ?? 0} học sinh</span>
                 </div>
                 <div className="cm-class-footer">
                   <span className="cm-class-date">Tham gia: {new Date(cls.createdAt).toLocaleDateString('vi-VN')}</span>

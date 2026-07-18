@@ -21,11 +21,18 @@ export async function getClassById(classId) {
   return res.json()
 }
 
-export async function createClass({ name, description, subject, teacherId, teacherName, joinPassword }) {
+export async function createClass({ name, description, grade, subject, teacherId, teacherName, joinPassword }) {
   const res = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, description, subject: subject || null, teacherId, teacherName: teacherName || '', joinPassword: joinPassword || null, createdAt: new Date().toISOString() }),
+    body: JSON.stringify({
+      name, description,
+      grade: grade || null,
+      subject: subject || null,           // mỗi lớp = 1 môn
+      teacherId, teacherName: teacherName || '',
+      joinPassword: joinPassword || null,
+      createdAt: new Date().toISOString(),
+    }),
   })
   if (!res.ok) throw new Error('Tạo lớp thất bại')
   return res.json()
@@ -47,38 +54,53 @@ export async function deleteClass(classId) {
   return res.json()
 }
 
+/** Xem sơ bộ lớp theo mã (tên/khối/môn) trước khi tham gia. */
+export async function getClassByCode(code) {
+  const res = await fetch(`${API}/by-code/${encodeURIComponent(code)}`)
+  const data = await res.json().catch(() => ({ error: `Lỗi máy chủ: HTTP ${res.status}` }))
+  return res.ok ? data : { error: data.error || 'Mã lớp không hợp lệ.' }
+}
+
+/** Tham gia lớp: mỗi lớp 1 môn nên học sinh vào thẳng môn của lớp (không cần chọn môn). */
 export async function joinClassByCode(code, password, user) {
   const res = await fetch(`${API}/join`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, password: password || null, userId: user.id, userName: user.name, userEmail: user.email }),
+    body: JSON.stringify({
+      code, password: password || null,
+      userId: user.id, userName: user.name, userEmail: user.email,
+    }),
   })
   const data = await res.json().catch(() => ({ error: `Lỗi máy chủ: HTTP ${res.status}` }))
   return data
 }
 
-export async function addMemberToClass(classId, student) {
+/** Thêm học sinh vào lớp THEO MÔN (subject). */
+export async function addMemberToClass(classId, student, subject = null) {
   const res = await fetch(`${API}/${classId}/members`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId: student.id, name: student.name, email: student.email }),
+    body: JSON.stringify({ userId: student.id, name: student.name, email: student.email, subject: subject || null }),
   })
-  if (!res.ok) throw new Error('Thêm học sinh thất bại')
-  return res.json()
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'Thêm học sinh thất bại')
+  return data
 }
 
-export async function removeMemberFromClass(classId, userId) {
-  const res = await fetch(`${API}/${classId}/members/${userId}`, { method: 'DELETE' })
+/** Xoá học sinh khỏi lớp; có subject → chỉ xoá khỏi môn đó. */
+export async function removeMemberFromClass(classId, userId, subject = null) {
+  const qs = subject ? `?subject=${encodeURIComponent(subject)}` : ''
+  const res = await fetch(`${API}/${classId}/members/${userId}${qs}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Xóa thành viên thất bại')
   return res.json()
 }
 
-export async function addAssignment(classId, { title, description, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, attachments, writingTask }) {
+export async function addAssignment(classId, { title, description, subject, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, attachments, writingTask }) {
   const res = await fetch(`${API}/${classId}/assignments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      title, description, examId: examId || null,
+      title, description, subject: subject || null, examId: examId || null,
       dueDate, openTime: openTime || null, closeTime: closeTime || null,
       duration: duration ?? null,
       maxAttempts: maxAttempts ?? null,
@@ -184,10 +206,11 @@ export async function uploadFile(file) {
   return res.json()
 }
 
-/** Tìm kiếm học sinh từ server (async) */
-export async function searchStudents(query = '') {
+/** Tìm kiếm học sinh từ server (async); grade → chỉ học sinh cùng cấp độ. */
+export async function searchStudents(query = '', grade = '') {
   try {
     const params = new URLSearchParams({ role: 'hoc_sinh', q: query })
+    if (grade) params.set('grade', grade)
     const r = await fetch(`/api/users/search?${params}`)
     if (r.ok) return r.json()
   } catch {}

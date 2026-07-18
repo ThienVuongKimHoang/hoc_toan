@@ -19,12 +19,6 @@ export default function Header({ user, onGoHome, onGoLogin, onGoLobby, onLogout,
           <span className="logo-text">Trung tâm <span className="logo-dot">Ánh Sáng</span></span>
         </button>
 
-        <nav className="site-nav">
-          <a href="#features" onClick={onGoHome}>Tính năng</a>
-          <a href="#how-it-works" onClick={onGoHome}>Cách dùng</a>
-          <button className="site-nav-btn" onClick={onGoLobby}>Đề thi</button>
-        </nav>
-
         <div className="header-right">
           {user ? (
             <>

@@ -67,6 +67,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def _startup():
     db.init_db()
+    _migrate_split_multisubject_classes()
 
 
 _CLASSIFY_BATCH = 15   # câu mỗi lần gọi Groq
@@ -1297,6 +1298,7 @@ async def api_register(request: Request):
         "name":         name,
         "role":         "khach",
         "avatar":       name[0].upper() if name else "?",
+        "grade":        (body.get("grade") or "").strip() or None,   # cấp độ (khối lớp)
         "isRegistered": True,
     }
     return db.add_user(new_user)
@@ -1315,9 +1317,9 @@ async def admin_list_users():
 
 
 @app.get("/api/users/search")
-async def search_users(q: str = "", role: str = ""):
-    """Tìm kiếm người dùng theo query & role."""
-    return db.search_users(q=q.strip(), role=role)
+async def search_users(q: str = "", role: str = "", grade: str = ""):
+    """Tìm kiếm người dùng theo query, role & cấp độ (grade)."""
+    return db.search_users(q=q.strip(), role=role, grade=grade)
 
 
 @app.put("/api/admin/users/{user_id}/role")
@@ -1327,6 +1329,18 @@ async def admin_update_user_role(user_id: str, request: Request):
     if not new_role:
         return JSONResponse({"error": "Thiếu role."}, status_code=400)
     updated = db.update_user_role(user_id, new_role)
+    if not updated:
+        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
+    return updated
+
+
+@app.put("/api/admin/users/{user_id}/grade")
+async def admin_update_user_grade(user_id: str, request: Request):
+    """Admin sửa cấp độ lớp (khối) của người dùng. Gửi grade='' hoặc null để bỏ."""
+    body = await request.json()
+    raw = body.get("grade")
+    grade = (str(raw).strip() or None) if raw not in (None, "") else None
+    updated = db.update_user(user_id, {"grade": grade})
     if not updated:
         return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
     return updated
@@ -1364,14 +1378,75 @@ def _now_iso() -> str:
     return datetime.now(_tz.utc).isoformat()
 
 
+def _migrate_split_multisubject_classes() -> None:
+    """Mỗi lớp = 1 khối + 1 môn. Lớp đa môn cũ (subjects > 1) được TÁCH thành nhiều
+    lớp 1-môn: lớp gốc giữ môn đầu (s0), mỗi môn còn lại tạo lớp mới (id + mã join
+    riêng) và chuyển members/assignments/documents thuộc môn đó sang. Idempotent:
+    khi mọi lớp đã ≤ 1 môn thì không làm gì. Lớp cũ chưa gán môn (subjects rỗng) giữ nguyên."""
+    try:
+        classes = db.list_all_classes()
+    except Exception as e:
+        print(f"[DB] Bỏ qua tách lớp đa môn (không đọc được lớp): {e}")
+        return
+    n_split = 0
+    for cls in classes:
+        subs = [s for s in (cls.get("subjects") or []) if s]
+        if len(subs) <= 1:
+            continue
+        s0, rest = subs[0], subs[1:]
+
+        def _belongs(item, subj):
+            return (item.get("subject") or None) == subj
+
+        # Tạo lớp mới cho từng môn phụ (s1..sn), chuyển nội dung của môn đó sang.
+        for si in rest:
+            new_id = _cls_id()
+            new_cls = {
+                "id": new_id,
+                "name": f"{cls.get('name', '')} · {si}",
+                "description": cls.get("description", ""),
+                "subject": si, "subjects": [si],
+                "grade": cls.get("grade"),
+                "teacherId": cls.get("teacherId"), "teacherName": cls.get("teacherName", ""),
+                "createdAt": cls.get("createdAt") or _now_iso(),
+                "joinCode": _join_code(), "joinPassword": cls.get("joinPassword"),
+                "members":     [m for m in (cls.get("members") or [])     if _belongs(m, si)],
+                "assignments": [a for a in (cls.get("assignments") or []) if _belongs(a, si)],
+                "documents":   [d for d in (cls.get("documents") or [])   if _belongs(d, si)],
+            }
+            db.upsert_class(new_id, new_cls)
+            n_split += 1
+
+        # Lớp gốc giữ môn đầu s0: nội dung thuộc s0 hoặc chưa gán môn (quy về môn chính).
+        keep_subj = lambda x: (x.get("subject") or None) in (None, s0)
+        cls["subject"] = s0
+        cls["subjects"] = [s0]
+        cls["members"]     = [m for m in (cls.get("members") or [])     if keep_subj(m)]
+        cls["assignments"] = [a for a in (cls.get("assignments") or []) if keep_subj(a)]
+        cls["documents"]   = [d for d in (cls.get("documents") or [])   if keep_subj(d)]
+        db.upsert_class(cls["id"], cls)
+
+    if n_split:
+        print(f"[DB] Tách lớp đa môn → tạo thêm {n_split} lớp 1-môn")
+
+
 @app.post("/api/classes")
 async def create_class_endpoint(request: Request):
     body = await request.json()
     cid = _cls_id()
+    # Mỗi lớp = 1 khối + ĐÚNG 1 môn. Nhận `subject`; chấp nhận `subjects[]` từ client
+    # cũ nhưng chỉ lấy môn đầu tiên. Luôn giữ subjects = [subject] cho các helper lọc.
+    subject = body.get("subject")
+    if not subject:
+        subs = body.get("subjects")
+        subject = next((s for s in subs if s), None) if isinstance(subs, list) else None
+    subjects = [subject] if subject else []
     cls = {
         "id": cid, "name": body.get("name", ""),
         "description": body.get("description", ""),
-        "subject": body.get("subject") or None,   # toan | ly | hoa | anh | van | khac
+        "subject": subject,                                # môn của lớp (toan|ly|hoa|anh|van|khac)
+        "grade": (body.get("grade") or "").strip() or None,  # cấp độ (khối lớp)
+        "subjects": subjects,                              # = [subject] để tương thích helper lọc
         "teacherId": body.get("teacherId"), "teacherName": body.get("teacherName", ""),
         "createdAt": body.get("createdAt", _now_iso()),
         "joinCode": _join_code(), "joinPassword": body.get("joinPassword") or None,
@@ -1473,16 +1548,56 @@ async def join_class_by_code(request: Request):
         return JSONResponse({"error": "Sai mật khẩu."}, status_code=401)
     em = (uemail or "").strip().lower()
 
+    # Chặn theo cấp độ: chỉ học sinh cùng cấp độ với lớp mới được tham gia.
+    stu = db.get_user_by_id(uid) if uid is not None else None
+    stu_grade = (stu or {}).get("grade")
+    if cls.get("grade") and stu_grade and str(stu_grade) != str(cls.get("grade")):
+        return JSONResponse(
+            {"error": f"Lớp này dành cho học sinh cấp độ Lớp {cls.get('grade')}. Bạn không thể tham gia."},
+            status_code=403)
+
+    # Mỗi lớp chỉ 1 môn → học sinh vào thẳng môn của lớp (không cần chọn).
+    cls_subject = cls.get("subject") or next((s for s in (cls.get("subjects") or []) if s), None)
+    want = [cls_subject]   # None với lớp cũ chưa gán môn → một thành viên chung
+
+    joined = []
+
     def mutate(c):
         members = c.get("members", [])
-        if any(str(m.get("userId")) == str(uid)
-               or (em and (m.get("email") or "").strip().lower() == em)
-               for m in members):
-            return False
-        members.append({"userId": uid, "name": uname, "email": uemail, "addedAt": _now_iso()})
+        for subj in want:
+            already = any(
+                (str(m.get("userId")) == str(uid)
+                 or (em and (m.get("email") or "").strip().lower() == em))
+                and (m.get("subject") or None) == (subj or None)
+                for m in members)
+            if already:
+                continue
+            members.append({"userId": uid, "name": uname, "email": uemail,
+                            "subject": subj, "addedAt": _now_iso()})
+            joined.append(subj)
         c["members"] = members
+        if not joined:
+            return False   # không có gì mới để tham gia
     db.update_class_atomic(cls["id"], mutate)
-    return {"ok": True, "classId": cls["id"], "className": cls["name"]}
+    return {"ok": True, "classId": cls["id"], "className": cls["name"], "subjects": joined}
+
+
+@app.get("/api/classes/by-code/{code}")
+async def get_class_by_code_endpoint(code: str):
+    """Xem sơ bộ lớp theo mã (cho học sinh chọn môn trước khi tham gia).
+    Không lộ mật khẩu/danh sách thành viên."""
+    cls = db.get_class_by_code((code or "").strip().upper())
+    if not cls:
+        return JSONResponse({"error": "Mã lớp không hợp lệ."}, status_code=404)
+    subject = cls.get("subject") or next((s for s in (cls.get("subjects") or []) if s), None)
+    return {
+        "id": cls["id"], "name": cls.get("name", ""),
+        "teacherName": cls.get("teacherName", ""),
+        "grade": cls.get("grade"),
+        "subject": subject,                       # môn của lớp (mỗi lớp 1 môn)
+        "subjects": [subject] if subject else [],  # tương thích client cũ
+        "hasJoinPassword": bool(cls.get("joinPassword")),
+    }
 
 
 @app.get("/api/classes/{cls_id}")
@@ -1499,8 +1614,18 @@ async def update_class_endpoint(cls_id: str, request: Request):
     body = await request.json()
 
     def mutate(cls):
-        for k in ("name", "description", "joinPassword", "subject"):
+        for k in ("name", "description", "joinPassword", "grade"):
             if k in body: cls[k] = body[k]
+        # Mỗi lớp 1 môn: ưu tiên `subject`; nếu client cũ gửi `subjects[]` thì lấy môn đầu.
+        if "subject" in body:
+            subj = body["subject"] or None
+        elif "subjects" in body:
+            subj = next((s for s in (body.get("subjects") or []) if s), None)
+        else:
+            subj = "__keep__"
+        if subj != "__keep__":
+            cls["subject"] = subj
+            cls["subjects"] = [subj] if subj else []
     cls = db.update_class_atomic(cls_id, mutate)
     if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     return cls
@@ -1517,19 +1642,35 @@ async def delete_class_endpoint(cls_id: str):
 async def add_member_endpoint(cls_id: str, request: Request):
     body = await request.json()
     em = (body.get("email") or "").strip().lower()
+    subject = body.get("subject") or None   # thêm học sinh THEO MÔN
     err = {}
+
+    # Chặn theo cấp độ: chỉ thêm học sinh cùng cấp độ với lớp.
+    cls0 = db.get_class(cls_id)
+    if cls0 is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if cls0.get("grade"):
+        stu = db.get_user_by_id(body.get("userId")) if body.get("userId") is not None else None
+        stu_grade = (stu or {}).get("grade")
+        if not stu_grade or str(stu_grade) != str(cls0.get("grade")):
+            return JSONResponse(
+                {"error": f"Chỉ thêm được học sinh cấp độ Lớp {cls0.get('grade')} vào lớp này."},
+                status_code=403)
 
     def mutate(cls):
         if str(cls.get("teacherId")) == str(body.get("userId")):
             err["msg"] = "Không thể thêm giáo viên của lớp vào danh sách học sinh."
             return False
         members = cls.get("members", [])
-        if any(str(m.get("userId")) == str(body.get("userId"))
-               or (em and (m.get("email") or "").strip().lower() == em)
+        # Trùng khi cùng học sinh VÀ cùng môn (một học sinh có thể học nhiều môn).
+        if any((str(m.get("userId")) == str(body.get("userId"))
+                or (em and (m.get("email") or "").strip().lower() == em))
+               and (m.get("subject") or None) == subject
                for m in members):
             return False
         members.append({"userId": body.get("userId"), "name": body.get("name", ""),
-                        "email": body.get("email", ""), "addedAt": _now_iso()})
+                        "email": body.get("email", ""), "subject": subject,
+                        "addedAt": _now_iso()})
         cls["members"] = members
     cls = db.update_class_atomic(cls_id, mutate)
     if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
@@ -1538,9 +1679,18 @@ async def add_member_endpoint(cls_id: str, request: Request):
 
 
 @app.delete("/api/classes/{cls_id}/members/{user_id}")
-async def remove_member_endpoint(cls_id: str, user_id: str):
+async def remove_member_endpoint(cls_id: str, user_id: str, subject: str = None):
+    """Xoá học sinh khỏi lớp. Có `subject` → chỉ xoá khỏi MÔN đó;
+    không có → xoá khỏi toàn bộ lớp (mọi môn)."""
+    subj = subject or None
     def mutate(cls):
-        cls["members"] = [m for m in cls.get("members", []) if str(m.get("userId")) != user_id]
+        def keep(m):
+            if str(m.get("userId")) != user_id:
+                return True
+            if subj is None:
+                return False   # xoá khỏi mọi môn
+            return (m.get("subject") or None) != subj
+        cls["members"] = [m for m in cls.get("members", []) if keep(m)]
     cls = db.update_class_atomic(cls_id, mutate)
     if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     return {"ok": True}
@@ -1562,6 +1712,7 @@ async def add_assignment_endpoint(cls_id: str, request: Request):
     asgn = {
         "id": _cls_id(), "title": body.get("title", ""),
         "description": body.get("description", ""),
+        "subject": body.get("subject") or None,   # bài tập/đề thi gắn với một môn của lớp
         # dueDate giữ cho tương thích cũ; với đề thi nó = closeTime
         "dueDate": close_time or body.get("dueDate"),
         "examId": exam_id,
@@ -1581,10 +1732,21 @@ async def add_assignment_endpoint(cls_id: str, request: Request):
         cls.setdefault("assignments", []).append(asgn)
     cls = db.update_class_atomic(cls_id, mutate)
     if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    # Chỉ báo cho học sinh ĐĂNG KÝ ĐÚNG MÔN của bài tập (tránh trùng nếu học nhiều môn).
+    # Mục/thành viên cũ chưa gắn subject quy về môn chính của lớp.
+    primary = cls.get("subject") or (cls.get("subjects") or [None])[0]
+    asgn_subject = asgn.get("subject") or primary
+    notified = set()
     for m in cls.get("members", []):
+        if asgn_subject and (m.get("subject") or primary) != asgn_subject:
+            continue
+        muid = str(m.get("userId"))
+        if muid in notified:
+            continue
+        notified.add(muid)
         db.add_notif({
             "id": _cls_id(), "type": "assignment",
-            "targetUserId": str(m.get("userId")), "classId": cls_id,
+            "targetUserId": muid, "classId": cls_id,
             "className": cls.get("name", ""), "assignmentId": asgn["id"],
             "title": f"Bài tập mới: {asgn['title']}",
             "message": f"Lớp {cls.get('name','')} vừa giao bài tập mới. Hạn nộp: {asgn.get('dueDate','')}",

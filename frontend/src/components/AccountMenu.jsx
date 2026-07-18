@@ -76,7 +76,6 @@ function buildMenu(role, actions) {
     items.push({ icon: IC.createExam, label: 'Tạo đề thi',       action: actions.onCreateExam })
     items.push({ icon: IC.myExams,    label: 'Đề thi của tôi',    action: actions.onMyExams })
     items.push({ icon: IC.users,      label: 'Quản lý lớp học',   action: actions.onGoClasses })
-    items.push({ icon: <span style={{fontSize:'15px'}}>🛠</span>, label: 'Công cụ', action: actions.onGoTools, highlight: true })
   }
 
   if (tier >= 3) {

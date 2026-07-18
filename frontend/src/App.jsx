@@ -55,7 +55,9 @@ function parseHash() {
   if (hash.startsWith('results/')) return { view: 'exam-results', examId: hash.slice(8), classId: null }
   if (hash === 'admin') return { view: 'super-admin', examId: null, classId: null }
   if (hash === 'study') return { view: 'study', examId: null, classId: null }
-  if (hash === 'classes') return { view: 'class-mgmt', examId: null, classId: null }
+  // classes | classes/<khối> | classes/<khối>/<classId> — điều hướng khối→lớp→chi tiết
+  // do ClassManagementPage tự đọc từ hash; ở đây chỉ cần giữ view class-mgmt.
+  if (hash === 'classes' || hash.startsWith('classes/')) return { view: 'class-mgmt', examId: null, classId: null }
   if (hash === 'my-classes') return { view: 'my-classes', examId: null, classId: null }
   if (hash === 'tools/solver') return { view: 'solver-page', examId: null, classId: null }
   if (hash === 'tools/geo3d') return { view: 'geo3d-page', examId: null, classId: null }

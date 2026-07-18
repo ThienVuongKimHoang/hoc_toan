@@ -93,6 +93,8 @@ CREATE TABLE IF NOT EXISTS users (
 );
 ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) DEFAULT NULL;
 ALTER TABLE users ALTER COLUMN avatar TYPE VARCHAR(500);
+-- Cấp độ (khối lớp) học sinh chọn khi đăng ký: '1'..'12'. GV/Admin để trống.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS grade VARCHAR(20);
 
 
 CREATE TABLE IF NOT EXISTS exams (
@@ -154,6 +156,10 @@ CREATE TABLE IF NOT EXISTS classes (
 -- Migration cho DB tạo trước khi cột subject tồn tại (CREATE IF NOT EXISTS
 -- không thêm cột mới vào bảng cũ)
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS subject VARCHAR(20);
+-- Lớp = khối/cấp (Lớp 5, 6, 7…): grade là cấp độ, subjects là danh sách môn.
+-- 'subject' đơn cũ được giữ lại để tương thích & backfill vào 'subjects'.
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS grade VARCHAR(20);
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS subjects JSONB DEFAULT '[]';
 
 CREATE TABLE IF NOT EXISTS notifications (
     id             VARCHAR(50)  PRIMARY KEY,
@@ -194,6 +200,16 @@ def init_db():
             if backfill_subject:
                 cur.execute("UPDATE classes SET subject = 'toan' WHERE subject IS NULL")
                 print(f"[DB] Đã thêm cột classes.subject, gán 'toan' cho {cur.rowcount} lớp cũ")
+            # Backfill subjects[] từ subject đơn cho các lớp cũ (idempotent):
+            # lớp nào subjects rỗng mà có subject thì đưa subject vào mảng.
+            cur.execute("""
+                UPDATE classes
+                   SET subjects = to_jsonb(ARRAY[subject])
+                 WHERE subject IS NOT NULL
+                   AND (subjects IS NULL OR subjects = '[]'::jsonb)
+            """)
+            if cur.rowcount:
+                print(f"[DB] Backfill classes.subjects cho {cur.rowcount} lớp cũ")
         conn.commit()
     _migrate_users()
     _migrate_exams()
@@ -863,6 +879,7 @@ def _user_from_row(row: dict, pwd: bool = False) -> dict:
         "role":         r["role"],
         "avatar":       r["avatar"] or "",
         "google_id":    r.get("google_id"),   # ADD THIS
+        "grade":        r.get("grade") or None,   # cấp độ (khối lớp) của học sinh
         "isRegistered": bool(r["is_registered"]),
         "createdAt":    r["created_at"].isoformat() if r.get("created_at") else None,
     }
@@ -890,10 +907,11 @@ def add_user(user: dict) -> dict:
     with _C() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                INSERT INTO users(id,email,password,name,role,avatar,is_registered,created_at)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,NOW()) RETURNING *
+                INSERT INTO users(id,email,password,name,role,avatar,grade,is_registered,created_at)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,NOW()) RETURNING *
             """, (int(user["id"]), user.get("email", ""), user.get("password", ""),
                   user.get("name", ""), user.get("role", "khach"), user.get("avatar", ""),
+                  user.get("grade") or None,
                   bool(user.get("isRegistered", False))))
             row = cur.fetchone()
         conn.commit()
@@ -935,11 +953,14 @@ def update_user_password(uid: str, password: str) -> bool:
     return found
 
 
-def search_users(q: str = "", role: str = "") -> list:
+def search_users(q: str = "", role: str = "", grade: str = "") -> list:
     where, params = [], []
     if role:
         where.append("role=%s")
         params.append(role)
+    if grade:
+        where.append("grade=%s")
+        params.append(grade)
     if q:
         where.append("(LOWER(name) LIKE %s OR LOWER(email) LIKE %s)")
         params += [f"%{q.lower()}%", f"%{q.lower()}%"]
@@ -965,6 +986,9 @@ def _cls_from_row(row: dict) -> dict:
         "joinCode":     r["join_code"],
         "joinPassword": r["join_password"],
         "subject":      r.get("subject") or None,
+        "grade":        r.get("grade") or None,
+        # subjects[] là danh sách môn của lớp; fallback về [subject] cho lớp cũ.
+        "subjects":     (r.get("subjects") or ([r["subject"]] if r.get("subject") else [])),
         "members":      r["members"] or [],
         "assignments":  r["assignments"] or [],
         "documents":    r["documents"] or [],
@@ -994,6 +1018,15 @@ def list_classes_by_teacher(teacher_id: str) -> list:
                 "SELECT * FROM classes WHERE teacher_id=%s ORDER BY created_at DESC",
                 (str(teacher_id),),
             )
+            rows = cur.fetchall()
+    return [_cls_from_row(dict(r)) for r in rows]
+
+
+def list_all_classes() -> list:
+    """Toàn bộ lớp (dùng cho migration/tác vụ nội bộ)."""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM classes ORDER BY created_at DESC")
             rows = cur.fetchall()
     return [_cls_from_row(dict(r)) for r in rows]
 
@@ -1057,20 +1090,21 @@ def upsert_class(cid: str, cls: dict) -> None:
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO classes(id,name,description,teacher_id,teacher_name,
-                    created_at,join_code,join_password,subject,members,assignments,documents)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    created_at,join_code,join_password,subject,grade,subjects,members,assignments,documents)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT(id) DO UPDATE SET
                     name=EXCLUDED.name, description=EXCLUDED.description,
                     teacher_id=EXCLUDED.teacher_id, teacher_name=EXCLUDED.teacher_name,
                     join_code=EXCLUDED.join_code, join_password=EXCLUDED.join_password,
-                    subject=EXCLUDED.subject,
+                    subject=EXCLUDED.subject, grade=EXCLUDED.grade, subjects=EXCLUDED.subjects,
                     members=EXCLUDED.members, assignments=EXCLUDED.assignments,
                     documents=EXCLUDED.documents
             """, (
                 cid, cls.get("name", ""), cls.get("description", ""),
                 str(cls.get("teacherId", "")), cls.get("teacherName", ""),
                 cls.get("createdAt"), cls.get("joinCode"), cls.get("joinPassword"),
-                cls.get("subject") or None,
+                cls.get("subject") or None, cls.get("grade") or None,
+                json.dumps(cls.get("subjects") or [], ensure_ascii=False),
                 json.dumps(cls.get("members") or [], ensure_ascii=False),
                 json.dumps(cls.get("assignments") or [], ensure_ascii=False),
                 json.dumps(cls.get("documents") or [], ensure_ascii=False),
@@ -1098,13 +1132,15 @@ def update_class_atomic(cid: str, mutate) -> Optional[dict]:
                 cur.execute("""
                     UPDATE classes SET
                         name=%s, description=%s, teacher_id=%s, teacher_name=%s,
-                        join_code=%s, join_password=%s, subject=%s,
+                        join_code=%s, join_password=%s, subject=%s, grade=%s, subjects=%s,
                         members=%s, assignments=%s, documents=%s
                     WHERE id=%s
                 """, (
                     cls.get("name", ""), cls.get("description", ""),
                     str(cls.get("teacherId", "")), cls.get("teacherName", ""),
                     cls.get("joinCode"), cls.get("joinPassword"), cls.get("subject") or None,
+                    cls.get("grade") or None,
+                    json.dumps(cls.get("subjects") or [], ensure_ascii=False),
                     json.dumps(cls.get("members") or [], ensure_ascii=False),
                     json.dumps(cls.get("assignments") or [], ensure_ascii=False),
                     json.dumps(cls.get("documents") or [], ensure_ascii=False),
@@ -1149,6 +1185,7 @@ def update_user(uid: str, fields: dict) -> Optional[dict]:
         "role":      "role",
         "password":  "password",
         "google_id": "google_id",
+        "grade":     "grade",
     }
     allowed = {_map[k]: v for k, v in fields.items() if k in _map}
     if not allowed:

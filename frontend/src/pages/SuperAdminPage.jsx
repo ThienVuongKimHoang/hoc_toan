@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ROLE_META } from '../auth/mockUsers.js'
 import { getAllExams } from '../store/examStore.js'
+import { GRADES, gradeLabel } from '../components/SubjectBadge.jsx'
 import SiteContentTab from './SiteContentTab.jsx'
 
 /* ── SVG primitives ── */
@@ -385,15 +386,17 @@ function ExamsTab() {
 
 /* ═══════════════════════════════════════════════════════════ TAB: USERS ══ */
 function EditRoleModal({ user, onSave, onClose }) {
-  const [role, setRole] = useState(user.role)
+  const [role, setRole]   = useState(user.role)
+  const [grade, setGrade] = useState(user.grade ? String(user.grade) : '')
   const roles = Object.entries(ROLE_META).map(([k, v]) => ({ key: k, label: v.label, icon: v.icon }))
   return (
     <div className="sa-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="sa-modal sa-modal--sm">
         <div className="sa-modal-header">
-          <h3>{IcEdit(16)} Đổi quyền — {user.name}</h3>
+          <h3>{IcEdit(16)} Sửa người dùng — {user.name}</h3>
           <button className="sa-modal-close" onClick={onClose}>✕</button>
         </div>
+        <div className="sa-field-label">Vai trò</div>
         <div className="sa-role-list">
           {roles.map(r => (
             <label key={r.key} className={`sa-role-option ${role === r.key ? 'selected' : ''}`}>
@@ -404,9 +407,15 @@ function EditRoleModal({ user, onSave, onClose }) {
             </label>
           ))}
         </div>
+        <div className="sa-field-label">Khối (cấp độ lớp)</div>
+        <select className="sa-grade-select" value={grade} onChange={e => setGrade(e.target.value)}>
+          <option value="">— Chưa đặt khối —</option>
+          {GRADES.map(g => <option key={g} value={g}>{gradeLabel(g)}</option>)}
+        </select>
+        <p className="sa-field-hint">Dùng cho học sinh — quyết định lớp học sinh có thể tham gia.</p>
         <div className="sa-modal-footer">
           <button className="sa-btn sa-btn--ghost" onClick={onClose}>Huỷ</button>
-          <button className="sa-btn sa-btn--primary" onClick={() => onSave(user.id, role)}>Lưu</button>
+          <button className="sa-btn sa-btn--primary" onClick={() => onSave(user.id, role, grade || null)}>Lưu</button>
         </div>
       </div>
     </div>
@@ -521,16 +530,27 @@ function UsersTab() {
   const pages     = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
   const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
-  const handleSaveRole = async (userId, newRole) => {
+  const handleSaveRole = async (userId, newRole, newGrade) => {
+    const prevUser = users.find(u => String(u.id) === String(userId))
     try {
-      await fetch(`/api/admin/users/${userId}/role`, {
-        method:  'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ role: newRole }),
-      })
-      setUsers(prev => prev.map(u => String(u.id) === String(userId) ? { ...u, role: newRole } : u))
+      if (!prevUser || prevUser.role !== newRole) {
+        await fetch(`/api/admin/users/${userId}/role`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ role: newRole }),
+        })
+      }
+      const normGrade = newGrade || null
+      if (!prevUser || (prevUser.grade || null) !== normGrade) {
+        await fetch(`/api/admin/users/${userId}/grade`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ grade: normGrade }),
+        })
+      }
+      setUsers(prev => prev.map(u => String(u.id) === String(userId) ? { ...u, role: newRole, grade: normGrade } : u))
       if (currentUser && String(currentUser.id) === String(userId)) {
-        const updated = { ...currentUser, role: newRole }
+        const updated = { ...currentUser, role: newRole, grade: normGrade }
         localStorage.setItem('hoctoan_user', JSON.stringify(updated))
         window.dispatchEvent(new CustomEvent('hoctoan_user_updated', { detail: updated }))
       }
@@ -612,13 +632,14 @@ function UsersTab() {
                   <th>Tên</th>
                   <th>Email</th>
                   <th>Vai trò</th>
+                  <th>Khối</th>
                   <th>Ngày tạo</th>
                   <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 {paginated.length === 0 ? (
-                  <tr><td colSpan={6} className="sa-empty">Không có người dùng nào.</td></tr>
+                  <tr><td colSpan={7} className="sa-empty">Không có người dùng nào.</td></tr>
                 ) : paginated.map(u => {
                   const meta   = ROLE_META[u.role]
                   const isSelf = String(currentUser?.id) === String(u.id)
@@ -639,10 +660,15 @@ function UsersTab() {
                           {meta?.icon} {meta?.label}
                         </span>
                       </td>
+                      <td>
+                        {u.grade
+                          ? <span className="sa-grade-pill">🎓 {gradeLabel(u.grade)}</span>
+                          : <span className="sa-grade-empty">—</span>}
+                      </td>
                       <td>{fmt(u.createdAt)}</td>
                       <td>
                         <div className="sa-actions">
-                          <button className="sa-act-btn" title="Đổi quyền" onClick={() => setEditing(u)}>
+                          <button className="sa-act-btn" title="Sửa vai trò & khối" onClick={() => setEditing(u)}>
                             {IcEdit(14)}
                           </button>
                           <button className="sa-act-btn" title="Đặt lại mật khẩu" onClick={() => setPwdEdit(u)}>

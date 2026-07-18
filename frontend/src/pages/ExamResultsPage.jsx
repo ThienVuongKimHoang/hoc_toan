@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { deleteSubmission, fetchExamById, getSubmissions, hideResultsToggle, revealResults, scaledScore } from '../store/examStore.js'
 import QuestionStats from '../components/QuestionStats.jsx'
+import ScoreDistribution from '../components/ScoreDistribution.jsx'
 import GradeEssayModal from '../components/GradeEssayModal.jsx'
 
 function fmtDate(iso) {
@@ -41,106 +42,6 @@ function TimeBar({ sec, limitMin }) {
     <div className="er-time-bar">
       <div className="er-time-fill" style={{ width: `${pct}%`, background: color }} />
       <span className="er-time-label">⏱ {fmtDuration(sec)}</span>
-    </div>
-  )
-}
-
-/* ── Histogram ── */
-function Histogram({ subs, maxScore }) {
-  if (!subs.length || !maxScore) return null
-
-  // 10 bins đều nhau theo thang điểm
-  const NUM_BINS = 10
-  const step = maxScore / NUM_BINS
-
-  const bins = Array.from({ length: NUM_BINS }, (_, i) => {
-    const lo = +(i * step).toFixed(2)
-    const hi = +((i + 1) * step).toFixed(2)
-    return { lo, hi, count: 0 }
-  })
-
-  subs.forEach(s => {
-    const score  = s.score ?? 0
-    const idx    = Math.min(Math.floor(score / step), NUM_BINS - 1)
-    bins[idx].count++
-  })
-
-  const peak = Math.max(...bins.map(b => b.count), 1)
-
-  // Màu theo vùng điểm (đỏ → vàng → xanh)
-  const barColor = (i) => {
-    const ratio = (i + 0.5) / NUM_BINS
-    if (ratio >= 0.7) return '#22c55e'
-    if (ratio >= 0.5) return '#f59e0b'
-    return '#ef4444'
-  }
-
-  const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(1)
-
-  return (
-    <div className="er-histogram">
-      <div className="er-hist-header">
-        <h3 className="er-hist-title">Phân bố điểm</h3>
-        <div className="er-hist-legend">
-          <span className="er-hl-dot" style={{ background: '#ef4444' }} /> Yếu
-          <span className="er-hl-dot" style={{ background: '#f59e0b' }} /> Trung bình
-          <span className="er-hl-dot" style={{ background: '#22c55e' }} /> Khá – Giỏi
-        </div>
-      </div>
-
-      <div className="er-hist-body">
-        {/* Y-axis labels */}
-        <div className="er-hist-yaxis">
-          {[peak, Math.ceil(peak / 2), 0].map(v => (
-            <span key={v}>{v}</span>
-          ))}
-        </div>
-
-        {/* Chart area */}
-        <div className="er-hist-chart">
-          {/* Dashed grid lines */}
-          <div className="er-hist-grid">
-            <div className="er-hist-gridline" style={{ bottom: '100%' }} />
-            <div className="er-hist-gridline" style={{ bottom: '50%' }} />
-            <div className="er-hist-gridline" style={{ bottom: '0%' }} />
-          </div>
-
-          {bins.map((bin, i) => {
-            const heightPct = (bin.count / peak) * 100
-            const color     = barColor(i)
-            return (
-              <div key={i} className="er-hist-col">
-                <div className="er-hist-bar-wrap">
-                  {bin.count > 0 && (
-                    <div className="er-hist-count-tag" style={{ color }}>
-                      {bin.count}
-                    </div>
-                  )}
-                  <div
-                    className="er-hist-bar"
-                    style={{
-                      height:     `${heightPct}%`,
-                      background: bin.count > 0
-                        ? `linear-gradient(to top, ${color}cc, ${color})`
-                        : 'transparent',
-                      minHeight:  bin.count > 0 ? 4 : 0,
-                    }}
-                    title={`${fmt(bin.lo)}–${fmt(bin.hi)} điểm: ${bin.count} học sinh`}
-                  />
-                </div>
-                <div className="er-hist-xlabel">
-                  {fmt(bin.lo)}
-                </div>
-              </div>
-            )
-          })}
-
-          {/* last x label */}
-          <div className="er-hist-xlabel-last">{fmt(maxScore)}</div>
-        </div>
-      </div>
-
-      <div className="er-hist-xaxis-label">Điểm số</div>
     </div>
   )
 }
@@ -286,8 +187,8 @@ export default function ExamResultsPage({ examId, examTitle, onGoBack }) {
         </div>
       ) : (
         <>
-          {/* Histogram */}
-          <Histogram subs={subs} maxScore={maxScore} />
+          {/* Phổ điểm */}
+          <ScoreDistribution subs={subs} maxScore={maxScore} chartTitle={`Thống kê điểm thi — ${examTitle || exam?.title || ''}`} />
 
           {/* Per-question stats */}
           <QuestionStats exam={exam} subs={subs} />

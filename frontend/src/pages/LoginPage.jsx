@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { login, register, ROLE_META, ROLES } from '../auth/mockUsers.js'
+import { GRADES, gradeLabel } from '../components/SubjectBadge.jsx'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 function GoogleLogo() {
   return (
@@ -159,6 +160,7 @@ function RegisterForm({ onLogin }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [grade, setGrade] = useState('')
   const [showPwd, setShowPwd] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -167,6 +169,7 @@ function RegisterForm({ onLogin }) {
     if (!name.trim()) return 'Vui lòng nhập họ tên.'
     if (!email.trim()) return 'Vui lòng nhập email.'
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Email không hợp lệ.'
+    if (!grade) return 'Vui lòng chọn cấp độ (khối lớp).'
     if (password.length < 6) return 'Mật khẩu tối thiểu 6 ký tự.'
     if (password !== confirm) return 'Mật khẩu xác nhận không khớp.'
     return null
@@ -177,7 +180,7 @@ function RegisterForm({ onLogin }) {
     const err = validate()
     if (err) { setError(err); return }
     setLoading(true); setError('')
-    const result = await register({ name, email, password })
+    const result = await register({ name, email, password, grade })
     setLoading(false)
     if (result.error) { setError(result.error); return }
     onLogin(result.user)
@@ -209,6 +212,19 @@ function RegisterForm({ onLogin }) {
           <input type="email" placeholder="example@email.com" value={email}
             onChange={e => { setEmail(e.target.value); setError('') }}
             autoComplete="email" />
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label>Cấp độ (khối lớp)</label>
+        <div className="input-wrap">
+          <span className="input-icon">🎓</span>
+          <select value={grade}
+            onChange={e => { setGrade(e.target.value); setError('') }}
+            style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none', font: 'inherit', color: 'inherit' }}>
+            <option value="">— Chọn cấp độ —</option>
+            {GRADES.map(g => <option key={g} value={g}>{gradeLabel(g)}</option>)}
+          </select>
         </div>
       </div>
 
