@@ -26,6 +26,7 @@ services:
     volumes:
       - ./class_docs:/app/class_docs
       - ./src/output:/app/src/output
+      - ./uploads:/app/uploads
     ports:
       - "8000:8000"
     depends_on:
