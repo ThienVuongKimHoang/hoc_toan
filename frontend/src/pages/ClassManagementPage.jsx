@@ -11,7 +11,7 @@ import {
 } from '../store/classStore.js'
 import ExerciseSolver from '../components/ExerciseSolver.jsx'
 import Geo3DViewer from '../components/Geo3DViewer.jsx'
-import SubjectBadge, { SUBJECTS, GradeBadge, GradePicker, SubjectPicker, gradeLabel } from '../components/SubjectBadge.jsx'
+import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, GradePicker, SubjectPicker, gradeLabel } from '../components/SubjectBadge.jsx'
 
 /* Môn "chính" của lớp (fallback cho dữ liệu cũ chưa gắn môn) */
 const primarySubject = (cls) => cls?.subject || cls?.subjects?.[0] || null
@@ -1299,20 +1299,47 @@ export default function ClassManagementPage({ user }) {
             </div>
           ) : (
             <div className="cm-class-grid">
-              {list.map(cls => (
-                <div key={cls.id} className="cm-class-card cm-subject-card" data-subject={primarySubject(cls) || 'khac'}>
-                  <div className="cm-class-card-header">
-                    <div className="cm-class-icon cm-subject-icon">{SUBJECTS[primarySubject(cls)]?.icon ?? '🏫'}</div>
-                    <div className="cm-class-title">{cls.name}</div>
-                  </div>
+              {list.map(cls => {
+                const hasPhoto = !!SUBJECT_BG[primarySubject(cls)]
+                const badgeRow = (
                   <div className="cm-class-subject-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                     {subjectsOf(cls).map(s => <SubjectBadge key={s} subject={s} size="sm" />)}
                   </div>
+                )
+                return (
+                <div key={cls.id} className="cm-class-card cm-subject-card" data-subject={primarySubject(cls) || 'khac'}>
+                  {/* Ảnh môn — khối lớn ở đầu thẻ, kiểu tour card. Badge nổi trên ảnh (góc trái trên). */}
+                  {hasPhoto && (
+                    <div className="cm-tour-photo">
+                      <img src={SUBJECT_BG[primarySubject(cls)]} alt="" loading="lazy" />
+                      <div className="cm-tour-badge-float">{badgeRow}</div>
+                    </div>
+                  )}
+                  <div className="cm-class-card-header">
+                    {!hasPhoto && (
+                      <div className="cm-class-icon cm-subject-icon">{SUBJECTS[primarySubject(cls)]?.icon ?? '🏫'}</div>
+                    )}
+                    <div className="cm-title-accent" />
+                    <div className="cm-class-title">{cls.name}</div>
+                  </div>
+                  {!hasPhoto && badgeRow}
                   {cls.description && <div className="cm-class-desc-preview">{cls.description}</div>}
-                  <div className="cm-class-stats">
-                    <span>{IC.users(13)} {cls.members?.length ?? 0} học sinh</span>
-                    <span>{IC.book(13)} {cls.assignments?.length ?? 0} bài tập</span>
-                    <span>{IC.clip(13)} {cls.documents?.length ?? 0} tài liệu</span>
+                  <div className="cm-stat-glow-row">
+                    <div className="cm-stat-glow">
+                      <span className="cm-stat-glow-ic">{IC.users(15)}</span>
+                      <b>{cls.members?.length ?? 0}</b>
+                      <em>học sinh</em>
+                    </div>
+                    <div className="cm-stat-glow">
+                      <span className="cm-stat-glow-ic">{IC.book(15)}</span>
+                      <b>{cls.assignments?.length ?? 0}</b>
+                      <em>bài tập</em>
+                    </div>
+                    <div className="cm-stat-glow">
+                      <span className="cm-stat-glow-ic">{IC.clip(15)}</span>
+                      <b>{cls.documents?.length ?? 0}</b>
+                      <em>tài liệu</em>
+                    </div>
                   </div>
                   <div className="cm-class-footer">
                     <span className="cm-class-date">Tạo: {formatDt(cls.createdAt)}</span>
@@ -1323,7 +1350,8 @@ export default function ClassManagementPage({ user }) {
                     </div>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

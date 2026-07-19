@@ -6570,6 +6570,106 @@ button { font-family: inherit; }
   background: linear-gradient(135deg, color-mix(in srgb, var(--subj) 14%, #fff), color-mix(in srgb, var(--subj) 24%, #fff));
 }
 
+/* ══ Thẻ lớp kiểu "tour card": ảnh lớn ở đầu thẻ, chiếm ~60% chiều cao ══ */
+.cm-tour-photo {
+  margin: -22px -22px 14px;   /* bleed ra sát mép thẻ (bù padding 22px) */
+  height: 220px;
+  overflow: hidden;
+  position: relative;
+}
+.cm-tour-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.5s cubic-bezier(.22,1,.36,1);
+}
+.cm-subject-card:hover .cm-tour-photo img { transform: scale(1.06); }
+/* Dải màu môn mảnh dưới đáy ảnh, nối liền sang phần nội dung */
+.cm-tour-photo::after {
+  content: "";
+  position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+  background: linear-gradient(90deg, var(--subj), color-mix(in srgb, var(--subj) 40%, #fff));
+}
+
+/* Badge môn nổi trên ảnh (góc trái trên) — chip kính tối, tách khỏi tên lớp */
+.cm-tour-badge-float {
+  position: absolute; top: 10px; left: 10px; right: 10px;
+  z-index: 1;
+}
+.cm-tour-badge-float .cm-class-subject-row { margin: 0; }
+.cm-tour-badge-float .subject-badge {
+  background: rgba(15,23,42,0.55) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  backdrop-filter: blur(8px) saturate(140%);
+  border: 1px solid rgba(255,255,255,0.28);
+}
+
+/* Header tên lớp — thanh nhấn màu môn bên trái + gradient chữ */
+.cm-subject-card .cm-class-card-header { gap: 10px; }
+.cm-title-accent {
+  width: 4px; align-self: stretch; min-height: 22px;
+  border-radius: 3px; flex-shrink: 0;
+  background: linear-gradient(180deg, var(--subj), color-mix(in srgb, var(--subj) 30%, #fff));
+  box-shadow: 0 0 10px -1px var(--subj);
+  transition: box-shadow 0.28s, transform 0.28s;
+}
+.cm-subject-card:hover .cm-title-accent { box-shadow: 0 0 16px 0 var(--subj); transform: scaleY(1.08); }
+.cm-subject-card .cm-class-title {
+  font-size: 1.16rem;
+  font-weight: 900;
+  background: linear-gradient(120deg, var(--cm-ink), color-mix(in srgb, var(--subj) 62%, var(--cm-ink)));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  transition: filter 0.28s;
+}
+.cm-subject-card:hover .cm-class-title { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--subj) 35%, transparent)); }
+/* Badge môn khi hiện dưới tên (lớp không có ảnh) — vẫn giữ glow như trước */
+.cm-subject-card .cm-class-subject-row .subject-badge {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.4),
+    0 3px 10px -2px color-mix(in srgb, var(--subj) 55%, transparent),
+    0 0 16px -3px var(--subj);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+}
+
+/* Thống kê — 3 ô kính tối phát sáng */
+.cm-stat-glow-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.cm-stat-glow {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 3px;
+  padding: 10px 4px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #0F172A, #1E293B);
+  border: 1px solid color-mix(in srgb, var(--subj) 40%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  transition: border-color 0.28s, box-shadow 0.28s, transform 0.28s;
+}
+.cm-subject-card:hover .cm-stat-glow {
+  border-color: color-mix(in srgb, var(--subj) 75%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 0 18px -4px var(--subj);
+  transform: translateY(-1px);
+}
+.cm-stat-glow-ic {
+  display: inline-flex;
+  color: color-mix(in srgb, var(--subj) 75%, #fff);
+  filter: drop-shadow(0 0 5px var(--subj));
+  opacity: 0.95;
+}
+.cm-stat-glow b {
+  font-size: 1.32rem; font-weight: 800; line-height: 1.1;
+  color: #fff;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--subj) 85%, transparent);
+}
+.cm-stat-glow em {
+  font-style: normal; font-size: 0.68rem; font-weight: 600;
+  color: rgba(255,255,255,0.68);
+}
+
 /* ── detail panel ── */
 .cm-detail {
   padding: 4px 20px 44px;

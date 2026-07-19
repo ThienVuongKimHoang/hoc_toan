@@ -1,13 +1,28 @@
 import React from 'react'
 
+/** Icon ảnh cho môn — cỡ theo em nên tự co giãn theo font-size chỗ dùng */
+const imgIcon = (src) => (
+  <img
+    src={src} alt=""
+    style={{ width: '3em', height: '2.2em', borderRadius: '4px', objectFit: 'contain', verticalAlign: 'middle', flexShrink: 0 }}
+  />
+)
+
+/** Ảnh nền theo môn (dùng cho thẻ lớp full-bleed). null = không có ảnh. */
+export const SUBJECT_BG = {
+  toan: '/img/toan.jpg',
+  ly: '/img/ly.jpg',
+  hoa: '/img/hoa.jpg',
+}
+
 /** Loại hình lớp học — dùng chung cho trang giáo viên & học sinh */
 export const SUBJECTS = {
-  toan: { label: 'Toán',      icon: '📐' },
-  ly:   { label: 'Vật lý',    icon: '⚡' },
-  hoa:  { label: 'Hóa học',   icon: '🧪' },
-  anh:  { label: 'Tiếng Anh', icon: '🇬🇧' },
-  van:  { label: 'Ngữ văn',   icon: '📖' },
-  khac: { label: 'Khác',      icon: '📚' },
+  toan: { label: 'Toán', icon: imgIcon('/img/toan.jpg') },
+  ly: { label: 'Vật lý', icon: imgIcon('/img/ly.jpg') },
+  hoa: { label: 'Hóa học', icon: imgIcon('/img/hoa.jpg') },
+  anh: { label: 'Tiếng Anh', icon: '🇬🇧' },
+  van: { label: 'Ngữ văn', icon: '📖' },
+  khac: { label: 'Khác', icon: '📚' },
 }
 
 export const SUBJECT_ORDER = ['toan', 'ly', 'hoa', 'anh', 'van', 'khac']
