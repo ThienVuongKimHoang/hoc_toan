@@ -28,7 +28,7 @@ export async function getClassById(classId) {
   return res.json()
 }
 
-export async function createClass({ name, description, grade, subject, teacherId, teacherName, joinPassword }) {
+export async function createClass({ name, description, grade, subject, teacherId, teacherName, joinPassword, schedule, settings }) {
   const res = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -38,6 +38,8 @@ export async function createClass({ name, description, grade, subject, teacherId
       subject: subject || null,           // mỗi lớp = 1 môn
       teacherId, teacherName: teacherName || '',
       joinPassword: joinPassword || null,
+      schedule: schedule || [],
+      settings: settings || {},
       createdAt: new Date().toISOString(),
     }),
   })

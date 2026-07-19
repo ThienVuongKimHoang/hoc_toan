@@ -82,7 +82,7 @@ function isDragTrigger(e, wrapperEl) {
   return x < EDGE || x > r.width - EDGE || y < EDGE || y > r.height - EDGE
 }
 
-export default function ReviewStep({ result, title, onTitleChange, onPreview, onPublish, onSave, subject = 'toan' }) {
+export default function ReviewStep({ result, title, onTitleChange, onPreview, onSave, subject = 'toan' }) {
   const effectiveSections = Object.keys(result.sections || {}).filter(sec => SECTION_META[sec])
   let sectionList = effectiveSections.length > 0 ? effectiveSections : MATH_SECTIONS
   // Đề Toán (kể cả trích từ PDF) luôn có sẵn tab Tự luận để GV thêm câu upload ảnh
@@ -465,9 +465,6 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
               💾 Lưu lại
             </button>
           )}
-          <button className="rs-publish-btn" disabled={totalQ === 0} onClick={() => onPublish(buildResult())}>
-            🚀 Lưu & Phát đề
-          </button>
         </div>
       </div>
 

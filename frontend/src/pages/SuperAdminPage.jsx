@@ -3,6 +3,7 @@ import { ROLE_META } from '../auth/mockUsers.js'
 import { getAllExams } from '../store/examStore.js'
 import { GRADES, gradeLabel } from '../components/SubjectBadge.jsx'
 import SiteContentTab from './SiteContentTab.jsx'
+import ReportsTab from './ReportsTab.jsx'
 
 /* ── SVG primitives ── */
 function Ic({ size = 16, children, style }) {
@@ -22,6 +23,7 @@ const IcTrash   = (s) => <Ic size={s}><polyline points="3 6 5 6 21 6"/><path d="
 const IcSearch  = (s) => <Ic size={s}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Ic>
 const IcStar    = (s) => <Ic size={s}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></Ic>
 const IcGlobe   = (s) => <Ic size={s}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></Ic>
+const IcReports = (s) => <Ic size={s}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></Ic>
 const IcRefresh = (s) => <Ic size={s}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-5.49"/></Ic>
 const IcChevron = (s, dir='right') => <Ic size={s}>{dir==='left' ? <polyline points="15 18 9 12 15 6"/> : <polyline points="9 6 15 12 9 18"/>}</Ic>
 const IcSave    = (s) => <Ic size={s}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></Ic>
@@ -824,6 +826,7 @@ const TABS = [
   { key: 'exams',  label: 'Quản lý đề thi',     icon: IcExams },
   { key: 'users',  label: 'Người dùng',          icon: IcUsers },
   { key: 'config', label: 'Cấu hình hệ thống',   icon: IcConfig },
+  { key: 'reports', label: 'Báo cáo',            icon: IcReports },
   { key: 'site',   label: 'Nội dung trang chủ',   icon: IcGlobe },
 ]
 
@@ -845,6 +848,7 @@ export default function SuperAdminPage({ user, onGoHome }) {
     exams:  <ExamsTab />,
     users:  <UsersTab />,
     config: <ConfigTab />,
+    reports: <ReportsTab viewerId={user.id} />,
     site:   <SiteContentTab />,
   }[tab]
 

@@ -162,6 +162,49 @@ ALTER TABLE classes ADD COLUMN IF NOT EXISTS grade VARCHAR(20);
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS subjects JSONB DEFAULT '[]';
 -- Lớp có thể có nhiều giáo viên phụ trách (co-teacher) ngoài teacher_id chính.
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS co_teachers JSONB DEFAULT '[]';
+-- Lịch học cố định: [{"dayOfWeek":1-7 (1=Thứ2..6=Thứ7,7=CN), "startTime":"19:30", "endTime":"21:00"}]
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS schedule JSONB DEFAULT '[]';
+-- Cấu hình riêng của lớp, vd ngưỡng điểm thấp để cảnh báo: {"lowScoreThreshold": 50}
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}';
+
+CREATE TABLE IF NOT EXISTS attendance_sessions (
+    id           VARCHAR(50)  PRIMARY KEY,
+    class_id     VARCHAR(50)  NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+    class_name   VARCHAR(255) DEFAULT '',
+    session_date DATE         NOT NULL,
+    opened_by    VARCHAR(100),
+    created_at   TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ  DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attend_sess_unique ON attendance_sessions(class_id, session_date);
+
+CREATE TABLE IF NOT EXISTS attendance_records (
+    id           SERIAL       PRIMARY KEY,
+    session_id   VARCHAR(50)  NOT NULL REFERENCES attendance_sessions(id) ON DELETE CASCADE,
+    student_id   VARCHAR(100) NOT NULL,
+    student_name VARCHAR(255) DEFAULT '',
+    status       VARCHAR(20)  NOT NULL DEFAULT 'co_mat',  -- co_mat|vang|tre|phep
+    note         VARCHAR(500) DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_attend_rec_session ON attendance_records(session_id);
+CREATE INDEX IF NOT EXISTS idx_attend_rec_student ON attendance_records(student_id);
+
+-- Báo cáo tổng hợp toàn hệ thống: vắng học, bỏ bài, điểm thấp — Super Admin xem chung 1 bảng.
+CREATE TABLE IF NOT EXISTS reports (
+    id           VARCHAR(50)  PRIMARY KEY,
+    type         VARCHAR(30)  NOT NULL,  -- vang_hoc | bo_bai | diem_thap
+    class_id     VARCHAR(50)  REFERENCES classes(id) ON DELETE CASCADE,
+    class_name   VARCHAR(255) DEFAULT '',
+    student_id   VARCHAR(100),
+    student_name VARCHAR(255) DEFAULT '',
+    ref_id       VARCHAR(100),           -- session id (vang_hoc) hoặc assignment id (bo_bai/diem_thap)
+    title        VARCHAR(500) DEFAULT '',
+    detail       TEXT         DEFAULT '',
+    created_at   TIMESTAMPTZ  DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_reports_type  ON reports(type);
+CREATE INDEX IF NOT EXISTS idx_reports_class ON reports(class_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_dedupe ON reports(type, ref_id, student_id);
 
 CREATE TABLE IF NOT EXISTS notifications (
     id             VARCHAR(50)  PRIMARY KEY,
@@ -995,6 +1038,8 @@ def _cls_from_row(row: dict) -> dict:
         "assignments":  r["assignments"] or [],
         "documents":    r["documents"] or [],
         "coTeachers":   r.get("co_teachers") or [],
+        "schedule":     r.get("schedule") or [],
+        "settings":     r.get("settings") or {},
     }
 
 
@@ -1106,15 +1151,16 @@ def upsert_class(cid: str, cls: dict) -> None:
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO classes(id,name,description,teacher_id,teacher_name,
-                    created_at,join_code,join_password,subject,grade,subjects,members,assignments,documents,co_teachers)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    created_at,join_code,join_password,subject,grade,subjects,members,assignments,documents,co_teachers,schedule,settings)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT(id) DO UPDATE SET
                     name=EXCLUDED.name, description=EXCLUDED.description,
                     teacher_id=EXCLUDED.teacher_id, teacher_name=EXCLUDED.teacher_name,
                     join_code=EXCLUDED.join_code, join_password=EXCLUDED.join_password,
                     subject=EXCLUDED.subject, grade=EXCLUDED.grade, subjects=EXCLUDED.subjects,
                     members=EXCLUDED.members, assignments=EXCLUDED.assignments,
-                    documents=EXCLUDED.documents, co_teachers=EXCLUDED.co_teachers
+                    documents=EXCLUDED.documents, co_teachers=EXCLUDED.co_teachers,
+                    schedule=EXCLUDED.schedule, settings=EXCLUDED.settings
             """, (
                 cid, cls.get("name", ""), cls.get("description", ""),
                 str(cls.get("teacherId", "")), cls.get("teacherName", ""),
@@ -1125,6 +1171,8 @@ def upsert_class(cid: str, cls: dict) -> None:
                 json.dumps(cls.get("assignments") or [], ensure_ascii=False),
                 json.dumps(cls.get("documents") or [], ensure_ascii=False),
                 json.dumps(cls.get("coTeachers") or [], ensure_ascii=False),
+                json.dumps(cls.get("schedule") or [], ensure_ascii=False),
+                json.dumps(cls.get("settings") or {}, ensure_ascii=False),
             ))
         conn.commit()
 
@@ -1150,7 +1198,8 @@ def update_class_atomic(cid: str, mutate) -> Optional[dict]:
                     UPDATE classes SET
                         name=%s, description=%s, teacher_id=%s, teacher_name=%s,
                         join_code=%s, join_password=%s, subject=%s, grade=%s, subjects=%s,
-                        members=%s, assignments=%s, documents=%s, co_teachers=%s
+                        members=%s, assignments=%s, documents=%s, co_teachers=%s,
+                        schedule=%s, settings=%s
                     WHERE id=%s
                 """, (
                     cls.get("name", ""), cls.get("description", ""),
@@ -1162,6 +1211,8 @@ def update_class_atomic(cid: str, mutate) -> Optional[dict]:
                     json.dumps(cls.get("assignments") or [], ensure_ascii=False),
                     json.dumps(cls.get("documents") or [], ensure_ascii=False),
                     json.dumps(cls.get("coTeachers") or [], ensure_ascii=False),
+                    json.dumps(cls.get("schedule") or [], ensure_ascii=False),
+                    json.dumps(cls.get("settings") or {}, ensure_ascii=False),
                     cid,
                 ))
             conn.commit()
@@ -1194,6 +1245,220 @@ def delete_class(cid: str) -> bool:
                 cur.execute("DELETE FROM notifications WHERE class_id=%s", (cid,))
         conn.commit()
     return found
+
+
+# ── Attendance + Reports ─────────────────────────────────────────────────────
+
+def _attend_session_from_row(row: dict, records: list = None) -> dict:
+    r = dict(row)
+    return {
+        "id":        r["id"],
+        "classId":   r["class_id"],
+        "className": r["class_name"] or "",
+        "date":      r["session_date"].isoformat() if r.get("session_date") else None,
+        "openedBy":  r.get("opened_by"),
+        "createdAt": r["created_at"].isoformat() if r.get("created_at") else None,
+        "updatedAt": r["updated_at"].isoformat() if r.get("updated_at") else None,
+        "records":   records or [],
+    }
+
+
+def _attend_record_from_row(row: dict) -> dict:
+    r = dict(row)
+    return {
+        "studentId":   r["student_id"],
+        "studentName": r["student_name"] or "",
+        "status":      r["status"] or "co_mat",
+        "note":        r.get("note") or "",
+    }
+
+
+def upsert_attendance_session(session_id: str, cls_id: str, class_name: str,
+                               session_date: str, opened_by, records: list) -> dict:
+    """Tạo/ghi đè điểm danh 1 buổi (1 lớp/1 ngày, unique theo class_id+session_date).
+    Ghi đè: xoá records + report vắng cũ của buổi đó rồi chèn lại theo dữ liệu mới —
+    cho phép giáo viên sửa lại điểm danh trong ngày mà không tạo báo cáo trùng."""
+    with _C() as conn:
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    INSERT INTO attendance_sessions(id,class_id,class_name,session_date,opened_by,updated_at)
+                    VALUES(%s,%s,%s,%s,%s,NOW())
+                    ON CONFLICT(class_id, session_date) DO UPDATE SET
+                        opened_by=EXCLUDED.opened_by, updated_at=NOW()
+                    RETURNING *
+                """, (session_id, cls_id, class_name, session_date,
+                      str(opened_by) if opened_by is not None else None))
+                srow = dict(cur.fetchone())
+                sid = srow["id"]
+                cur.execute("DELETE FROM attendance_records WHERE session_id=%s", (sid,))
+                for rec in records:
+                    cur.execute("""
+                        INSERT INTO attendance_records(session_id,student_id,student_name,status,note)
+                        VALUES(%s,%s,%s,%s,%s)
+                    """, (sid, str(rec.get("studentId")), rec.get("studentName", ""),
+                          rec.get("status") or "co_mat", rec.get("note", "")))
+                # Chỉ trạng thái "vắng" (không phép) mới sinh báo cáo — xoá cũ, chèn lại theo dữ liệu mới nhất.
+                cur.execute("DELETE FROM reports WHERE type='vang_hoc' AND ref_id=%s", (sid,))
+                new_absentees = []
+                for rec in records:
+                    if (rec.get("status") or "co_mat") != "vang":
+                        continue
+                    rid = secrets.token_hex(8)
+                    student_name = rec.get("studentName", "")
+                    cur.execute("""
+                        INSERT INTO reports(id,type,class_id,class_name,student_id,student_name,ref_id,title,detail)
+                        VALUES(%s,'vang_hoc',%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (type, ref_id, student_id) DO NOTHING
+                    """, (rid, cls_id, class_name, str(rec.get("studentId")), student_name, sid,
+                          f"Vắng học ngày {session_date}",
+                          f"Học sinh {student_name} vắng buổi học ngày {session_date} của lớp {class_name}"))
+                    new_absentees.append(student_name)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    out_records = [{"studentId": rec.get("studentId"), "studentName": rec.get("studentName", ""),
+                     "status": rec.get("status") or "co_mat", "note": rec.get("note", "")} for rec in records]
+    result = _attend_session_from_row(srow, out_records)
+    result["newAbsentees"] = new_absentees
+    return result
+
+
+def get_attendance_session(cls_id: str, session_date: str) -> Optional[dict]:
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM attendance_sessions WHERE class_id=%s AND session_date=%s",
+                        (cls_id, session_date))
+            srow = cur.fetchone()
+            if not srow:
+                return None
+            cur.execute("SELECT * FROM attendance_records WHERE session_id=%s ORDER BY id", (srow["id"],))
+            rrows = cur.fetchall()
+    return _attend_session_from_row(dict(srow), [_attend_record_from_row(dict(r)) for r in rrows])
+
+
+def list_attendance_sessions(cls_id: str, limit: int = 30) -> list:
+    """Lịch sử điểm danh của lớp, mỗi buổi kèm số lượng theo từng trạng thái."""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT s.*,
+                       COUNT(*) FILTER (WHERE r.status='co_mat') AS co_mat_count,
+                       COUNT(*) FILTER (WHERE r.status='vang')   AS vang_count,
+                       COUNT(*) FILTER (WHERE r.status='tre')    AS tre_count,
+                       COUNT(*) FILTER (WHERE r.status='phep')   AS phep_count
+                FROM attendance_sessions s
+                LEFT JOIN attendance_records r ON r.session_id = s.id
+                WHERE s.class_id=%s
+                GROUP BY s.id
+                ORDER BY s.session_date DESC
+                LIMIT %s
+            """, (cls_id, limit))
+            rows = cur.fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        sess = _attend_session_from_row(d)
+        sess["counts"] = {"coMat": d["co_mat_count"], "vang": d["vang_count"],
+                           "tre": d["tre_count"], "phep": d["phep_count"]}
+        out.append(sess)
+    return out
+
+
+def class_attendance_stats(cls_id: str) -> dict:
+    """% chuyên cần từng học sinh trong lớp: {studentId: {total,coMat,vang,tre,phep,rate}}."""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT r.student_id,
+                       COUNT(*) AS total,
+                       COUNT(*) FILTER (WHERE r.status='co_mat') AS co_mat,
+                       COUNT(*) FILTER (WHERE r.status='vang')   AS vang,
+                       COUNT(*) FILTER (WHERE r.status='tre')    AS tre,
+                       COUNT(*) FILTER (WHERE r.status='phep')   AS phep
+                FROM attendance_records r
+                JOIN attendance_sessions s ON s.id = r.session_id
+                WHERE s.class_id=%s
+                GROUP BY r.student_id
+            """, (cls_id,))
+            rows = cur.fetchall()
+    out = {}
+    for r in rows:
+        d = dict(r)
+        total = d["total"] or 0
+        out[d["student_id"]] = {
+            "total": total, "coMat": d["co_mat"], "vang": d["vang"], "tre": d["tre"], "phep": d["phep"],
+            "rate": round((d["co_mat"] + d["tre"]) / total * 100, 1) if total else None,
+        }
+    return out
+
+
+def get_submissions_for_assignment(cls_id: str, asgn_id: str) -> list:
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT * FROM submissions WHERE class_id=%s AND assignment_id=%s ORDER BY submitted_at",
+                (cls_id, asgn_id),
+            )
+            rows = cur.fetchall()
+    return [_sub_from_row(dict(r)) for r in rows]
+
+
+def _report_from_row(row: dict) -> dict:
+    r = dict(row)
+    return {
+        "id":          r["id"],
+        "type":        r["type"] or "",
+        "classId":     r.get("class_id"),
+        "className":   r["class_name"] or "",
+        "studentId":   r.get("student_id"),
+        "studentName": r["student_name"] or "",
+        "refId":       r.get("ref_id"),
+        "title":       r["title"] or "",
+        "detail":      r["detail"] or "",
+        "createdAt":   r["created_at"].isoformat() if r.get("created_at") else None,
+    }
+
+
+def add_report(r: dict) -> bool:
+    """Ghi 1 dòng báo cáo (bỏ bài/điểm thấp — vắng học dùng upsert_attendance_session).
+    Trả True nếu vừa chèn mới, False nếu đã tồn tại (idempotent theo type+refId+studentId)."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO reports(id,type,class_id,class_name,student_id,student_name,ref_id,title,detail)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (type, ref_id, student_id) DO NOTHING
+                RETURNING id
+            """, (
+                r.get("id", ""), r.get("type", ""), r.get("classId"), r.get("className", ""),
+                str(r.get("studentId", "")), r.get("studentName", ""), r.get("refId"),
+                r.get("title", ""), r.get("detail", ""),
+            ))
+            inserted = cur.fetchone() is not None
+        conn.commit()
+    return inserted
+
+
+def list_reports(type_: str = None, class_id: str = None, limit: int = 50, offset: int = 0) -> dict:
+    where, params = [], []
+    if type_:
+        where.append("type=%s"); params.append(type_)
+    if class_id:
+        where.append("class_id=%s"); params.append(class_id)
+    clause = f"WHERE {' AND '.join(where)}" if where else ""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM reports {clause}", params)
+            total = cur.fetchone()["cnt"]
+            cur.execute(
+                f"SELECT * FROM reports {clause} ORDER BY created_at DESC LIMIT %s OFFSET %s",
+                params + [limit, offset],
+            )
+            rows = cur.fetchall()
+    return {"rows": [_report_from_row(dict(r)) for r in rows], "total": total}
+
 
 def update_user(uid: str, fields: dict) -> Optional[dict]:
     """Update arbitrary user fields. Supported keys: name, avatar, role, password, google_id."""

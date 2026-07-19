@@ -115,7 +115,7 @@ function EssayPreview({ q, showAnswers }) {
 }
 
 /* ── Main modal ── */
-export default function ExamPreviewModal({ result, title, onClose, onPublish, onEditQuestion }) {
+export default function ExamPreviewModal({ result, title, onClose, onSave, onEditQuestion }) {
   const [showAnswers, setShowAnswers] = useState(false)
   const printRef = useRef(null)
 
@@ -165,7 +165,7 @@ export default function ExamPreviewModal({ result, title, onClose, onPublish, on
               {showAnswers ? '🙈 Ẩn đáp án' : '👁 Hiện đáp án'}
             </button>
             <button className="ep-print-btn" onClick={handlePrint}>🖨 In / Xuất PDF</button>
-            <button className="ep-publish-btn" onClick={onPublish}>🚀 Xác nhận phát đề</button>
+            <button className="ep-publish-btn" onClick={onSave}>💾 Lưu lại</button>
           </div>
         </div>
 

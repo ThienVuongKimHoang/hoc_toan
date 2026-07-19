@@ -123,7 +123,9 @@ function StepCard({ item, index, revealed, onReveal }) {
   )
 }
 
-export default function ExerciseSolver({ onBack }) {
+const SOLVER_TITLES = { toan: 'Giải bài tập toán', ly: 'Giải bài tập Vật lý', hoa: 'Giải bài tập Hóa học' }
+
+export default function ExerciseSolver({ onBack, subject = 'toan' }) {
   const [phase,        setPhase]        = useState('input')
   const [exercise,     setExercise]     = useState('')
   const [imageFile,    setImageFile]    = useState(null)
@@ -179,6 +181,7 @@ export default function ExerciseSolver({ onBack }) {
       const fd = new FormData()
       if (exercise.trim()) fd.append('exercise', exercise.trim())
       if (imageFile) fd.append('file', imageFile)
+      fd.append('subject', subject)
       const res = await fetch('/api/solve-exercise', { method: 'POST', body: fd })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -277,7 +280,7 @@ export default function ExerciseSolver({ onBack }) {
           <ArrowLeftIcon /> Quay lại
         </button>
         <span className="es-header-title">
-          <SparklesIcon /> Giải bài tập toán
+          <SparklesIcon /> {SOLVER_TITLES[subject] || SOLVER_TITLES.toan}
         </span>
         {result && phase !== 'input' && (
           <button className="es-new-btn" onClick={resetAll}>

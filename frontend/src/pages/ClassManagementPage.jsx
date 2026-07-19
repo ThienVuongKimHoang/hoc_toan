@@ -9,6 +9,9 @@ import {
   joinUrl, removeAssignment, removeCoTeacher, removeDocument, removeMemberFromClass,
   searchStudents, searchTeachers, updateClassInfo, uploadFile,
 } from '../store/classStore.js'
+import {
+  getAttendanceHistory, getAttendanceSession, getClassProgress, submitAttendance,
+} from '../store/attendanceStore.js'
 import ExerciseSolver from '../components/ExerciseSolver.jsx'
 import Geo3DViewer from '../components/Geo3DViewer.jsx'
 import CreateExamPage from './CreateExamPage.jsx'
@@ -22,7 +25,9 @@ import { ROLES } from '../auth/mockUsers.js'
 const primarySubject = (cls) => cls?.subject || cls?.subjects?.[0] || null
 /* Một bài tập / tài liệu / thành viên thuộc môn nào — mục cũ thiếu subject quy về môn chính */
 const inSubject = (item, subject, cls) => ((item?.subject || primarySubject(cls)) === subject)
-/* Chỉ hai công cụ Giải bài & Vẽ hình cho môn Toán */
+/* Giải bài AI: dùng được cho Toán, Lý, Hóa. Vẽ hình 3D: chỉ Toán. */
+const SOLVER_SUBJECTS = ['toan', 'ly', 'hoa']
+const hasSolverAccess = (subject) => SOLVER_SUBJECTS.includes(subject)
 const isMathSubject = (subject) => subject === 'toan'
 /* Đọc điều hướng (khối→lớp) từ hash: #classes | #classes/<khối> | #classes/<khối>/<classId>.
    '__none__' (lớp chưa đặt khối) mã hoá thành 'none' trên URL. */
@@ -494,6 +499,13 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, onClos
   )
 }
 
+/* Thứ trong lịch học: 1=Thứ 2 .. 6=Thứ 7, 7=Chủ nhật (khớp ISO weekday) */
+const SCHEDULE_DAYS = [
+  { value: 1, label: 'T2' }, { value: 2, label: 'T3' }, { value: 3, label: 'T4' },
+  { value: 4, label: 'T5' }, { value: 5, label: 'T6' }, { value: 6, label: 'T7' },
+  { value: 7, label: 'CN' },
+]
+
 /* ─── Class form modal (create/edit) ─── */
 function ClassFormModal({ initial, defaultGrade = null, onClose, onSave, loading }) {
   const [name, setName] = useState(initial?.name ?? '')
@@ -502,13 +514,22 @@ function ClassFormModal({ initial, defaultGrade = null, onClose, onSave, loading
   const [subject, setSubject] = useState(initial?.subject ?? initial?.subjects?.[0] ?? null)
   const [password, setPassword] = useState(initial?.joinPassword ?? '')
   const [showPwd, setShowPwd] = useState(false)
+  const [scheduleDays, setScheduleDays] = useState(() => (initial?.schedule || []).map(s => s.dayOfWeek))
+  const [startTime, setStartTime] = useState(initial?.schedule?.[0]?.startTime || '19:30')
+  const [endTime, setEndTime] = useState(initial?.schedule?.[0]?.endTime || '21:00')
+  const [lowScoreThreshold, setLowScoreThreshold] = useState(initial?.settings?.lowScoreThreshold ?? 50)
   const [err, setErr] = useState('')
+
+  const toggleDay = (d) => setScheduleDays(prev =>
+    prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => a - b))
 
   const submit = () => {
     if (!name.trim()) { setErr('Vui lòng nhập tên lớp.'); return }
     if (!grade) { setErr('Vui lòng chọn cấp độ (khối lớp).'); return }
     if (!subject) { setErr('Vui lòng chọn môn học.'); return }
-    onSave({ name: name.trim(), description: desc.trim(), grade, subject, joinPassword: password.trim() || null })
+    const schedule = scheduleDays.map(d => ({ dayOfWeek: d, startTime, endTime }))
+    const settings = { lowScoreThreshold: Number(lowScoreThreshold) || 50 }
+    onSave({ name: name.trim(), description: desc.trim(), grade, subject, joinPassword: password.trim() || null, schedule, settings })
   }
 
   return (
@@ -538,6 +559,33 @@ function ClassFormModal({ initial, defaultGrade = null, onClose, onSave, loading
           <label className="cm-label" style={{ marginTop: 14 }}>Mô tả</label>
           <textarea className="cm-input cm-textarea" rows={2}
             placeholder="Mô tả ngắn (tuỳ chọn)" value={desc} onChange={e => setDesc(e.target.value)} />
+
+          <label className="cm-label" style={{ marginTop: 14 }}>
+            🗓️ Lịch học <span style={{ color: '#94a3b8', fontWeight: 400 }}>(để mở điểm danh đúng buổi, tuỳ chọn)</span>
+          </label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {SCHEDULE_DAYS.map(d => (
+              <button type="button" key={d.value}
+                className={`cm-tab ${scheduleDays.includes(d.value) ? 'cm-tab--active' : ''}`}
+                style={{ padding: '4px 10px', fontSize: 13 }}
+                onClick={() => toggleDay(d.value)}>{d.label}</button>
+            ))}
+          </div>
+          {scheduleDays.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+              <input className="cm-input" type="time" value={startTime}
+                onChange={e => setStartTime(e.target.value)} style={{ flex: 1 }} />
+              <span style={{ color: '#94a3b8' }}>–</span>
+              <input className="cm-input" type="time" value={endTime}
+                onChange={e => setEndTime(e.target.value)} style={{ flex: 1 }} />
+            </div>
+          )}
+
+          <label className="cm-label" style={{ marginTop: 14 }}>
+            ⚠️ Ngưỡng cảnh báo điểm thấp (%) <span style={{ color: '#94a3b8', fontWeight: 400 }}>(học sinh dưới mức này bị ghi vào báo cáo)</span>
+          </label>
+          <input className="cm-input" type="number" min={0} max={100} value={lowScoreThreshold}
+            onChange={e => setLowScoreThreshold(e.target.value)} style={{ maxWidth: 120 }} />
 
           <label className="cm-label" style={{ marginTop: 14 }}>
             {IC.lock(13)} Mật khẩu tham gia <span style={{ color: '#94a3b8', fontWeight: 400 }}>(tuỳ chọn)</span>
@@ -934,6 +982,202 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, onClose, 
   )
 }
 
+const ATTEND_STATUS_OPTIONS = [
+  { value: 'co_mat', label: 'Có mặt' },
+  { value: 'vang', label: 'Vắng' },
+  { value: 'tre', label: 'Trễ' },
+  { value: 'phep', label: 'Có phép' },
+]
+
+/* Thông tin lịch học của lớp cho 1 ngày cụ thể (chỉ hiển thị, không khoá điểm danh). */
+function scheduleInfoForDate(schedule, dateStr) {
+  if (!schedule?.length || !dateStr) return null
+  const jsDay = new Date(`${dateStr}T00:00:00`).getDay()   // 0=CN..6=Th7
+  const iso = jsDay === 0 ? 7 : jsDay                        // quy về 1=Th2..7=CN
+  const slot = schedule.find(s => s.dayOfWeek === iso)
+  if (!slot) return { open: false, text: 'Ngày này không có trong lịch học của lớp' }
+  const todayStr = new Date().toISOString().slice(0, 10)
+  if (dateStr !== todayStr) return { open: true, text: `Buổi học ${slot.startTime}–${slot.endTime}` }
+  const now = new Date().toTimeString().slice(0, 5)
+  const inWindow = now >= slot.startTime && now <= slot.endTime
+  return {
+    open: inWindow,
+    text: inWindow ? `Đang trong giờ học (${slot.startTime}–${slot.endTime})`
+      : `Ngoài giờ học (${slot.startTime}–${slot.endTime}) — vẫn điểm danh được`,
+  }
+}
+
+/* ─── Tab Điểm danh ─── */
+function AttendanceTab({ classId, teacherId, members, schedule }) {
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const [date, setDate] = useState(todayStr)
+  const [statusMap, setStatusMap] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [history, setHistory] = useState([])
+
+  const loadHistory = useCallback(async () => setHistory(await getAttendanceHistory(classId)), [classId])
+  useEffect(() => { loadHistory() }, [loadHistory])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    getAttendanceSession(classId, date).then(session => {
+      if (cancelled) return
+      const map = {}
+      members.forEach(m => { map[m.userId] = { status: 'co_mat', note: '' } })
+      ;(session?.records || []).forEach(r => { map[r.studentId] = { status: r.status, note: r.note || '' } })
+      setStatusMap(map)
+      setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [classId, date, members])
+
+  const setStatus = (studentId, status) =>
+    setStatusMap(prev => ({ ...prev, [studentId]: { ...prev[studentId], status } }))
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const records = members.map(m => ({
+        studentId: m.userId, studentName: m.name,
+        status: statusMap[m.userId]?.status || 'co_mat', note: statusMap[m.userId]?.note || '',
+      }))
+      await submitAttendance(classId, { teacherId, date, records })
+      await loadHistory()
+    } catch (err) { alert(err.message) }
+    finally { setSaving(false) }
+  }
+
+  const info = scheduleInfoForDate(schedule, date)
+
+  return (
+    <div>
+      <div className="cm-section-toolbar">
+        <input className="cm-input" type="date" value={date} max={todayStr}
+          onChange={e => setDate(e.target.value)} style={{ maxWidth: 180 }} />
+        {info && (
+          <span className={`cm-window-chip cm-window-chip--${info.open ? 'open' : 'closed'}`}>
+            {IC.clock(12)} {info.text}
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="cm-empty-state">Đang tải…</div>
+      ) : members.length === 0 ? (
+        <div className="cm-empty-state">Lớp chưa có học sinh.</div>
+      ) : (
+        <div className="cm-member-list">
+          {members.map(m => (
+            <div key={m.userId} className="cm-member-row">
+              <div className="cm-member-avatar">{m.name?.[0]?.toUpperCase() || '?'}</div>
+              <div style={{ flex: 1 }}>
+                <div>{m.name}</div>
+                <div style={{ fontSize: 12, color: '#94a3b8' }}>{m.email}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {ATTEND_STATUS_OPTIONS.map(opt => (
+                  <button key={opt.value} type="button"
+                    className={`cm-tab ${statusMap[m.userId]?.status === opt.value ? 'cm-tab--active' : ''}`}
+                    style={{ padding: '4px 10px', fontSize: 12 }}
+                    onClick={() => setStatus(m.userId, opt.value)}>{opt.label}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="cm-footer" style={{ padding: '12px 0' }}>
+        <button className="btn-primary cm-submit" onClick={save} disabled={saving || loading || members.length === 0}>
+          {saving ? '⏳ Đang lưu…' : '💾 Lưu điểm danh'}
+        </button>
+      </div>
+
+      <h4 className="sub-section-title">Lịch sử điểm danh</h4>
+      {history.length === 0 ? (
+        <div className="cm-empty-state">Chưa có buổi điểm danh nào.</div>
+      ) : (
+        <div className="cm-assignment-list">
+          {history.map(s => (
+            <div key={s.id} className="cm-assignment-card" style={{ cursor: 'pointer' }}
+              onClick={() => setDate(s.date)}>
+              <div className="cm-asgn-left">
+                <div className="cm-asgn-title">
+                  {new Date(`${s.date}T00:00:00`).toLocaleDateString('vi-VN')}
+                </div>
+                <div className="cm-asgn-meta">
+                  <span className="cm-exam-chip">✅ {s.counts.coMat} có mặt</span>
+                  {s.counts.vang > 0 && <span className="cm-exam-chip">❌ {s.counts.vang} vắng</span>}
+                  {s.counts.tre > 0 && <span className="cm-exam-chip">⏰ {s.counts.tre} trễ</span>}
+                  {s.counts.phep > 0 && <span className="cm-exam-chip">📄 {s.counts.phep} phép</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Tab Tiến độ học sinh ─── */
+function ProgressTab({ classId, teacherId }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    getClassProgress(classId, teacherId)
+      .then(d => { if (!cancelled) { setData(d); setLoading(false) } })
+      .catch(e => { if (!cancelled) { setErr(e.message); setLoading(false) } })
+    return () => { cancelled = true }
+  }, [classId, teacherId])
+
+  if (loading) return <div className="cm-empty-state">Đang tải tiến độ…</div>
+  if (err) return <div className="cm-error">{err}</div>
+  if (!data?.students?.length) return <div className="cm-empty-state">Lớp chưa có học sinh.</div>
+
+  return (
+    <div className="cm-member-list">
+      {data.students.map(st => (
+        <div key={st.studentId} className="cm-member-row"
+          style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="cm-member-avatar">{st.studentName?.[0]?.toUpperCase() || '?'}</div>
+            <div style={{ flex: 1, fontWeight: 600 }}>{st.studentName}</div>
+            <span className="cm-exam-chip">
+              🗓️ {st.attendance.rate != null ? `${st.attendance.rate}% chuyên cần` : 'Chưa điểm danh'}
+            </span>
+            <span className="cm-exam-chip">📝 {st.assignments.submitted}/{st.assignments.total} bài nộp</span>
+          </div>
+          {st.attendance.vang > 0 && (
+            <div style={{ fontSize: 12, color: '#dc2626' }}>Vắng {st.attendance.vang} buổi</div>
+          )}
+          {st.assignments.missedTitles.length > 0 && (
+            <div style={{ fontSize: 12, color: '#dc2626' }}>
+              Bỏ bài: {st.assignments.missedTitles.join(', ')}
+            </div>
+          )}
+          {st.scoreHistory.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {st.scoreHistory.map((s, i) => (
+                <span key={i} className="cm-exam-chip"
+                  title={s.date ? new Date(s.date).toLocaleDateString('vi-VN') : ''}>
+                  {s.title}: {s.score}/{s.maxScore}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ─── Class detail panel ─── */
 function ClassDetail({ cls, subject, teacherId, isSuperAdmin, user, onBack, onUpdated }) {
   const [tab, setTab] = useState('assignments')
@@ -1111,7 +1355,10 @@ function ClassDetail({ cls, subject, teacherId, isSuperAdmin, user, onBack, onUp
     ['assignments', '📝 Bài tập'],
     ['create-exam', '✏️ Tạo đề'],
     ['whiteboard', '🖊️ Bảng trắng'],
-    ...(isMathSubject(subject) ? [['solver', '✨ Giải bài'], ['geo3d', '📐 Vẽ hình']] : []),
+    ...(hasSolverAccess(subject) ? [['solver', '✨ Giải bài']] : []),
+    ...(isMathSubject(subject) ? [['geo3d', '📐 Vẽ hình']] : []),
+    ['attendance', '🗓️ Điểm danh'],
+    ['progress', '📈 Tiến độ'],
     ['members', '👤 Học sinh'],
   ]
   return (
@@ -1213,6 +1460,16 @@ function ClassDetail({ cls, subject, teacherId, isSuperAdmin, user, onBack, onUp
               </div>
             )}
           </div>
+        )}
+
+        {/* ── Điểm danh ── */}
+        {tab === 'attendance' && (
+          <AttendanceTab classId={cls.id} teacherId={teacherId} members={subjMembers} schedule={cls.schedule} />
+        )}
+
+        {/* ── Tiến độ học sinh ── */}
+        {tab === 'progress' && (
+          <ProgressTab classId={cls.id} teacherId={teacherId} />
         )}
 
         {/* ── Assignments (Bài tập + Đề thi là mục con) ── */}
@@ -1344,9 +1601,9 @@ function ClassDetail({ cls, subject, teacherId, isSuperAdmin, user, onBack, onUp
           )
         })()}
 
-        {/* ── Giải bài (Toán) ── */}
-        {tab === 'solver' && isMathSubject(subject) && (
-          <ExerciseSolver />
+        {/* ── Giải bài (Toán, Lý, Hóa) ── */}
+        {tab === 'solver' && hasSolverAccess(subject) && (
+          <ExerciseSolver subject={subject} />
         )}
 
         {/* ── Vẽ hình (Toán) ── */}
@@ -1417,17 +1674,17 @@ export default function ClassManagementPage({ user }) {
 
   useEffect(() => { reload() }, [])
 
-  const handleCreate = async ({ name, description, grade, subject, joinPassword }) => {
+  const handleCreate = async ({ name, description, grade, subject, joinPassword, schedule, settings }) => {
     setLoading(true)
     try {
-      await createClass({ name, description, grade, subject, teacherId: user.id, teacherName: user.name, joinPassword })
+      await createClass({ name, description, grade, subject, teacherId: user.id, teacherName: user.name, joinPassword, schedule, settings })
       setShowCreate(false)
       reload()
     } finally { setLoading(false) }
   }
 
-  const handleEdit = async ({ name, description, grade, subject, joinPassword }) => {
-    await updateClassInfo(editCls.id, { name, description, grade: grade || null, subject: subject || null, joinPassword })
+  const handleEdit = async ({ name, description, grade, subject, joinPassword, schedule, settings }) => {
+    await updateClassInfo(editCls.id, { name, description, grade: grade || null, subject: subject || null, joinPassword, schedule, settings })
     setEditCls(null)
     reload()
   }
@@ -1508,7 +1765,8 @@ export default function ClassManagementPage({ user }) {
                   </div>
                 )
                 return (
-                <div key={cls.id} className="cm-class-card cm-subject-card" data-subject={primarySubject(cls) || 'khac'}>
+                <div key={cls.id} className="cm-class-card cm-subject-card" data-subject={primarySubject(cls) || 'khac'}
+                  style={{ cursor: 'pointer' }} onClick={() => goNav(selectedGrade, cls.id)}>
                   {/* Ảnh môn — khối lớn ở đầu thẻ, kiểu tour card. Badge nổi trên ảnh (góc trái trên). */}
                   {hasPhoto && (
                     <div className="cm-tour-photo">
@@ -1546,9 +1804,9 @@ export default function ClassManagementPage({ user }) {
                   <div className="cm-class-footer">
                     <span className="cm-class-date">Tạo: {formatDt(cls.createdAt)}</span>
                     <div className="cm-class-actions">
-                      <button className="mec-btn" onClick={() => setEditCls(cls)}>{IC.pencil(14)}</button>
-                      <button className="mec-btn mec-btn--delete" onClick={() => handleDelete(cls.id)}>{IC.trash(14)}</button>
-                      <button className="btn-primary cm-enter-btn" onClick={() => goNav(selectedGrade, cls.id)}>Vào lớp <span className="cm-enter-arrow">→</span></button>
+                      <button className="mec-btn" onClick={(e) => { e.stopPropagation(); setEditCls(cls) }}>{IC.pencil(14)}</button>
+                      <button className="mec-btn mec-btn--delete" onClick={(e) => { e.stopPropagation(); handleDelete(cls.id) }}>{IC.trash(14)}</button>
+                      <button className="btn-primary cm-enter-btn" onClick={(e) => { e.stopPropagation(); goNav(selectedGrade, cls.id) }}>Vào lớp <span className="cm-enter-arrow">→</span></button>
                     </div>
                   </div>
                 </div>

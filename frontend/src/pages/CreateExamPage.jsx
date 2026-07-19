@@ -3,7 +3,6 @@ import UploadStep       from '../components/create-exam/UploadStep.jsx'
 import ProcessingStep   from '../components/create-exam/ProcessingStep.jsx'
 import ReviewStep       from '../components/create-exam/ReviewStep.jsx'
 import ExamPreviewModal from '../components/ExamPreviewModal.jsx'
-import PublishModal     from '../components/PublishModal.jsx'
 import { createExam, updateExam } from '../store/examStore.js'
 
 /* ── Step configs ── */
@@ -11,15 +10,13 @@ const UPLOAD_STEPS = [
   { id: 'upload',     label: 'Upload',          icon: '📤' },
   { id: 'processing', label: 'AI xử lý',        icon: '🤖' },
   { id: 'review',     label: 'Xem & Chỉnh sửa', icon: '✏️' },
-  { id: 'publish',    label: 'Phát đề',         icon: '🚀' },
 ]
-const UPLOAD_ORDER = ['upload', 'processing', 'review', 'publish']
+const UPLOAD_ORDER = ['upload', 'processing', 'review']
 
 const MANUAL_STEPS = [
-  { id: 'review',  label: 'Soạn thảo', icon: '✍️' },
-  { id: 'publish', label: 'Phát đề',   icon: '🚀' },
+  { id: 'review', label: 'Soạn thảo', icon: '✍️' },
 ]
-const MANUAL_ORDER = ['review', 'publish']
+const MANUAL_ORDER = ['review']
 
 function StepIndicator({ current, manual }) {
   const steps = manual ? MANUAL_STEPS : UPLOAD_STEPS
@@ -82,8 +79,6 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
   const [title,             setTitle]             = useState(isEditing ? editingExam.title : isMix ? 'Đề phối ngẫu nhiên' : '')
   const [editedResult,      setEditedResult]      = useState(null)
   const [showPreview,       setShowPreview]       = useState(false)
-  const [showPublish,       setShowPublish]       = useState(false)
-  const [savedExam,         setSavedExam]         = useState(null)
   const [previewEditTarget, setPreviewEditTarget] = useState(null)
 
   /* ── Upload & AI extraction ── */
@@ -150,28 +145,11 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
     onGoMyExams()
   }
 
-  /* ── Lưu & Phát đề ── */
-  const handlePublish = (edited) => {
-    const t = title.trim() || 'Đề thi chưa đặt tên'
-    let exam
-    if (isEditing) {
-      exam = updateExam(editingExam.id, { title: t, result: edited })
-      syncToServer(exam)
-    } else {
-      exam = createExam({ title: t, result: edited, userId: user.id, subject: examSubject })
-    }
-    setEditedResult(edited)
-    setSavedExam(exam)
-    setShowPreview(false)
-    setShowPublish(true)
-  }
-
   const handlePreview      = (edited) => { setEditedResult(edited); setShowPreview(true) }
   const handleEditFromPreview = ()    => { setShowPreview(false); setPreviewEditTarget(null) }
 
   const stepId = phase === 'processing' ? 'processing'
                : phase === 'review'     ? 'review'
-               : phase === 'publish'    ? 'publish'
                : 'upload'
 
   return (
@@ -187,9 +165,9 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
             </h1>
             <p>
               {isEditing ? `Đang sửa: ${editingExam.title}`
-                : isMix   ? `${mixResult.total_questions} câu đã được phối — Chỉnh sửa và Phát đề`
-                : isManual ? 'Thêm câu hỏi — Lưu lại hoặc Phát đề ngay'
-                : 'Upload PDF — AI trích xuất — Chỉnh sửa — Phát đề'}
+                : isMix   ? `${mixResult.total_questions} câu đã được phối — Chỉnh sửa và Lưu`
+                : isManual ? 'Thêm câu hỏi rồi Lưu lại'
+                : 'Upload PDF — AI trích xuất — Chỉnh sửa — Lưu'}
             </p>
           </div>
           <StepIndicator current={stepId} manual={isManual || isEditing || isMix} />
@@ -210,7 +188,6 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
             subject={examSubject}
             onTitleChange={setTitle}
             onPreview={handlePreview}
-            onPublish={handlePublish}
             onSave={handleSaveOnly}
             scrollToQuestion={previewEditTarget}
           />
@@ -222,16 +199,8 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
           result={editedResult}
           title={title}
           onClose={() => setShowPreview(false)}
-          onPublish={() => handlePublish(editedResult)}
+          onSave={() => { setShowPreview(false); handleSaveOnly(editedResult) }}
           onEditQuestion={handleEditFromPreview}
-        />
-      )}
-
-      {showPublish && savedExam && (
-        <PublishModal
-          exam={savedExam}
-          onClose={() => setShowPublish(false)}
-          onPublished={() => { setShowPublish(false); onGoMyExams() }}
         />
       )}
     </div>

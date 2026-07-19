@@ -68,6 +68,7 @@ app.add_middleware(
 async def _startup():
     db.init_db()
     _migrate_split_multisubject_classes()
+    asyncio.create_task(_report_scanner_loop())
 
 
 _CLASSIFY_BATCH = 15   # câu mỗi lần gọi Groq
@@ -1451,6 +1452,7 @@ async def create_class_endpoint(request: Request):
         "createdAt": body.get("createdAt", _now_iso()),
         "joinCode": _join_code(), "joinPassword": body.get("joinPassword") or None,
         "members": [], "assignments": [], "documents": [],
+        "schedule": body.get("schedule") or [], "settings": body.get("settings") or {},
     }
     db.upsert_class(cid, cls)
     return cls
@@ -1629,7 +1631,7 @@ async def update_class_endpoint(cls_id: str, request: Request):
     body = await request.json()
 
     def mutate(cls):
-        for k in ("name", "description", "joinPassword", "grade"):
+        for k in ("name", "description", "joinPassword", "grade", "schedule", "settings"):
             if k in body: cls[k] = body[k]
         # Mỗi lớp 1 môn: ưu tiên `subject`; nếu client cũ gửi `subjects[]` thì lấy môn đầu.
         if "subject" in body:
@@ -2102,6 +2104,219 @@ async def mark_all_read(request: Request):
     return {"ok": True}
 
 
+# ─── Điểm danh + Tiến độ học sinh + Báo cáo tổng hợp ──────────────────────────
+
+@app.post("/api/classes/{cls_id}/attendance")
+async def submit_attendance_endpoint(cls_id: str, request: Request):
+    body = await request.json()
+    cls = db.get_class(cls_id)
+    if not cls:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    teacher_id = body.get("teacherId")
+    if not teacher_id or not _is_class_teacher(cls, teacher_id):
+        return JSONResponse({"error": "Không có quyền điểm danh lớp này"}, status_code=403)
+    date = (body.get("date") or "").strip()
+    if not date:
+        return JSONResponse({"error": "Thiếu ngày điểm danh"}, status_code=400)
+    records = body.get("records") or []
+
+    session = db.upsert_attendance_session(
+        _cls_id(), cls_id, cls.get("name", ""), date, teacher_id, records)
+
+    absentees = session.get("newAbsentees") or []
+    if absentees:
+        for adm in db.get_super_admins():
+            db.add_notif({
+                # classId=None: đây là thông báo cho SUPER ADMIN, không phải học sinh của lớp
+                # (super admin không phải "member" của lớp) — để trống để NotificationBell
+                # không cố mở lớp qua luồng "Lớp của tôi" (chỉ dành cho học sinh) khi bấm vào.
+                "id": _cls_id(), "type": "attendance",
+                "targetUserId": str(adm.get("id")), "classId": None,
+                "className": cls.get("name", ""), "assignmentId": "",
+                "title": f"Báo cáo điểm danh lớp {cls.get('name','')} ngày {date}",
+                "message": f"{len(absentees)} học sinh vắng: {', '.join(absentees)}",
+                "createdAt": _now_iso(), "read": False,
+            })
+    return session
+
+
+@app.get("/api/classes/{cls_id}/attendance")
+async def get_attendance_endpoint(cls_id: str, date: str = None):
+    if not date:
+        return JSONResponse({"error": "Thiếu ngày"}, status_code=400)
+    return db.get_attendance_session(cls_id, date)
+
+
+@app.get("/api/classes/{cls_id}/attendance/history")
+async def attendance_history_endpoint(cls_id: str, limit: int = 30):
+    return db.list_attendance_sessions(cls_id, limit)
+
+
+@app.get("/api/classes/{cls_id}/progress")
+async def class_progress_endpoint(cls_id: str, teacherId: str = None):
+    cls = db.get_class(cls_id)
+    if not cls:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not teacherId or not _is_class_teacher(cls, teacherId):
+        return JSONResponse({"error": "Không có quyền xem tiến độ lớp này"}, status_code=403)
+
+    attend_stats = db.class_attendance_stats(cls_id)
+    now = datetime.now(_tz.utc)
+
+    def _parse(iso):
+        try:
+            return datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    per_student = {}
+    for m in cls.get("members", []):
+        sid = str(m.get("userId"))
+        per_student[sid] = {
+            "studentId": sid, "studentName": m.get("name", ""),
+            "attendance": attend_stats.get(sid) or
+                {"total": 0, "coMat": 0, "vang": 0, "tre": 0, "phep": 0, "rate": None},
+            "assignments": {"submitted": 0, "total": 0, "missedTitles": []},
+            "scoreHistory": [],
+        }
+
+    for asgn in cls.get("assignments", []):
+        asgn_subject = asgn.get("subject") or cls.get("subject")
+        member_ids = [str(m.get("userId")) for m in cls.get("members", [])
+                      if not asgn_subject or (m.get("subject") or cls.get("subject")) == asgn_subject]
+        if asgn.get("examId"):
+            submitted_by = {str(s.get("studentId")): s
+                            for s in db.get_submissions_for_assignment(cls_id, asgn["id"])}
+        else:
+            submitted_by = {str(s.get("studentId")): s for s in asgn.get("submissions", [])}
+        close_dt = _parse(asgn.get("closeTime") or asgn.get("dueDate"))
+        is_over = bool(close_dt and now > close_dt)
+        for sid in member_ids:
+            st = per_student.get(sid)
+            if not st:
+                continue
+            st["assignments"]["total"] += 1
+            sub = submitted_by.get(sid)
+            if sub:
+                st["assignments"]["submitted"] += 1
+                score, max_score = sub.get("score"), sub.get("maxScore")
+                if score is not None and max_score:
+                    st["scoreHistory"].append({
+                        "title": asgn.get("title", ""), "date": sub.get("submittedAt"),
+                        "score": score, "maxScore": max_score,
+                    })
+            elif is_over:
+                st["assignments"]["missedTitles"].append(asgn.get("title", ""))
+
+    for st in per_student.values():
+        st["scoreHistory"].sort(key=lambda x: x.get("date") or "")
+
+    return {"students": list(per_student.values())}
+
+
+@app.get("/api/admin/reports")
+async def admin_reports_endpoint(type: str = None, classId: str = None,
+                                  limit: int = 50, offset: int = 0, viewerId: str = None):
+    viewer = db.get_user_by_id(viewerId) if viewerId is not None else None
+    if (viewer or {}).get("role") != "super_admin":
+        return JSONResponse({"error": "Không có quyền truy cập"}, status_code=403)
+    return db.list_reports(type_=type, class_id=classId, limit=limit, offset=offset)
+
+
+_REPORT_SCAN_INTERVAL = 900  # 15 phút
+
+
+async def _report_scanner_loop():
+    while True:
+        try:
+            _scan_overdue_assignments()
+        except Exception as e:
+            print(f"[report-scanner] error: {e}")
+        await asyncio.sleep(_REPORT_SCAN_INTERVAL)
+
+
+def _scan_overdue_assignments() -> None:
+    """Quét định kỳ: bài tập/đề đã quá hạn nộp → học sinh chưa nộp (bỏ bài) hoặc điểm dưới
+    ngưỡng của lớp (điểm thấp) được ghi vào bảng reports + báo cho super admin. Idempotent
+    qua cờ assignment['reportScanned'] + unique index (type,ref_id,student_id) trên reports."""
+    now = datetime.now(_tz.utc)
+
+    def _parse(iso):
+        try:
+            return datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    for cls in db.list_all_classes():
+        cls_id, class_name = cls["id"], cls.get("name", "")
+        threshold = (cls.get("settings") or {}).get("lowScoreThreshold")
+        if threshold is None:
+            threshold = 50
+        scanned_ids = set()
+        for asgn in cls.get("assignments") or []:
+            if asgn.get("reportScanned"):
+                continue
+            close_dt = _parse(asgn.get("closeTime") or asgn.get("dueDate"))
+            if not close_dt or close_dt > now:
+                continue
+            asgn_subject = asgn.get("subject") or cls.get("subject")
+            members = [m for m in cls.get("members", [])
+                       if not asgn_subject or (m.get("subject") or cls.get("subject")) == asgn_subject]
+            if asgn.get("examId"):
+                submitted_by = {str(s.get("studentId")): s
+                                for s in db.get_submissions_for_assignment(cls_id, asgn["id"])}
+            else:
+                submitted_by = {str(s.get("studentId")): s for s in asgn.get("submissions", [])}
+
+            missed, low_score = [], []
+            for m in members:
+                sid = str(m.get("userId"))
+                sub = submitted_by.get(sid)
+                if not sub:
+                    if db.add_report({
+                        "id": _cls_id(), "type": "bo_bai", "classId": cls_id, "className": class_name,
+                        "studentId": sid, "studentName": m.get("name", ""), "refId": asgn["id"],
+                        "title": f"Bỏ bài: {asgn.get('title','')}",
+                        "detail": f"Học sinh {m.get('name','')} không nộp bài '{asgn.get('title','')}' "
+                                  f"(lớp {class_name}) đúng hạn.",
+                    }):
+                        missed.append(m.get("name", ""))
+                else:
+                    score, max_score = sub.get("score"), sub.get("maxScore")
+                    if score is not None and max_score:
+                        pct = score / max_score * 100
+                        if pct < threshold:
+                            if db.add_report({
+                                "id": _cls_id(), "type": "diem_thap", "classId": cls_id, "className": class_name,
+                                "studentId": sid, "studentName": m.get("name", ""), "refId": asgn["id"],
+                                "title": f"Điểm thấp: {asgn.get('title','')}",
+                                "detail": f"Học sinh {m.get('name','')} đạt {score}/{max_score} ({pct:.0f}%) "
+                                          f"bài '{asgn.get('title','')}' (lớp {class_name}), dưới ngưỡng {threshold}%.",
+                            }):
+                                low_score.append(f"{m.get('name','')} ({score}/{max_score})")
+            scanned_ids.add(asgn["id"])
+            if missed or low_score:
+                parts = []
+                if missed: parts.append(f"{len(missed)} bỏ bài: {', '.join(missed)}")
+                if low_score: parts.append(f"{len(low_score)} điểm thấp: {', '.join(low_score)}")
+                for adm in db.get_super_admins():
+                    db.add_notif({
+                        # classId=None: thông báo cho super admin — xem giải thích ở notif "attendance" phía trên.
+                        "id": _cls_id(), "type": "report",
+                        "targetUserId": str(adm.get("id")), "classId": None,
+                        "className": class_name, "assignmentId": asgn["id"],
+                        "title": f"Báo cáo bài tập: {asgn.get('title','')} — lớp {class_name}",
+                        "message": " · ".join(parts),
+                        "createdAt": _now_iso(), "read": False,
+                    })
+        if scanned_ids:
+            def mutate(c, ids=scanned_ids):
+                for a in c.get("assignments", []):
+                    if a.get("id") in ids:
+                        a["reportScanned"] = True
+            db.update_class_atomic(cls_id, mutate)
+
+
 # ─── End Class management ─────────────────────────────────────────────────────
 
 
@@ -2335,51 +2550,67 @@ def _safe_json_loads(text):
         return json.loads(_fix_json_escapes(raw))
 
 
-def _build_solve_prompt(exercise):
+_SOLVER_SUBJECT_LABELS = {"toan": "Toán", "ly": "Vật lý", "hoa": "Hóa học"}
+
+
+def _build_solve_prompt(exercise, subject="toan"):
+    label = _SOLVER_SUBJECT_LABELS.get(subject, "Toán")
     exercise_section = (
         f'Bài tập:\n"""\n{exercise}\n"""'
         if exercise
         else "(Xem hình ảnh đính kèm — đọc toàn bộ đề bài từ ảnh)"
     )
-    return f"""Bạn là giáo viên Toán THPT Việt Nam. Phân tích bài tập toán và trả lời CHÍNH XÁC bằng JSON.
+    geometry_block = ""
+    if subject == "toan":
+        geometry_block = """
+
+Khi is_geometry=true, geometry_data PHẢI có đúng định dạng:
+{
+  "points": [{"id": "A", "x": 0.0, "y": 0.0, "z": 0.0}],
+  "segments": [{"from": "A", "to": "B", "dashed": false}],
+  "faces": [{"id": "f1", "points": ["A","B","C"], "style": {"fill": "#4dabf7", "opacity": 0.3, "stroke": "#1971c2"}}],
+  "midpoints": [{"id": "M", "of": ["A","B"]}],
+  "vectors": [],
+  "labels": []
+}
+
+Quy ước tọa độ: x=ngang, y=cao (lên trên), z=sâu. Cạnh bị che dùng "dashed": true.
+Đặt hình vào vùng tọa độ hợp lý, mô tả ĐÚNG hình trong đề bài."""
+    is_geometry_hint = (
+        "<true nếu bài liên quan đến hình không gian 3D, ngược lại false>"
+        if subject == "toan" else "<luôn luôn false>"
+    )
+    geometry_data_hint = (
+        "<object vẽ hình nếu is_geometry=true, ngược lại null>"
+        if subject == "toan" else "<luôn luôn null>"
+    )
+    return f"""Bạn là giáo viên {label} THPT Việt Nam. Phân tích bài tập {label.lower()} và trả lời CHÍNH XÁC bằng JSON.
 
 {exercise_section}
 
 Trả lời bằng JSON thuần túy (không có ```json, không giải thích ngoài JSON):
 {{
-  "is_geometry": <true nếu bài liên quan đến hình không gian 3D, ngược lại false>,
-  "geometry_data": <object vẽ hình nếu is_geometry=true, ngược lại null>,
+  "is_geometry": {is_geometry_hint},
+  "geometry_data": {geometry_data_hint},
   "theory": [
-    {{"title": "Tên định lý/công thức", "content": "Giải thích, dùng LaTeX $...$ hoặc $$...$$"}}
+    {{"title": "Tên định lý/công thức/khái niệm", "content": "Giải thích, dùng LaTeX $...$ hoặc $$...$$"}}
   ],
   "steps": [
     {{"title": "Bước N: tiêu đề", "content": "Nội dung chi tiết, dùng LaTeX cho mọi công thức"}}
   ]
-}}
-
-Khi is_geometry=true, geometry_data PHẢI có đúng định dạng:
-{{
-  "points": [{{"id": "A", "x": 0.0, "y": 0.0, "z": 0.0}}],
-  "segments": [{{"from": "A", "to": "B", "dashed": false}}],
-  "faces": [{{"id": "f1", "points": ["A","B","C"], "style": {{"fill": "#4dabf7", "opacity": 0.3, "stroke": "#1971c2"}}}}],
-  "midpoints": [{{"id": "M", "of": ["A","B"]}}],
-  "vectors": [],
-  "labels": []
-}}
-
-Quy ước tọa độ: x=ngang, y=cao (lên trên), z=sâu. Cạnh bị che dùng "dashed": true.
-Đặt hình vào vùng tọa độ hợp lý, mô tả ĐÚNG hình trong đề bài.
+}}{geometry_block}
 theory: 3-5 kiến thức quan trọng. steps: 4-8 bước giải chi tiết. Dùng LaTeX cho TẤT CẢ công thức."""
 
 
-def _build_verify_prompt(exercise, draft_steps):
+def _build_verify_prompt(exercise, draft_steps, subject="toan"):
+    label = _SOLVER_SUBJECT_LABELS.get(subject, "Toán")
     steps_text = json.dumps(draft_steps, ensure_ascii=False, indent=2)
     exercise_section = (
         f'Bài tập:\n"""\n{exercise}\n"""'
         if exercise
         else "(Bài tập từ hình ảnh đính kèm)"
     )
-    return f"""Bạn là giáo viên Toán THPT Việt Nam. Nhiệm vụ: kiểm tra lời giải bên dưới và trả về bản đã sửa lỗi.
+    return f"""Bạn là giáo viên {label} THPT Việt Nam. Nhiệm vụ: kiểm tra lời giải bên dưới và trả về bản đã sửa lỗi.
 
 {exercise_section}
 
@@ -2399,8 +2630,8 @@ Trả lời bằng JSON thuần túy (không có ```json):
 }}"""
 
 
-def _groq_solve_sync(groq_client, exercise, img_b64, mime):
-    prompt_text = _build_solve_prompt(exercise)
+def _groq_solve_sync(groq_client, exercise, img_b64, mime, subject="toan"):
+    prompt_text = _build_solve_prompt(exercise, subject)
     if img_b64:
         user_content = [
             {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
@@ -2422,8 +2653,8 @@ def _groq_solve_sync(groq_client, exercise, img_b64, mime):
     return result
 
 
-def _groq_verify_sync(verify_client, exercise, draft_steps):
-    prompt_text = _build_verify_prompt(exercise, draft_steps)
+def _groq_verify_sync(verify_client, exercise, draft_steps, subject="toan"):
+    prompt_text = _build_verify_prompt(exercise, draft_steps, subject)
     resp = verify_client.chat.completions.create(
         model=GROQ_SOLVER_MODEL,
         messages=[{"role": "user", "content": prompt_text}],
@@ -2439,11 +2670,14 @@ def _groq_verify_sync(verify_client, exercise, draft_steps):
 async def solve_exercise(
     exercise: str = Form(""),
     file: UploadFile = File(None),
+    subject: str = Form("toan"),
 ):
     """GROQ call 1: giải (theory + geometry + steps) → GROQ call 2: verify & fix steps."""
     exercise = exercise.strip()
     if not exercise and file is None:
         return JSONResponse({"error": "Thiếu nội dung bài tập"}, status_code=400)
+    if subject not in _SOLVER_SUBJECT_LABELS:
+        subject = "toan"
 
     img_b64 = None
     mime = None
@@ -2459,13 +2693,13 @@ async def solve_exercise(
 
     try:
         # Call 1: giải toàn bộ
-        result = await asyncio.to_thread(_groq_solve_sync, solve_client, exercise, img_b64, mime)
+        result = await asyncio.to_thread(_groq_solve_sync, solve_client, exercise, img_b64, mime, subject)
 
         draft_steps = result.get("steps") or []
         if draft_steps:
             # Call 2: verify & sửa lỗi steps (chạy song song với việc đã có theory/geo)
             verified_steps = await asyncio.to_thread(
-                _groq_verify_sync, verify_client, exercise, draft_steps
+                _groq_verify_sync, verify_client, exercise, draft_steps, subject
             )
             result["steps"] = verified_steps
 
