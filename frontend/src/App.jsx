@@ -54,7 +54,8 @@ function parseHash() {
   if (hash === 'lobby') return { view: 'exam-lobby', examId: null, classId: null }
   if (hash.startsWith('practice/')) return { view: 'practice-exam', examId: hash.slice(9), classId: null }
   if (hash.startsWith('results/')) return { view: 'exam-results', examId: hash.slice(8), classId: null }
-  if (hash === 'admin') return { view: 'super-admin', examId: null, classId: null }
+  if (hash === 'admin') return { view: 'super-admin', examId: null, classId: null, adminTab: null }
+  if (hash.startsWith('admin/')) return { view: 'super-admin', examId: null, classId: null, adminTab: hash.slice(6) || null }
   if (hash === 'study') return { view: 'study', examId: null, classId: null }
   // classes | classes/<khối> | classes/<khối>/<classId> — điều hướng khối→lớp→chi tiết
   // do ClassManagementPage tự đọc từ hash; ở đây chỉ cần giữ view class-mgmt.
@@ -211,6 +212,8 @@ export default function App() {
   const [openClassId, setOpenClassId] = useState(() => parseHash().openClassId ?? null)
   const [whiteboardSubject, setWhiteboardSubject] = useState(() => parseHash().whiteboardSubject ?? null)
   const [whiteboardReturnHash, setWhiteboardReturnHash] = useState(() => parseHash().whiteboardReturnHash ?? null)
+  const [adminTab, setAdminTab] = useState(() => parseHash().adminTab ?? null)
+  const [adminNavNonce, setAdminNavNonce] = useState(0)
   const [editingExam, setEditingExam] = useState(null)
   const [resultsExam, setResultsExam] = useState(null)
   const [manualMode, setManualMode] = useState(false)
@@ -222,9 +225,10 @@ export default function App() {
 
   useEffect(() => {
     const onHash = () => {
-      const { view: v, examId: id, classId: cid, assignmentId: aid, openClassId: ocid, whiteboardSubject: wbs, whiteboardReturnHash: wbr } = parseHash()
+      const { view: v, examId: id, classId: cid, assignmentId: aid, openClassId: ocid, whiteboardSubject: wbs, whiteboardReturnHash: wbr, adminTab: at } = parseHash()
       setView(v); setExamId(id); setClassId(cid ?? null); setAssignmentId(aid ?? null); setOpenClassId(ocid ?? null)
       setWhiteboardSubject(wbs ?? null); setWhiteboardReturnHash(wbr ?? null)
+      setAdminTab(at ?? null); setAdminNavNonce(n => n + 1)
     }
     window.addEventListener('popstate', onHash)
     window.addEventListener('hashchange', onHash)
@@ -254,6 +258,13 @@ export default function App() {
     if (!user) { goLogin(); return }
     if (!hasAdminAccess(user.role)) return
     setHash('admin'); setView('super-admin')
+  }
+  /* Mở trang Admin thẳng vào 1 tab cụ thể (vd: từ thông báo báo cáo → tab "Báo cáo").
+     Tăng adminNavNonce để SuperAdminPage luôn nhảy tab dù bấm lại đúng tab cũ. */
+  const goAdminTab = (tabKey) => {
+    if (!user) { goLogin(); return }
+    if (!hasAdminAccess(user.role)) return
+    setHash(`admin/${tabKey}`); setAdminTab(tabKey); setAdminNavNonce(n => n + 1); setView('super-admin')
   }
   const goStudy = () => user ? (setHash('study'), setView('study')) : goLogin()
   const goClasses = () => {
@@ -424,6 +435,7 @@ export default function App() {
       onGoClasses={goClasses}
       onGoMyClasses={goMyClasses}
       onOpenClass={openClass}
+      onOpenReports={() => goAdminTab('reports')}
       onGoTools={goTools}
     />
   )
@@ -476,7 +488,7 @@ export default function App() {
     return (
       <>
         {header}
-        <SuperAdminPage user={user} onGoHome={goHome} />
+        <SuperAdminPage user={user} onGoHome={goHome} initialTab={adminTab} navNonce={adminNavNonce} />
         {teacherToolOverlays}
       </>
     )

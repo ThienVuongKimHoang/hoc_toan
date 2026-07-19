@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { getNotifications, markAllRead, markRead } from '../store/notificationStore.js'
 
-export default function NotificationBell({ user, onOpenClass }) {
+const isReportNotif = (n) => n.type === 'attendance' || n.type === 'report'
+
+export default function NotificationBell({ user, onOpenClass, onOpenReports }) {
   const [notifs,  setNotifs]  = useState([])
   const [open,    setOpen]    = useState(false)
   const ref = useRef(null)
@@ -44,6 +46,12 @@ export default function NotificationBell({ user, onOpenClass }) {
     if (n.classId && onOpenClass) {
       setOpen(false)
       onOpenClass(n.classId)
+      return
+    }
+    // Thông báo điểm danh/báo cáo (dành cho super admin) → mở thẳng tab Báo cáo
+    if (isReportNotif(n) && onOpenReports) {
+      setOpen(false)
+      onOpenReports()
     }
   }
 
@@ -81,11 +89,13 @@ export default function NotificationBell({ user, onOpenClass }) {
             {notifs.length === 0 ? (
               <div className="notif-empty">Không có thông báo nào.</div>
             ) : (
-              notifs.map(n => (
+              notifs.map(n => {
+                const clickable = !!n.classId || isReportNotif(n)
+                return (
                 <div key={n.id}
-                  className={`notif-item ${!n.read ? 'notif-item--unread' : ''} ${n.classId ? 'notif-item--link' : ''}`}
+                  className={`notif-item ${!n.read ? 'notif-item--unread' : ''} ${clickable ? 'notif-item--link' : ''}`}
                   onClick={() => handleClickNotif(n)}
-                  title={n.classId ? 'Bấm để mở lớp & bài tập' : undefined}>
+                  title={n.classId ? 'Bấm để mở lớp & bài tập' : isReportNotif(n) ? 'Bấm để xem trang Báo cáo' : undefined}>
                   <div className="notif-icon">
                     {n.type === 'register' ? '📋' : n.type === 'attendance' ? '🗓️' : n.type === 'report' ? '📊' : '📝'}
                   </div>
@@ -95,11 +105,13 @@ export default function NotificationBell({ user, onOpenClass }) {
                     <div className="notif-time">
                       {formatDt(n.createdAt)}
                       {n.classId && <span className="notif-go"> · Xem bài →</span>}
+                      {!n.classId && isReportNotif(n) && <span className="notif-go"> · Xem báo cáo →</span>}
                     </div>
                   </div>
                   {!n.read && <div className="notif-dot" />}
                 </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>

@@ -830,11 +830,17 @@ const TABS = [
   { key: 'site',   label: 'Nội dung trang chủ',   icon: IcGlobe },
 ]
 
-export default function SuperAdminPage({ user, onGoHome }) {
-  const [tab,       setTab]       = useState('stats')
+export default function SuperAdminPage({ user, onGoHome, initialTab, navNonce }) {
+  const [tab,       setTab]       = useState(initialTab || 'stats')
   const [collapsed, setCollapsed] = useState(() =>
     localStorage.getItem('sa_sidebar_collapsed') === 'true'
   )
+
+  // Cho phép điều hướng thẳng vào 1 tab từ bên ngoài (vd: bấm thông báo báo cáo).
+  // Phụ thuộc navNonce (tăng mỗi lần điều hướng) để nhảy tab được kể cả khi bấm lại đúng tab cũ.
+  useEffect(() => {
+    if (initialTab) setTab(initialTab)
+  }, [navNonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleSidebar = () => {
     setCollapsed(v => {
