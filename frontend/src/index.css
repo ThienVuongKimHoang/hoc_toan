@@ -2500,6 +2500,13 @@ button { font-family: inherit; }
   padding: 32px 24px 120px;
 }
 
+/* ── Nhúng "Tạo đề" inline trong tab của lớp học — bỏ chrome toàn trang
+     (100vh, sticky theo header ngoài) vì giờ nó sống trong .cm-tab-body ── */
+.cm-create-exam-embed .create-exam-page { min-height: 0; background: transparent; }
+.cm-create-exam-embed .ce-header { position: static; top: auto; margin: 0 0 20px; padding: 16px 20px; border-radius: var(--cm-radius, 12px); }
+.cm-create-exam-embed .ce-header-inner { max-width: none; }
+.cm-create-exam-embed .ce-body { max-width: none; padding: 0; }
+
 /* ── Step indicator ── */
 .ce-steps {
   display: flex;
@@ -6670,6 +6677,25 @@ button { font-family: inherit; }
   color: rgba(255,255,255,0.68);
 }
 
+/* Còn bài cần làm (>0) — chữ đỏ, tile giữ nguyên */
+.cm-stat-glow--danger b { color: #f87171; text-shadow: 0 0 12px rgba(248,113,113,0.85); }
+.cm-stat-glow--danger em { color: rgba(248,113,113,0.85); }
+.cm-stat-glow--danger .cm-stat-glow-ic { color: #f87171; filter: drop-shadow(0 0 5px rgba(248,113,113,0.7)); }
+
+/* Sát giờ nộp (<24h) — cảnh báo cực mạnh, nhấp nháy */
+.cm-stat-glow--urgent {
+  background: linear-gradient(160deg, #7f1d1d, #450a0a);
+  border-color: rgba(248,113,113,0.9);
+  animation: cm-urgent-pulse 1.4s ease-in-out infinite;
+}
+.cm-stat-glow--urgent .cm-stat-glow-ic { color: #fecaca; filter: drop-shadow(0 0 6px #ef4444); }
+.cm-stat-glow--urgent b { color: #fff; text-shadow: 0 0 14px rgba(239,68,68,0.95); }
+.cm-stat-glow--urgent em { color: #fecaca; }
+@keyframes cm-urgent-pulse {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 10px -2px rgba(239,68,68,0.65); }
+  50%      { box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 26px 4px rgba(239,68,68,0.95); }
+}
+
 /* ── detail panel ── */
 .cm-detail {
   padding: 4px 20px 44px;
@@ -6948,6 +6974,63 @@ button { font-family: inherit; }
 }
 .cm-doc-name:hover { text-decoration: underline; }
 .cm-doc-meta { font-size: 0.76rem; color: #94a3b8; margin-top: 1px; }
+
+/* ── folder tiles (tài liệu chụp từ whiteboard, gom theo folder) ── */
+.cm-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.cm-folder-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 10px;
+  background: linear-gradient(135deg, #EEF4FF, #E0EAFE);
+  border: 1px solid var(--cm-border);
+  border-radius: 14px;
+  cursor: pointer;
+  color: var(--cm-royal-2);
+  transition: transform 0.18s cubic-bezier(.22,1,.36,1), box-shadow 0.18s;
+}
+.cm-folder-tile:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -12px rgba(37,99,235,0.28); }
+.cm-folder-name { font-size: 0.85rem; font-weight: 700; color: #1e293b; text-align: center; }
+.cm-folder-count { font-size: 0.74rem; color: #64748b; }
+
+/* ── giáo viên phụ trách (co-teacher) ── */
+.cm-teacher-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: #F8FAFC;
+  border: 1px solid var(--cm-border);
+  border-radius: 12px;
+}
+.cm-teacher-eyebrow { font-size: 0.78rem; font-weight: 700; color: #64748b; flex-shrink: 0; }
+.cm-teacher-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cm-teacher-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+  background: #fff; border: 1px solid var(--cm-border); color: #334155;
+}
+.cm-teacher-chip--main { background: #FEF3C7; border-color: #FDE68A; color: #92400e; }
+.cm-teacher-chip-x {
+  display: flex; border: none; background: none; padding: 0; cursor: pointer;
+  color: #94a3b8; line-height: 0;
+}
+.cm-teacher-chip-x:hover { color: #dc2626; }
+.cm-add-teacher-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+  background: none; border: 1px dashed #94a3b8; color: #475569; cursor: pointer;
+}
+.cm-add-teacher-btn:hover { border-color: #2563eb; color: #2563eb; }
+.cm-class-teacher-line { font-size: 0.8rem; color: #64748b; display: flex; align-items: center; gap: 5px; margin: -4px 0 8px; }
 
 /* ── search input (add student modal) ── */
 .cm-search-wrap {
@@ -7592,6 +7675,148 @@ button { font-family: inherit; }
   .notif-dropdown { width: calc(100vw - 24px); right: -8px; }
   .mc-asgn-card { flex-direction: column; align-items: flex-start; }
   .fv-modal { width: 100vw; height: 100vh; border-radius: 0; }
+}
+
+/* ═══════════════════════════════════════════
+   WHITEBOARD — popup lưu ảnh chụp (dùng chung, xem thêm khối INFINITE WHITEBOARD bên dưới)
+═══════════════════════════════════════════ */
+.wb-capture-preview {
+  display: block; width: 100%; max-height: 220px; object-fit: contain;
+  background: #F8FAFC; border: 1px solid var(--cm-border); border-radius: 10px;
+  margin-bottom: 14px;
+}
+.wb-folder-mode-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.wb-folder-mode-btn {
+  padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600;
+  background: #fff; border: 1px solid var(--cm-border); color: #64748b; cursor: pointer;
+}
+.wb-folder-mode-btn.is-active { background: #2563eb; border-color: #2563eb; color: #fff; }
+.wb-locked-field {
+  padding: 9px 12px; border-radius: 9px; font-size: 0.9rem; font-weight: 700;
+  background: #F8FAFC; border: 1px solid var(--cm-border); color: #334155;
+}
+
+/* ═══════════════════════════════════════════
+   INFINITE WHITEBOARD — Bảng trắng vô hạn (trang riêng)
+═══════════════════════════════════════════ */
+.iwb-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #f4f5f7;
+  user-select: none;
+}
+.iwb-canvas, .iwb-overlay {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+  touch-action: none;
+}
+.iwb-overlay { pointer-events: none; }
+.iwb-root--drag-over::after {
+  content: '';
+  position: absolute; inset: 8px;
+  border: 2px dashed #2563eb;
+  border-radius: 14px;
+  background: rgba(37, 99, 235, 0.05);
+  pointer-events: none;
+  z-index: 4;
+}
+.iwb-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.iwb-drop-overlay span {
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
+}
+.iwb-toolbar {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid var(--cm-border);
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.1);
+}
+.iwb-tool-group { display: flex; align-items: center; gap: 4px; }
+.iwb-tool-group:not(:last-child) { padding-right: 10px; border-right: 1px solid #eef0f3; }
+.iwb-tool-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; padding: 0; border-radius: 9px;
+  background: #fff; border: 1px solid transparent; color: #475569; cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.iwb-tool-btn:hover:not(:disabled) { background: #f1f5f9; }
+.iwb-tool-btn.is-active { background: #2563eb; border-color: #2563eb; color: #fff; }
+.iwb-tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.iwb-tool-btn--danger:hover:not(:disabled) { background: #fef2f2; color: #dc2626; }
+.iwb-color-swatch {
+  width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent;
+  cursor: pointer; padding: 0; box-shadow: 0 0 0 1px var(--cm-border);
+}
+.iwb-color-swatch.is-active { border-color: #fff; box-shadow: 0 0 0 2px #2563eb; }
+.iwb-width-btn {
+  width: 28px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  background: #fff; border: 1px solid transparent; cursor: pointer;
+}
+.iwb-width-btn.is-active { border-color: #2563eb; background: #EEF4FF; }
+.iwb-width-dot { display: block; border-radius: 50%; background: #334155; }
+.iwb-zoom-bar {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #fff;
+  border: 1px solid var(--cm-border);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.1);
+}
+.iwb-zoom-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; border-radius: 7px;
+  background: #fff; border: none; color: #475569; cursor: pointer;
+}
+.iwb-zoom-btn:hover { background: #f1f5f9; }
+.iwb-zoom-pct {
+  min-width: 42px; text-align: center; font-size: 0.78rem; font-weight: 700; color: #334155;
+}
+.iwb-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 5;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  background: rgba(255,255,255,0.85);
+  padding: 4px 10px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+@media (max-width: 720px) {
+  .iwb-hint { display: none; }
+  .iwb-toolbar { max-width: calc(100vw - 24px); overflow-x: auto; }
 }
 
 /* ═══════════════════════════════════════════
@@ -9398,3 +9623,122 @@ button { font-family: inherit; }
   margin-bottom: 14px;
 }
 .er-grade-btn.graded { background: #ecfdf5; border-color: #6ee7b7; color: #047857; }
+
+/* ═══════════════════════════════════════════
+   EXERCISE FOLDER VIEW — Đề & Lời giải theo Buổi → Câu
+═══════════════════════════════════════════ */
+.exfv-root { display: flex; flex-direction: column; gap: 16px; }
+.exfv-cau-card {
+  border: 1px solid var(--cm-border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fff;
+}
+.exfv-cau-header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; margin-bottom: 10px;
+}
+.exfv-cau-title { font-weight: 800; font-size: 1rem; color: #0f172a; }
+.exfv-cau-meta { font-size: 0.78rem; color: #94a3b8; white-space: nowrap; }
+.exfv-section { margin-top: 10px; }
+.exfv-section:first-of-type { margin-top: 0; }
+.exfv-section-label { font-size: 0.8rem; font-weight: 700; color: #475569; margin-bottom: 8px; }
+.exfv-drag-hint { font-weight: 500; color: #94a3b8; }
+.exfv-thumb-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.exfv-thumb {
+  position: relative;
+  width: 96px; height: 96px;
+  border-radius: 10px;
+  overflow: visible;
+  border: 1px solid var(--cm-border);
+  background: #F8FAFC;
+  flex-shrink: 0;
+  transition: transform 0.12s ease;
+}
+.exfv-thumb img {
+  width: 100%; height: 100%; object-fit: cover;
+  border-radius: 9px; cursor: pointer; display: block;
+}
+.exfv-thumb--step { cursor: grab; }
+.exfv-thumb--step.is-dragging {
+  transform: scale(1.28);
+  z-index: 5;
+  box-shadow: 0 10px 28px rgba(15,23,42,0.28);
+  opacity: 0.95;
+  cursor: grabbing;
+}
+.exfv-thumb--step.is-drop-target {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+  transform: scale(1.08);
+}
+.exfv-step-badge {
+  position: absolute; top: -6px; left: -6px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #2563eb; color: #fff; font-size: 0.72rem; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.exfv-thumb-del {
+  position: absolute; top: -6px; right: -6px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; border: 1px solid var(--cm-border); color: #dc2626;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 2; padding: 0;
+}
+.exfv-thumb-del:hover { background: #fef2f2; border-color: #fca5a5; }
+
+/* ─── Exercise Lightbox — xem liên tục Đề → Đáp án giải trong 1 câu ─── */
+.exlb-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(15, 23, 42, 0.92);
+  display: flex; flex-direction: column;
+}
+.exlb-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px; flex-shrink: 0;
+  color: #fff;
+}
+.exlb-title { font-weight: 700; font-size: 0.95rem; }
+.exlb-counter { margin-left: auto; font-size: 0.82rem; color: #cbd5e1; }
+.exlb-close {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(255,255,255,0.12); border: none; color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.exlb-close:hover { background: rgba(255,255,255,0.22); }
+.exlb-body {
+  flex: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; padding: 0 60px;
+}
+.exlb-image {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain; border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+.exlb-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 46px; height: 46px; border-radius: 50%;
+  background: rgba(255,255,255,0.12); border: none; color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: background 0.15s;
+}
+.exlb-nav:hover { background: rgba(255,255,255,0.25); }
+.exlb-nav--prev { left: 10px; }
+.exlb-nav--next { right: 10px; }
+.exlb-dots {
+  display: flex; justify-content: center; gap: 6px;
+  padding: 14px; flex-shrink: 0;
+}
+.exlb-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(255,255,255,0.3); border: none; padding: 0; cursor: pointer;
+}
+.exlb-dot.is-dapan { background: rgba(74,222,128,0.35); }
+.exlb-dot.is-active { background: #fff; }
+.exlb-dot.is-active.is-dapan { background: #4ade80; }
+@media (max-width: 640px) {
+  .exlb-body { padding: 0 46px; }
+  .exlb-nav { width: 38px; height: 38px; }
+}

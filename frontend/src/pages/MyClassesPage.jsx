@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { getClassByCode, getClassesByStudent, getExamWindow, getPendingForStudent, joinClassByCode, submitAssignment, uploadFile } from '../store/classStore.js'
-import SubjectBadge, { SUBJECTS, GradeBadge, gradeLabel } from '../components/SubjectBadge.jsx'
+import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, gradeLabel } from '../components/SubjectBadge.jsx'
 import { BandChip, IeltsGradeModal, IeltsStatsModal } from '../components/IeltsGrade.jsx'
+import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
+import { isExerciseDoc } from '../utils/exerciseDocs.js'
 
 /* Môn "chính" của lớp (fallback dữ liệu cũ chưa gắn môn) */
 const primarySubject = (cls) => cls?.subject || cls?.subjects?.[0] || null
@@ -46,6 +48,7 @@ const IC = {
   download: (s=16) => <Svg size={s}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></Svg>,
   eye:      (s=16) => <Svg size={s}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></Svg>,
   key:      (s=16) => <Svg size={s}><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></Svg>,
+  folder:   (s=16) => <Svg size={s}><path d="M4 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.5L11 4H4z"/></Svg>,
 }
 
 /* ─── File type helper ─── */
@@ -429,6 +432,7 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
   const [tab, setTab] = useState('assignments')       // 'assignments' | 'documents'
   const [asgnTab, setAsgnTab] = useState('homework')  // 'homework' | 'exam'
   const [viewingFile, setViewingFile] = useState(null)
+  const [openFolder, setOpenFolder] = useState(null)
 
   const fmtSize = b => !b ? '' : b < 1048576 ? `${(b/1024).toFixed(1)} KB` : `${(b/1048576).toFixed(1)} MB`
   const fmtDt = iso => iso ? new Date(iso).toLocaleString('vi-VN', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : ''
@@ -485,28 +489,66 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
           </div>
         )}
 
-        {tab === 'documents' && (
-          subjDocs.length === 0 ? (
-            <div className="cm-empty-state">
-              <div className="cm-empty-icon">{IC.clip(40)}</div>
-              <p>Chưa có tài liệu nào.</p>
-            </div>
-          ) : (
-            <div className="cm-doc-list">
-              {subjDocs.map(d => (
-                <div key={d.id} className="cm-doc-row">
-                  <div className="cm-doc-icon" onClick={() => setViewingFile(d)} style={{cursor:'pointer'}}>{IC.file(20)}</div>
-                  <div className="cm-doc-info">
-                    <button className="cm-doc-name" onClick={() => setViewingFile(d)}>{d.name}</button>
-                    <div className="cm-doc-meta">{fmtSize(d.size)} · {fmtDt(d.uploadedAt)}</div>
-                  </div>
-                  <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống">{IC.download(14)}</a>
-                  <button className="cm-remove-btn" onClick={() => setViewingFile(d)} title="Xem">{IC.eye(14)}</button>
-                </div>
-              ))}
+        {tab === 'documents' && (() => {
+          const looseDocs = subjDocs.filter(d => !d.folder)
+          const folderMap = new Map()
+          subjDocs.forEach(d => {
+            if (!d.folder) return
+            if (!folderMap.has(d.folder)) folderMap.set(d.folder, [])
+            folderMap.get(d.folder).push(d)
+          })
+          const docsInView = openFolder ? (folderMap.get(openFolder) || []) : looseDocs
+          const folderHasExercise = openFolder && docsInView.some(isExerciseDoc)
+          const folderTileLabel = (docs) => {
+            const exerciseDocs = docs.filter(isExerciseDoc)
+            if (!exerciseDocs.length) return `${docs.length} ảnh`
+            const cauCount = new Set(exerciseDocs.map(d => d.cauLabel)).size
+            return `${cauCount} câu`
+          }
+          const renderDocRow = (d) => (
+            <div key={d.id} className="cm-doc-row">
+              <div className="cm-doc-icon" onClick={() => setViewingFile(d)} style={{cursor:'pointer'}}>{IC.file(20)}</div>
+              <div className="cm-doc-info">
+                <button className="cm-doc-name" onClick={() => setViewingFile(d)}>{d.name}</button>
+                <div className="cm-doc-meta">{fmtSize(d.size)} · {fmtDt(d.uploadedAt)}</div>
+              </div>
+              <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống">{IC.download(14)}</a>
+              <button className="cm-remove-btn" onClick={() => setViewingFile(d)} title="Xem">{IC.eye(14)}</button>
             </div>
           )
-        )}
+          return (
+            <div>
+              {openFolder && (
+                <button className="cm-back-btn" style={{marginBottom:12}} onClick={() => setOpenFolder(null)}>{IC.back(16)} {openFolder}</button>
+              )}
+              {!openFolder && folderMap.size > 0 && (
+                <div className="cm-folder-grid">
+                  {[...folderMap.entries()].map(([name, docs]) => (
+                    <button key={name} className="cm-folder-tile" onClick={() => setOpenFolder(name)}>
+                      {IC.folder(28)}
+                      <span className="cm-folder-name">{name}</span>
+                      <span className="cm-folder-count">{folderTileLabel(docs)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {docsInView.length === 0 ? (
+                folderMap.size === 0 && (
+                  <div className="cm-empty-state">
+                    <div className="cm-empty-icon">{IC.clip(40)}</div>
+                    <p>Chưa có tài liệu nào.</p>
+                  </div>
+                )
+              ) : folderHasExercise ? (
+                <ExerciseFolderView docs={docsInView} />
+              ) : (
+                <div className="cm-doc-list">
+                  {docsInView.map(renderDocRow)}
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       {viewingFile && <FileViewerModal file={viewingFile} onClose={() => setViewingFile(null)} />}
@@ -706,27 +748,45 @@ export default function MyClassesPage({ user, initialJoinCode, initialClassId })
         <div className="cm-class-grid">
           {classes.map(cls => {
             const pending = countPending(cls)
+            const clsPendingItems = pendingItems.filter(i => i.classId === cls.id)
+            const isUrgent = clsPendingItems.some(a => a.dueDate && (new Date(a.dueDate) - new Date()) < 86400_000)
+            const subject = primarySubject(cls)
+            const hasPhoto = !!SUBJECT_BG[subject]
+            const badgeRow = (
+              <div className="cm-class-subject-row" style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center'}}>
+                <GradeBadge grade={cls.grade} size="sm" />
+                {myEnrolledSubjects(cls, user).map(s => <SubjectBadge key={s} subject={s} size="sm" />)}
+              </div>
+            )
             return (
-              <div key={cls.id} className="cm-class-card" style={{cursor:'pointer'}} onClick={() => setSelected(cls)}>
+              <div key={cls.id} className="cm-class-card cm-subject-card" data-subject={subject || 'khac'} style={{cursor:'pointer'}} onClick={() => setSelected(cls)}>
+                {hasPhoto && (
+                  <div className="cm-tour-photo">
+                    <img src={SUBJECT_BG[subject]} alt="" loading="lazy" />
+                    <div className="cm-tour-badge-float">{badgeRow}</div>
+                  </div>
+                )}
                 <div className="cm-class-card-header">
-                  <div className="cm-class-icon">🏫</div>
+                  {!hasPhoto && <div className="cm-class-icon cm-subject-icon">{SUBJECTS[subject]?.icon ?? '🏫'}</div>}
+                  <div className="cm-title-accent" />
                   <div style={{flex:1}}>
                     <div className="cm-class-title">{cls.name}</div>
-                    {cls.teacherName && <div style={{fontSize:'0.78rem',color:'#64748b'}}>GV: {cls.teacherName}</div>}
                   </div>
                   {pending > 0 && <span className="mc-pending-badge">{pending} cần nộp</span>}
                 </div>
-                <div className="cm-class-subject-row" style={{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center'}}>
-                  <GradeBadge grade={cls.grade} size="sm" />
-                  {myEnrolledSubjects(cls, user).map(s => <SubjectBadge key={s} subject={s} size="sm" />)}
-                </div>
+                {cls.teacherName && <div className="cm-class-teacher-line">GV: {cls.teacherName}</div>}
+                {!hasPhoto && badgeRow}
                 {cls.description && <div className="cm-class-desc-preview">{cls.description}</div>}
-                <div className="cm-class-stats">
-                  <span>{IC.book(13)} {cls.assignments?.length ?? 0} bài tập</span>
+                <div className="cm-stat-glow-row">
+                  <div className={`cm-stat-glow ${isUrgent ? 'cm-stat-glow--urgent' : pending > 0 ? 'cm-stat-glow--danger' : ''}`}>
+                    <span className="cm-stat-glow-ic">{IC.book(15)}</span>
+                    <b>{pending}</b>
+                    <em>cần làm</em>
+                  </div>
                 </div>
                 <div className="cm-class-footer">
                   <span className="cm-class-date">Tham gia: {new Date(cls.createdAt).toLocaleDateString('vi-VN')}</span>
-                  <span style={{fontSize:'0.82rem',color:'#2563eb',fontWeight:600}}>Xem chi tiết →</span>
+                  <button className="btn-primary cm-enter-btn">Xem chi tiết <span className="cm-enter-arrow">→</span></button>
                 </div>
               </div>
             )

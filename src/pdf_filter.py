@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 # ---------------------------------------------------------------------------
 
 ROOT_DIR = Path(__file__).parent.parent
-VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
 TEXT_MODEL   = "llama-3.3-70b-versatile"   # model text-only nhanh hơn, tiết kiệm token
 IMAGE_DPI    = 150   # DPI render ảnh nhúng (đủ để nhận dạng nội dung)
 CONTEXT_CHARS = 800  # số ký tự text xung quanh ảnh để đánh giá relevance
@@ -172,6 +172,7 @@ def evaluate_image(client: Groq, fallbacks: list,
         }],
         max_tokens=512,
         temperature=0.1,
+        reasoning_effort="none",
     )
 
     # Clean và parse JSON

@@ -7,6 +7,13 @@ export async function getClassesByTeacher(teacherId) {
   return res.json()
 }
 
+/** Toàn bộ lớp trong hệ thống — chỉ super_admin mới được trả về dữ liệu. */
+export async function getAllClasses(viewerId) {
+  const res = await fetch(`${API}?viewAll=true&viewerId=${viewerId}`)
+  if (!res.ok) return []
+  return res.json()
+}
+
 export async function getClassesByStudent(studentId, email) {
   const qs = new URLSearchParams({ studentId: String(studentId) })
   if (email) qs.set('email', email)
@@ -95,6 +102,24 @@ export async function removeMemberFromClass(classId, userId, subject = null) {
   return res.json()
 }
 
+/** Thêm giáo viên phụ (co-teacher) vào lớp — chỉ super_admin dùng. */
+export async function addCoTeacher(classId, teacher) {
+  const res = await fetch(`${API}/${classId}/co-teachers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: teacher.id, name: teacher.name }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'Thêm giáo viên thất bại')
+  return data
+}
+
+export async function removeCoTeacher(classId, userId) {
+  const res = await fetch(`${API}/${classId}/co-teachers/${userId}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Xóa giáo viên thất bại')
+  return res.json()
+}
+
 export async function addAssignment(classId, { title, description, subject, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, attachments, writingTask }) {
   const res = await fetch(`${API}/${classId}/assignments`, {
     method: 'POST',
@@ -178,6 +203,17 @@ export async function removeDocument(classId, docId) {
   await fetch(`${API}/${classId}/documents/${docId}`, { method: 'DELETE' })
 }
 
+/** Cập nhật 1 vài field của document đã có (vd: order khi sắp xếp lại các bước đáp án giải) */
+export async function updateDocument(classId, docId, updates) {
+  const res = await fetch(`${API}/${classId}/documents/${docId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  })
+  if (!res.ok) throw new Error('Cập nhật tài liệu thất bại')
+  return res.json()
+}
+
 /** Chấm (hoặc chấm lại) bài IELTS Writing của một học sinh bằng AI */
 export async function gradeSubmission(classId, assignmentId, studentId) {
   const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/grade/${studentId}`, { method: 'POST' })
@@ -211,6 +247,16 @@ export async function searchStudents(query = '', grade = '') {
   try {
     const params = new URLSearchParams({ role: 'hoc_sinh', q: query })
     if (grade) params.set('grade', grade)
+    const r = await fetch(`/api/users/search?${params}`)
+    if (r.ok) return r.json()
+  } catch {}
+  return []
+}
+
+/** Tìm kiếm giáo viên từ server (dùng để thêm co-teacher vào lớp). */
+export async function searchTeachers(query = '') {
+  try {
+    const params = new URLSearchParams({ role: 'giao_vien', q: query })
     const r = await fetch(`/api/users/search?${params}`)
     if (r.ok) return r.json()
   } catch {}

@@ -46,7 +46,7 @@ SECTION_DESCS = {
     "PHẦN III": "Trả lời ngắn, ghi đáp số (Câu 1–6, 0.5đ/câu)",
 }
 
-VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
 PAGE_DPI = 200
 MAX_TOKENS_DEFAULT = 4096
 MAX_TOKENS_RETRY = 8192
@@ -576,6 +576,7 @@ def call_groq_vision(client: Groq, img_b64: str, prompt: str,
                 ],
                 max_tokens=max_tokens,
                 temperature=0.1,
+                reasoning_effort="none",
             )
             raw = response.choices[0].message.content.strip()
             return extract_json_from_text(raw)

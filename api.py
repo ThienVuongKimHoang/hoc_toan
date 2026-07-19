@@ -1456,6 +1456,14 @@ async def create_class_endpoint(request: Request):
     return cls
 
 
+def _is_class_teacher(cls: dict, user_id) -> bool:
+    """True nếu user_id là giáo viên chính HOẶC giáo viên phụ (co-teacher) của lớp."""
+    uid = str(user_id)
+    if str(cls.get("teacherId")) == uid:
+        return True
+    return any(str(ct.get("userId")) == uid for ct in cls.get("coTeachers") or [])
+
+
 def _sanitize_class(cls: dict) -> dict:
     """Bản trả về cho HỌC SINH: không lộ mật khẩu tham gia lớp."""
     out = dict(cls)
@@ -1465,9 +1473,16 @@ def _sanitize_class(cls: dict) -> dict:
 
 
 @app.get("/api/classes")
-async def list_classes(teacherId: str = None, studentId: str = None, email: str = None):
+async def list_classes(teacherId: str = None, studentId: str = None, email: str = None,
+                        viewAll: bool = False, viewerId: str = None):
+    if viewAll:
+        # Chỉ super_admin mới được xem TOÀN BỘ lớp trong hệ thống.
+        viewer = db.get_user_by_id(viewerId) if viewerId is not None else None
+        if (viewer or {}).get("role") != "super_admin":
+            return []
+        return db.list_all_classes()
     if teacherId:
-        return db.list_classes_by_teacher(teacherId)
+        return db.list_classes_by_teacher_or_coteacher(teacherId)
     if studentId:
         return [_sanitize_class(c) for c in db.list_classes_by_student(studentId, email)]
     return []
@@ -1542,7 +1557,7 @@ async def join_class_by_code(request: Request):
     cls = db.get_class_by_code(code)
     if not cls:
         return JSONResponse({"error": "Mã lớp không hợp lệ."}, status_code=404)
-    if str(cls.get("teacherId")) == str(uid):
+    if _is_class_teacher(cls, uid):
         return JSONResponse({"error": "Bạn là giáo viên của lớp này, không thể tham gia với tư cách học sinh."}, status_code=403)
     if cls.get("joinPassword") and cls["joinPassword"] != password:
         return JSONResponse({"error": "Sai mật khẩu."}, status_code=401)
@@ -1658,7 +1673,7 @@ async def add_member_endpoint(cls_id: str, request: Request):
                 status_code=403)
 
     def mutate(cls):
-        if str(cls.get("teacherId")) == str(body.get("userId")):
+        if _is_class_teacher(cls, body.get("userId")):
             err["msg"] = "Không thể thêm giáo viên của lớp vào danh sách học sinh."
             return False
         members = cls.get("members", [])
@@ -1691,6 +1706,33 @@ async def remove_member_endpoint(cls_id: str, user_id: str, subject: str = None)
                 return False   # xoá khỏi mọi môn
             return (m.get("subject") or None) != subj
         cls["members"] = [m for m in cls.get("members", []) if keep(m)]
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    return {"ok": True}
+
+
+@app.post("/api/classes/{cls_id}/co-teachers")
+async def add_co_teacher_endpoint(cls_id: str, request: Request):
+    body = await request.json()
+    uid = body.get("userId")
+
+    def mutate(cls):
+        if str(cls.get("teacherId")) == str(uid):
+            return False   # đã là giáo viên chính, không thêm trùng
+        co_teachers = cls.get("coTeachers", [])
+        if any(str(ct.get("userId")) == str(uid) for ct in co_teachers):
+            return False   # đã có rồi
+        co_teachers.append({"userId": uid, "name": body.get("name", ""), "addedAt": _now_iso()})
+        cls["coTeachers"] = co_teachers
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    return {"ok": True}
+
+
+@app.delete("/api/classes/{cls_id}/co-teachers/{user_id}")
+async def remove_co_teacher_endpoint(cls_id: str, user_id: str):
+    def mutate(cls):
+        cls["coTeachers"] = [ct for ct in cls.get("coTeachers", []) if str(ct.get("userId")) != user_id]
     cls = db.update_class_atomic(cls_id, mutate)
     if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     return {"ok": True}
@@ -2025,6 +2067,22 @@ async def remove_class_doc_endpoint(cls_id: str, doc_id: str):
     return {"ok": True}
 
 
+@app.patch("/api/classes/{cls_id}/documents/{doc_id}")
+async def update_class_doc_endpoint(cls_id: str, doc_id: str, request: Request):
+    """Cập nhật một vài field của 1 document đã có (vd: order khi kéo-thả sắp xếp lại
+    các bước đáp án giải) — không phải thay thế toàn bộ document."""
+    body = await request.json()
+
+    def mutate(cls):
+        for d in cls.get("documents", []):
+            if d.get("id") == doc_id:
+                d.update(body)
+                return
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    return {"ok": True}
+
+
 @app.get("/api/notifications")
 async def get_notifications_endpoint(userId: str):
     return db.get_notifs_for_user(userId)
@@ -2135,7 +2193,7 @@ async def delete_submission_image(filename: str):
 import re as _re
 import base64 as _base64
 
-GROQ_SOLVER_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+GROQ_SOLVER_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"
 
 def _fix_json_escapes(s):
     """Fix LaTeX backslashes trong JSON string từ LLM.

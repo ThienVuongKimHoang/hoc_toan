@@ -22,6 +22,7 @@ import QuestionCard from './components/QuestionCard.jsx'
 import TeacherToolsModal from './components/TeacherToolsModal.jsx'
 import ExerciseSolver from './components/ExerciseSolver.jsx'
 import GeoViewerPage from './pages/GeoViewerPage.jsx'
+import WhiteboardPage from './pages/WhiteboardPage.jsx'
 import MixExamModal from './components/MixExamModal.jsx'
 
 const SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III']
@@ -61,6 +62,17 @@ function parseHash() {
   if (hash === 'my-classes') return { view: 'my-classes', examId: null, classId: null }
   if (hash === 'tools/solver') return { view: 'solver-page', examId: null, classId: null }
   if (hash === 'tools/geo3d') return { view: 'geo3d-page', examId: null, classId: null }
+  if (hash === 'tools/whiteboard') return { view: 'whiteboard-page', examId: null, classId: null }
+  if (hash.startsWith('tools/whiteboard/')) {
+    // tools/whiteboard/<classId>/<subject>/<returnHash đã encode> — mở bảng trắng từ trong 1 lớp,
+    // giữ subject để lưu tài liệu đúng môn và returnHash để nút "Quay lại" trở về đúng lớp đó.
+    const [cid, subj, retEnc] = hash.slice('tools/whiteboard/'.length).split('/')
+    return {
+      view: 'whiteboard-page', examId: null, classId: cid || null,
+      whiteboardSubject: subj || null,
+      whiteboardReturnHash: retEnc ? decodeURIComponent(retEnc) : null,
+    }
+  }
   return { view: 'home', examId: null, classId: null }
 }
 
@@ -197,6 +209,8 @@ export default function App() {
   const [classId, setClassId] = useState(() => parseHash().classId ?? null)
   const [assignmentId, setAssignmentId] = useState(() => parseHash().assignmentId ?? null)
   const [openClassId, setOpenClassId] = useState(() => parseHash().openClassId ?? null)
+  const [whiteboardSubject, setWhiteboardSubject] = useState(() => parseHash().whiteboardSubject ?? null)
+  const [whiteboardReturnHash, setWhiteboardReturnHash] = useState(() => parseHash().whiteboardReturnHash ?? null)
   const [editingExam, setEditingExam] = useState(null)
   const [resultsExam, setResultsExam] = useState(null)
   const [manualMode, setManualMode] = useState(false)
@@ -208,8 +222,9 @@ export default function App() {
 
   useEffect(() => {
     const onHash = () => {
-      const { view: v, examId: id, classId: cid, assignmentId: aid, openClassId: ocid } = parseHash()
+      const { view: v, examId: id, classId: cid, assignmentId: aid, openClassId: ocid, whiteboardSubject: wbs, whiteboardReturnHash: wbr } = parseHash()
       setView(v); setExamId(id); setClassId(cid ?? null); setAssignmentId(aid ?? null); setOpenClassId(ocid ?? null)
+      setWhiteboardSubject(wbs ?? null); setWhiteboardReturnHash(wbr ?? null)
     }
     window.addEventListener('popstate', onHash)
     window.addEventListener('hashchange', onHash)
@@ -415,6 +430,10 @@ export default function App() {
 
   const goSolverPage = () => { setHash('tools/solver'); setView('solver-page') }
   const goGeo3dPage = () => { setHash('tools/geo3d'); setView('geo3d-page') }
+  const goWhiteboardPage = () => {
+    setHash('tools/whiteboard'); setView('whiteboard-page')
+    setClassId(null); setWhiteboardSubject(null); setWhiteboardReturnHash(null)
+  }
 
   /* ── Teacher tools modal (hiển thị mọi nơi) ── */
   const teacherToolOverlays = showTeacherTools && (
@@ -423,6 +442,7 @@ export default function App() {
         setShowTeacherTools(false)
         if (id === 'solver') goSolverPage()
         if (id === 'geo3d') goGeo3dPage()
+        if (id === 'whiteboard') goWhiteboardPage()
       }}
       onClose={() => setShowTeacherTools(false)}
     />
@@ -619,6 +639,20 @@ export default function App() {
     <>
       {header}
       <GeoViewerPage onBack={() => { setHash(''); setView('home') }} />
+    </>
+  )
+
+  if (view === 'whiteboard-page') return (
+    <>
+      {header}
+      <WhiteboardPage
+        classId={classId}
+        subject={whiteboardSubject}
+        onBack={() => {
+          if (whiteboardReturnHash) { setHash(whiteboardReturnHash); setView('class-mgmt') }
+          else { setHash(''); setView('home') }
+        }}
+      />
     </>
   )
 

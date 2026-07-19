@@ -44,7 +44,7 @@ READING_SECTION_NAME    = "READING"
 ENGLISH_POINTS_PER_Q    = 0.25
 ENGLISH_TOTAL_QUESTIONS = 40
 
-VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
 TEXT_MODEL   = "llama-3.3-70b-versatile"
 MIN_TEXT_CHARS = 150  # dưới ngưỡng này → coi là PDF scan, dùng Vision fallback
 
@@ -165,6 +165,7 @@ def _describe_image(client: Groq, img_b64: str, mime: str, fallback_clients: lis
                 ]}],
                 max_tokens=150,
                 temperature=0.1,
+                reasoning_effort="none",
             )
             return resp.choices[0].message.content.strip()
         except Exception as e:

@@ -160,6 +160,8 @@ ALTER TABLE classes ADD COLUMN IF NOT EXISTS subject VARCHAR(20);
 -- 'subject' đơn cũ được giữ lại để tương thích & backfill vào 'subjects'.
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS grade VARCHAR(20);
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS subjects JSONB DEFAULT '[]';
+-- Lớp có thể có nhiều giáo viên phụ trách (co-teacher) ngoài teacher_id chính.
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS co_teachers JSONB DEFAULT '[]';
 
 CREATE TABLE IF NOT EXISTS notifications (
     id             VARCHAR(50)  PRIMARY KEY,
@@ -992,6 +994,7 @@ def _cls_from_row(row: dict) -> dict:
         "members":      r["members"] or [],
         "assignments":  r["assignments"] or [],
         "documents":    r["documents"] or [],
+        "coTeachers":   r.get("co_teachers") or [],
     }
 
 
@@ -1029,6 +1032,19 @@ def list_all_classes() -> list:
             cur.execute("SELECT * FROM classes ORDER BY created_at DESC")
             rows = cur.fetchall()
     return [_cls_from_row(dict(r)) for r in rows]
+
+
+def list_classes_by_teacher_or_coteacher(user_id: str) -> list:
+    """Lớp mà user là GIÁO VIÊN CHÍNH hoặc GIÁO VIÊN PHỤ (co-teacher)."""
+    uid = str(user_id)
+    out = []
+    for cls in list_all_classes():
+        if str(cls.get("teacherId")) == uid:
+            out.append(cls)
+            continue
+        if any(str(ct.get("userId")) == uid for ct in cls.get("coTeachers") or []):
+            out.append(cls)
+    return out
 
 
 def list_classes_by_student(student_id: str, email: str = None) -> list:
@@ -1090,15 +1106,15 @@ def upsert_class(cid: str, cls: dict) -> None:
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO classes(id,name,description,teacher_id,teacher_name,
-                    created_at,join_code,join_password,subject,grade,subjects,members,assignments,documents)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    created_at,join_code,join_password,subject,grade,subjects,members,assignments,documents,co_teachers)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT(id) DO UPDATE SET
                     name=EXCLUDED.name, description=EXCLUDED.description,
                     teacher_id=EXCLUDED.teacher_id, teacher_name=EXCLUDED.teacher_name,
                     join_code=EXCLUDED.join_code, join_password=EXCLUDED.join_password,
                     subject=EXCLUDED.subject, grade=EXCLUDED.grade, subjects=EXCLUDED.subjects,
                     members=EXCLUDED.members, assignments=EXCLUDED.assignments,
-                    documents=EXCLUDED.documents
+                    documents=EXCLUDED.documents, co_teachers=EXCLUDED.co_teachers
             """, (
                 cid, cls.get("name", ""), cls.get("description", ""),
                 str(cls.get("teacherId", "")), cls.get("teacherName", ""),
@@ -1108,6 +1124,7 @@ def upsert_class(cid: str, cls: dict) -> None:
                 json.dumps(cls.get("members") or [], ensure_ascii=False),
                 json.dumps(cls.get("assignments") or [], ensure_ascii=False),
                 json.dumps(cls.get("documents") or [], ensure_ascii=False),
+                json.dumps(cls.get("coTeachers") or [], ensure_ascii=False),
             ))
         conn.commit()
 
@@ -1133,7 +1150,7 @@ def update_class_atomic(cid: str, mutate) -> Optional[dict]:
                     UPDATE classes SET
                         name=%s, description=%s, teacher_id=%s, teacher_name=%s,
                         join_code=%s, join_password=%s, subject=%s, grade=%s, subjects=%s,
-                        members=%s, assignments=%s, documents=%s
+                        members=%s, assignments=%s, documents=%s, co_teachers=%s
                     WHERE id=%s
                 """, (
                     cls.get("name", ""), cls.get("description", ""),
@@ -1144,6 +1161,7 @@ def update_class_atomic(cid: str, mutate) -> Optional[dict]:
                     json.dumps(cls.get("members") or [], ensure_ascii=False),
                     json.dumps(cls.get("assignments") or [], ensure_ascii=False),
                     json.dumps(cls.get("documents") or [], ensure_ascii=False),
+                    json.dumps(cls.get("coTeachers") or [], ensure_ascii=False),
                     cid,
                 ))
             conn.commit()

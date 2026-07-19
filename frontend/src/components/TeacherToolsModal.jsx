@@ -27,6 +27,12 @@ const SparklesIcon = () => (
   </svg>
 )
 
+const PenToolIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+  </svg>
+)
+
 const ArrowRightIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="5" y1="12" x2="19" y2="12"/>
@@ -50,6 +56,14 @@ const TOOLS = [
     desc: 'AI phân tích lý thuyết cần thiết rồi giải chi tiết từng bước',
     color: '#0369a1',
     bg: '#e0f2fe',
+  },
+  {
+    id: 'whiteboard',
+    Icon: PenToolIcon,
+    title: 'Bảng trắng',
+    desc: 'Bảng vẽ vô hạn: phóng to/thu nhỏ, kéo chọn để di chuyển nét vẽ',
+    color: '#c2410c',
+    bg: '#ffedd5',
   },
 ]
 

@@ -3,15 +3,20 @@ import { getExamsByTeacher, fetchExamsByTeacher, getSubmissions as getExamSubmis
 import QuestionStats from '../components/QuestionStats.jsx'
 import ScoreDistribution from '../components/ScoreDistribution.jsx'
 import {
-  addAssignment, addDocument, addMemberToClass, createClass,
+  addAssignment, addCoTeacher, addDocument, addMemberToClass, createClass,
   deleteAssignmentSubmission,
-  deleteClass, getClassById, getClassesByTeacher, getSubmissions,
-  joinUrl, removeAssignment, removeDocument, removeMemberFromClass,
-  searchStudents, updateClassInfo, uploadFile,
+  deleteClass, getAllClasses, getClassById, getClassesByTeacher, getSubmissions,
+  joinUrl, removeAssignment, removeCoTeacher, removeDocument, removeMemberFromClass,
+  searchStudents, searchTeachers, updateClassInfo, uploadFile,
 } from '../store/classStore.js'
 import ExerciseSolver from '../components/ExerciseSolver.jsx'
 import Geo3DViewer from '../components/Geo3DViewer.jsx'
+import CreateExamPage from './CreateExamPage.jsx'
+import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
+import SaveCaptureModal from '../components/SaveCaptureModal.jsx'
+import { isExerciseDoc } from '../utils/exerciseDocs.js'
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, GradePicker, SubjectPicker, gradeLabel } from '../components/SubjectBadge.jsx'
+import { ROLES } from '../auth/mockUsers.js'
 
 /* Môn "chính" của lớp (fallback cho dữ liệu cũ chưa gắn môn) */
 const primarySubject = (cls) => cls?.subject || cls?.subjects?.[0] || null
@@ -66,6 +71,7 @@ const IC = {
   img: (s = 16) => <Svg size={s}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></Svg>,
   audio: (s = 16) => <Svg size={s}><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></Svg>,
   download: (s = 16) => <Svg size={s}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></Svg>,
+  folder: (s = 16) => <Svg size={s}><path d="M4 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.5L11 4H4z" /></Svg>,
 }
 
 /* ─── File type helpers ─── */
@@ -615,6 +621,61 @@ function AddStudentModal({ classMembers, grade, subject, onClose, onAdd }) {
   )
 }
 
+/* ─── Add teacher modal (co-teacher — chỉ super_admin) ─── */
+function AddTeacherModal({ teacherId, coTeachers, onClose, onAdd }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const addedIds = new Set([String(teacherId), ...coTeachers.map(ct => String(ct.userId))])
+
+  useEffect(() => {
+    searchTeachers('').then(setResults)
+  }, [])
+
+  const handleSearch = q => {
+    setQuery(q)
+    searchTeachers(q).then(setResults)
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 480 }}>
+        <div className="modal-header"><h2>📚 Thêm giáo viên phụ trách</h2><button className="modal-close" onClick={onClose}>✕</button></div>
+        <div style={{ padding: '0 24px 24px' }}>
+          <div className="cm-search-wrap">
+            <span className="cm-search-icon">{IC.search(15)}</span>
+            <input className="cm-input cm-search-input" placeholder="Tìm tên hoặc email giáo viên…"
+              value={query} onChange={e => handleSearch(e.target.value)} autoFocus />
+          </div>
+          <div className="cm-student-list">
+            {results.length === 0
+              ? <div className="cm-empty-hint">Không tìm thấy giáo viên nào.</div>
+              : results.map(t => {
+                const already = addedIds.has(String(t.id))
+                return (
+                  <div key={t.id} className={`cm-student-row ${already ? 'cm-student-row--added' : ''}`}>
+                    <div className="cm-student-avatar">{t.avatar || t.name[0]}</div>
+                    <div className="cm-student-info">
+                      <div className="cm-student-name">{t.name}</div>
+                      <div className="cm-student-email">{t.email}</div>
+                    </div>
+                    {already
+                      ? <span className="cm-added-badge">{IC.check(13)} Đã thêm</span>
+                      : <button className="cm-add-btn" onClick={() => onAdd(t)}>{IC.plus(13)} Thêm</button>
+                    }
+                  </div>
+                )
+              })
+            }
+          </div>
+          <div className="cm-footer" style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
+            <button className="pm-cancel" onClick={onClose}>Đóng</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Assignment form modal ─── */
 function AssignmentModal({ teacherId, cls, subject, mode: initialMode, onClose, onSave }) {
   // Hiện cache localStorage ngay, rồi cập nhật bằng danh sách chuẩn từ server.
@@ -874,15 +935,19 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, onClose, 
 }
 
 /* ─── Class detail panel ─── */
-function ClassDetail({ cls, subject, teacherId, onBack, onUpdated }) {
+function ClassDetail({ cls, subject, teacherId, isSuperAdmin, user, onBack, onUpdated }) {
   const [tab, setTab] = useState('assignments')
   const [asgnTab, setAsgnTab] = useState('homework')  // 'homework' | 'exam' (Đề thi)
   const [showAddStudent, setShowAddStudent] = useState(false)
+  const [showAddTeacher, setShowAddTeacher] = useState(false)
   const [showAssignment, setShowAssignment] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [viewSubs, setViewSubs] = useState(null)
   const [viewingFile, setViewingFile] = useState(null)
   const [copiedJoin, setCopiedJoin] = useState(false)
+  const [openFolder, setOpenFolder] = useState(null)
+  const [pendingUploadFile, setPendingUploadFile] = useState(null)
+  const [deletingFolder, setDeletingFolder] = useState(false)
   const fileInputRef = useRef(null)
 
   const refresh = () => onUpdated()
@@ -913,6 +978,20 @@ function ClassDetail({ cls, subject, teacherId, onBack, onUpdated }) {
     refresh()
   }
 
+  /* Giáo viên phụ trách (co-teacher) — chỉ super_admin thao tác */
+  const handleAddCoTeacher = async (teacher) => {
+    try {
+      await addCoTeacher(cls.id, teacher)
+      setShowAddTeacher(false)
+      refresh()
+    } catch (err) { alert(err.message) }
+  }
+  const handleRemoveCoTeacher = async (userId) => {
+    if (!confirm('Gỡ giáo viên này khỏi lớp?')) return
+    await removeCoTeacher(cls.id, userId)
+    refresh()
+  }
+
   /* Assignments — gắn subject của môn đang xem */
   const handleAddAssignment = async (data) => {
     await addAssignment(cls.id, { ...data, subject })
@@ -925,23 +1004,44 @@ function ClassDetail({ cls, subject, teacherId, onBack, onUpdated }) {
     refresh()
   }
 
-  /* Documents — gắn subject */
+  /* Documents — gắn subject. Đang mở 1 Buổi thì upload sẽ mở popup gán Câu/Đề-Đáp án
+     giống hệt luồng "Chụp vùng & lưu" ở bảng trắng, thay vì upload rời như trước. */
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
+    if (openFolder) { setPendingUploadFile(file); return }
     setUploading(true)
     try {
       const doc = await uploadFile(file)
       await addDocument(cls.id, { ...doc, subject })
       refresh()
     } catch (err) { alert('Upload thất bại: ' + err.message) }
-    finally { setUploading(false); e.target.value = '' }
+    finally { setUploading(false) }
+  }
+  const handleConfirmFolderUpload = async ({ name, folder, cauLabel, section, order }) => {
+    const doc = await uploadFile(pendingUploadFile)
+    await addDocument(cls.id, { ...doc, name, subject, folder, kind: 'exercise', cauLabel, section, order })
+    setPendingUploadFile(null)
+    refresh()
   }
   const handleRemoveDoc = async (doc) => {
     if (!confirm(`Xoá tài liệu "${doc.name}"?`)) return
     await fetch(`/api/class-documents/${encodeURIComponent(doc.filename)}`, { method: 'DELETE' }).catch(() => { })
     await removeDocument(cls.id, doc.id)
     refresh()
+  }
+  const handleDeleteFolder = async (folderName, docs) => {
+    if (!confirm(`Xóa toàn bộ Buổi "${folderName}" và ${docs.length} tài liệu bên trong? Không thể hoàn tác.`)) return
+    setDeletingFolder(true)
+    try {
+      await Promise.all(docs.map(async d => {
+        await fetch(`/api/class-documents/${encodeURIComponent(d.filename)}`, { method: 'DELETE' }).catch(() => { })
+        await removeDocument(cls.id, d.id)
+      }))
+      setOpenFolder(null)
+      refresh()
+    } finally { setDeletingFolder(false) }
   }
 
   const formatDt = iso => iso
@@ -1009,10 +1109,11 @@ function ClassDetail({ cls, subject, teacherId, onBack, onUpdated }) {
   const TABS = [
     ['documents', '📎 Tài liệu'],
     ['assignments', '📝 Bài tập'],
+    ['create-exam', '✏️ Tạo đề'],
+    ['whiteboard', '🖊️ Bảng trắng'],
     ...(isMathSubject(subject) ? [['solver', '✨ Giải bài'], ['geo3d', '📐 Vẽ hình']] : []),
     ['members', '👤 Học sinh'],
   ]
-
   return (
     <div className="cm-detail">
       {/* Header */}
@@ -1031,6 +1132,25 @@ function ClassDetail({ cls, subject, teacherId, onBack, onUpdated }) {
         </div>
       </div>
 
+      {/* Giáo viên phụ trách — chính + co-teacher */}
+      <div className="cm-teacher-row">
+        <span className="cm-teacher-eyebrow">📚 Giáo viên phụ trách</span>
+        <div className="cm-teacher-chips">
+          <span className="cm-teacher-chip cm-teacher-chip--main">{cls.teacherName || 'Chưa rõ'}</span>
+          {(cls.coTeachers || []).map(ct => (
+            <span key={ct.userId} className="cm-teacher-chip">
+              {ct.name}
+              {isSuperAdmin && (
+                <button className="cm-teacher-chip-x" onClick={() => handleRemoveCoTeacher(ct.userId)}>{IC.x(11)}</button>
+              )}
+            </span>
+          ))}
+          {isSuperAdmin && (
+            <button className="cm-add-teacher-btn" onClick={() => setShowAddTeacher(true)}>{IC.plus(12)} Thêm giáo viên</button>
+          )}
+        </div>
+      </div>
+
       {/* Join link — banner công nghệ */}
       <div className="cm-join-banner">
         <div className="cm-join-left">
@@ -1045,10 +1165,18 @@ function ClassDetail({ cls, subject, teacherId, onBack, onUpdated }) {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — riêng "Bảng trắng" nhảy hẳn sang trang bảng trắng vô hạn (#tools/whiteboard),
+          không mở inline nữa, vì cần zoom/pan/kéo-chọn không gian không giới hạn. */}
       <div className="cm-tabs">
         {TABS.map(([k, l]) => (
-          <button key={k} className={`cm-tab ${tab === k ? 'cm-tab--active' : ''}`} onClick={() => setTab(k)}>{l}</button>
+          <button key={k} className={`cm-tab ${tab === k ? 'cm-tab--active' : ''}`} onClick={() => {
+            if (k === 'whiteboard') {
+              const returnHash = `classes/${cls.grade || 'none'}/${cls.id}`
+              window.location.hash = `tools/whiteboard/${cls.id}/${subject}/${encodeURIComponent(returnHash)}`
+              return
+            }
+            setTab(k)
+          }}>{l}</button>
         ))}
       </div>
 
@@ -1124,40 +1252,97 @@ function ClassDetail({ cls, subject, teacherId, onBack, onUpdated }) {
           </div>
         )}
 
-        {/* ── Documents ── */}
-        {tab === 'documents' && (
-          <div>
-            <div className="cm-section-toolbar">
-              <span className="cm-section-count">{subjDocs.length} tài liệu · môn {SUBJECTS[subject]?.label}</span>
-              <button className="btn-primary cm-action-btn"
-                onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-                {uploading ? '⏳ Đang upload…' : <>{IC.upload(14)} Upload</>}
-              </button>
-              <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileSelect} />
-            </div>
-            {subjDocs.length === 0 ? (
-              <div className="cm-empty-state">
-                <div className="cm-empty-icon">{IC.clip(40)}</div>
-                <p>Chưa có tài liệu nào.</p>
-                <button className="btn-primary" onClick={() => fileInputRef.current?.click()}>{IC.upload(14)} Upload tài liệu</button>
-              </div>
-            ) : (
-              <div className="cm-doc-list">
-                {subjDocs.map(d => (
-                  <div key={d.id} className="cm-doc-row">
-                    <div className="cm-doc-icon" onClick={() => setViewingFile(d)} style={{ cursor: 'pointer' }}>{IC.file(20)}</div>
-                    <div className="cm-doc-info">
-                      <button className="cm-doc-name" onClick={() => setViewingFile(d)}>{d.name}</button>
-                      <div className="cm-doc-meta">{formatSize(d.size)} · {formatDt(d.uploadedAt)}</div>
-                    </div>
-                    <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống">{IC.download(14)}</a>
-                    <button className="cm-remove-btn" onClick={() => handleRemoveDoc(d)}>{IC.trash(14)}</button>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* ── Tạo đề (inline, không mở trang/popup riêng) ── */}
+        {tab === 'create-exam' && (
+          <div className="cm-create-exam-embed">
+            <CreateExamPage
+              key={cls.id + subject}
+              user={user}
+              subject={subject}
+              onGoMyExams={() => { setTab('assignments'); refresh() }}
+            />
           </div>
         )}
+
+        {/* ── Documents ── */}
+        {tab === 'documents' && (() => {
+          const looseDocs = subjDocs.filter(d => !d.folder)
+          const folderMap = new Map()
+          subjDocs.forEach(d => {
+            if (!d.folder) return
+            if (!folderMap.has(d.folder)) folderMap.set(d.folder, [])
+            folderMap.get(d.folder).push(d)
+          })
+          const docsInView = openFolder ? (folderMap.get(openFolder) || []) : looseDocs
+          const folderHasExercise = openFolder && docsInView.some(isExerciseDoc)
+          const folderTileLabel = (docs) => {
+            const exerciseDocs = docs.filter(isExerciseDoc)
+            if (!exerciseDocs.length) return `${docs.length} ảnh`
+            const cauCount = new Set(exerciseDocs.map(d => d.cauLabel)).size
+            return `${cauCount} câu`
+          }
+          const renderDocRow = (d) => (
+            <div key={d.id} className="cm-doc-row">
+              <div className="cm-doc-icon" onClick={() => setViewingFile(d)} style={{ cursor: 'pointer' }}>{IC.file(20)}</div>
+              <div className="cm-doc-info">
+                <button className="cm-doc-name" onClick={() => setViewingFile(d)}>{d.name}</button>
+                <div className="cm-doc-meta">{formatSize(d.size)} · {formatDt(d.uploadedAt)}</div>
+              </div>
+              <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống">{IC.download(14)}</a>
+              <button className="cm-remove-btn" onClick={() => handleRemoveDoc(d)}>{IC.trash(14)}</button>
+            </div>
+          )
+          return (
+            <div>
+              <div className="cm-section-toolbar">
+                {openFolder ? (
+                  <>
+                    <button className="cm-back-btn" onClick={() => setOpenFolder(null)}>{IC.back(16)} {openFolder}</button>
+                    <button className="cm-remove-btn" title="Xóa buổi này" disabled={deletingFolder}
+                      onClick={() => handleDeleteFolder(openFolder, docsInView)}>
+                      {IC.trash(14)}
+                    </button>
+                  </>
+                ) : (
+                  <span className="cm-section-count">{subjDocs.length} tài liệu · môn {SUBJECTS[subject]?.label}</span>
+                )}
+                <button className="btn-primary cm-action-btn"
+                  onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                  {uploading ? '⏳ Đang upload…' : <>{IC.upload(14)} Upload</>}
+                </button>
+                <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileSelect} />
+              </div>
+
+              {!openFolder && folderMap.size > 0 && (
+                <div className="cm-folder-grid">
+                  {[...folderMap.entries()].map(([name, docs]) => (
+                    <button key={name} className="cm-folder-tile" onClick={() => setOpenFolder(name)}>
+                      {IC.folder(28)}
+                      <span className="cm-folder-name">{name}</span>
+                      <span className="cm-folder-count">{folderTileLabel(docs)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {docsInView.length === 0 ? (
+                folderMap.size === 0 && (
+                  <div className="cm-empty-state">
+                    <div className="cm-empty-icon">{IC.clip(40)}</div>
+                    <p>Chưa có tài liệu nào.</p>
+                    <button className="btn-primary" onClick={() => fileInputRef.current?.click()}>{IC.upload(14)} Upload tài liệu</button>
+                  </div>
+                )
+              ) : folderHasExercise ? (
+                <ExerciseFolderView docs={docsInView} editable classId={cls.id} onChanged={refresh} />
+              ) : (
+                <div className="cm-doc-list">
+                  {docsInView.map(renderDocRow)}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* ── Giải bài (Toán) ── */}
         {tab === 'solver' && isMathSubject(subject) && (
@@ -1176,6 +1361,10 @@ function ClassDetail({ cls, subject, teacherId, onBack, onUpdated }) {
         <AddStudentModal classMembers={subjMembers} grade={cls.grade} subject={subject}
           onClose={() => setShowAddStudent(false)} onAdd={handleAddMember} />
       )}
+      {showAddTeacher && (
+        <AddTeacherModal teacherId={cls.teacherId} coTeachers={cls.coTeachers || []}
+          onClose={() => setShowAddTeacher(false)} onAdd={handleAddCoTeacher} />
+      )}
       {showAssignment && (
         <AssignmentModal teacherId={teacherId} cls={cls} subject={subject} mode={asgnTab === 'exam' ? 'exam' : 'homework'}
           onClose={() => setShowAssignment(false)} onSave={handleAddAssignment} />
@@ -1185,6 +1374,11 @@ function ClassDetail({ cls, subject, teacherId, onBack, onUpdated }) {
           allAssignments={cls.assignments || []} onClose={() => setViewSubs(null)} />
       )}
       {viewingFile && <FileViewerModal file={viewingFile} onClose={() => setViewingFile(null)} />}
+      {pendingUploadFile && (
+        <SaveCaptureModal blob={pendingUploadFile} existingFolders={[openFolder]} folderDocs={subjDocs}
+          lockedFolder={openFolder}
+          onCancel={() => setPendingUploadFile(null)} onConfirm={handleConfirmFolderUpload} />
+      )}
     </div>
   )
 }
@@ -1215,8 +1409,10 @@ export default function ClassManagementPage({ user }) {
   }
   const goBack = () => window.history.back()
 
+  const isSuperAdmin = user.role === ROLES.SUPERADMIN
+
   const reload = async () => {
-    setClasses(await getClassesByTeacher(String(user.id)))
+    setClasses(isSuperAdmin ? await getAllClasses(user.id) : await getClassesByTeacher(String(user.id)))
   }
 
   useEffect(() => { reload() }, [])
@@ -1237,7 +1433,12 @@ export default function ClassManagementPage({ user }) {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Xoá lớp học này? Hành động không thể hoàn tác.')) return
+    const cls = classes.find(c => c.id === id)
+    const isOtherTeacherClass = isSuperAdmin && cls && String(cls.teacherId) !== String(user.id)
+    const msg = isOtherTeacherClass
+      ? `Bạn đang xóa lớp của giáo viên khác: ${cls.teacherName || 'không rõ'}. Xác nhận xóa?`
+      : 'Xoá lớp học này? Hành động không thể hoàn tác.'
+    if (!confirm(msg)) return
     await deleteClass(id)
     if (nav.classId === id) goNav(nav.grade, null)   // đang mở lớp bị xoá → về danh sách khối
     reload()
@@ -1265,8 +1466,8 @@ export default function ClassManagementPage({ user }) {
       <div className="create-topbar">
         <h1 className="exam-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{IC.users(24)} Quản lý lớp học</h1>
       </div>
-      <ClassDetail cls={selected} subject={primarySubject(selected)} teacherId={user.id}
-        onBack={goBack} onUpdated={reload} />
+      <ClassDetail cls={selected} subject={primarySubject(selected)} teacherId={selected.teacherId}
+        isSuperAdmin={isSuperAdmin} user={user} onBack={goBack} onUpdated={reload} />
       {editCls && <ClassFormModal initial={editCls} onClose={() => setEditCls(null)} onSave={handleEdit} />}
     </div>
   )
@@ -1322,6 +1523,7 @@ export default function ClassManagementPage({ user }) {
                     <div className="cm-title-accent" />
                     <div className="cm-class-title">{cls.name}</div>
                   </div>
+                  {isSuperAdmin && <div className="cm-class-teacher-line">{IC.users(13)} {cls.teacherName || 'Chưa rõ giáo viên'}</div>}
                   {!hasPhoto && badgeRow}
                   {cls.description && <div className="cm-class-desc-preview">{cls.description}</div>}
                   <div className="cm-stat-glow-row">
