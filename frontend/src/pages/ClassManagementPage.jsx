@@ -30,6 +30,11 @@ const inSubject = (item, subject, cls) => ((item?.subject || primarySubject(cls)
 const SOLVER_SUBJECTS = ['toan', 'ly', 'hoa']
 const hasSolverAccess = (subject) => SOLVER_SUBJECTS.includes(subject)
 const isMathSubject = (subject) => subject === 'toan'
+/* Ngày dạng YYYY-MM-DD theo giờ local của trình duyệt (KHÔNG dùng toISOString() —
+   hàm đó quy về UTC nên lệch 1 ngày trong khung 00:00–06:59 giờ VN). */
+function localDateStr(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 /* Đọc điều hướng (khối→lớp) từ hash: #classes | #classes/<khối> | #classes/<khối>/<classId>.
    '__none__' (lớp chưa đặt khối) mã hoá thành 'none' trên URL. */
 function navFromHash() {
@@ -749,8 +754,8 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, onClose, 
     return subjRank * 2 + gradeRank
   }
   const sortedExams = [...exams].sort((a, b) => examRank(a) - examRank(b))
-  const today = new Date().toISOString().slice(0, 10)
-  const weekLater = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10)
+  const today = localDateStr()
+  const weekLater = localDateStr(new Date(Date.now() + 7 * 86400_000))
 
   const [mode, setMode] = useState(initialMode || 'exam')   // 'exam' | 'homework'
   const [title, setTitle] = useState('')
@@ -1013,7 +1018,7 @@ function scheduleInfoForDate(schedule, dateStr) {
   const iso = jsDay === 0 ? 7 : jsDay                        // quy về 1=Th2..7=CN
   const slot = schedule.find(s => s.dayOfWeek === iso)
   if (!slot) return { open: false, text: 'Ngày này không có trong lịch học của lớp' }
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = localDateStr()
   if (dateStr !== todayStr) return { open: true, text: `Buổi học ${slot.startTime}–${slot.endTime}` }
   const now = new Date().toTimeString().slice(0, 5)
   const inWindow = now >= slot.startTime && now <= slot.endTime
@@ -1026,15 +1031,21 @@ function scheduleInfoForDate(schedule, dateStr) {
 
 /* ─── Tab Điểm danh ─── */
 function AttendanceTab({ classId, teacherId, members, schedule }) {
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = localDateStr()
   const [date, setDate] = useState(todayStr)
   const [statusMap, setStatusMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState([])
+  const toolbarRef = useRef(null)
 
   const loadHistory = useCallback(async () => setHistory(await getAttendanceHistory(classId)), [classId])
   useEffect(() => { loadHistory() }, [loadHistory])
+
+  const goToDate = (d) => {
+    setDate(d)
+    toolbarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -1070,12 +1081,21 @@ function AttendanceTab({ classId, teacherId, members, schedule }) {
 
   return (
     <div>
-      <div className="cm-section-toolbar">
+      <div className="cm-section-toolbar" ref={toolbarRef}>
         <input className="cm-input" type="date" value={date} max={todayStr}
           onChange={e => setDate(e.target.value)} style={{ maxWidth: 180 }} />
         {info && (
           <span className={`cm-window-chip cm-window-chip--${info.open ? 'open' : 'closed'}`}>
             {IC.clock(12)} {info.text}
+          </span>
+        )}
+        {date !== todayStr && (
+          <span className="cm-window-chip cm-window-chip--pending">
+            📖 Đang xem lại ngày {new Date(`${date}T00:00:00`).toLocaleDateString('vi-VN')}
+            <button type="button" onClick={() => goToDate(todayStr)}
+              style={{ marginLeft: 8, border: 'none', background: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>
+              Về hôm nay
+            </button>
           </span>
         )}
       </div>
@@ -1118,11 +1138,13 @@ function AttendanceTab({ classId, teacherId, members, schedule }) {
       ) : (
         <div className="cm-assignment-list">
           {history.map(s => (
-            <div key={s.id} className="cm-assignment-card" style={{ cursor: 'pointer' }}
-              onClick={() => setDate(s.date)}>
+            <div key={s.id}
+              className={`cm-assignment-card ${s.date === date ? 'cm-assignment-card--active' : ''}`}
+              style={{ cursor: 'pointer' }}
+              onClick={() => goToDate(s.date)}>
               <div className="cm-asgn-left">
                 <div className="cm-asgn-title">
-                  {new Date(`${s.date}T00:00:00`).toLocaleDateString('vi-VN')}
+                  {s.date === date && '👁️ '}{new Date(`${s.date}T00:00:00`).toLocaleDateString('vi-VN')}
                 </div>
                 <div className="cm-asgn-meta">
                   <span className="cm-exam-chip">✅ {s.counts.coMat} có mặt</span>

@@ -6986,6 +6986,7 @@ button { font-family: inherit; }
 }
 .cm-assignment-card:hover { transform: translateY(-2px); box-shadow: 0 12px 26px -14px rgba(37,99,235,0.30); border-color: #C7D8F3; }
 .cm-assignment-card--past { opacity: 0.7; background: #f8fafc; }
+.cm-assignment-card--active { border-color: #2563eb; background: #eff6ff; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
 .cm-asgn-left { flex: 1; min-width: 0; }
 .cm-asgn-title { font-size: 0.95rem; font-weight: 700; color: #1e293b; margin-bottom: 3px; }
 .cm-asgn-desc  { font-size: 0.82rem; color: #64748b; margin-bottom: 6px; }
