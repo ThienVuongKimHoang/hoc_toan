@@ -41,6 +41,7 @@ from extract_questions import (  # noqa: E402
     sanitize_json_escapes,
     scan_pdf_layout,
     scan_question_starts,
+    vision_scan_structure,
 )
 from extract_english import (  # noqa: E402
     detect_exam_subject,
@@ -239,7 +240,25 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "", exam_
 
         section_header_page, section_q_start_page, page_active_sections, detected_sections = scan_pdf_layout(doc)
         q_starts = scan_question_starts(doc, section_q_start_page, section_header_page)
-        detected_counts = auto_detect_section_counts(doc, section_q_start_page, section_header_page)
+        text_counts = auto_detect_section_counts(doc, section_q_start_page, section_header_page)
+
+        # Lượt 1: quét cấu trúc bằng Vision (đọc ảnh, không phụ thuộc text layer) — đáng
+        # tin cậy hơn text_counts vốn mù với PDF scan hoặc định dạng "Câu N:" không khớp
+        # regex, và trước đây khiến câu hỏi vượt số hardcode (vd PHẦN I mặc định 12) bị
+        # âm thầm loại bỏ dù Groq Vision đã trích đúng ở lượt 2.
+        def _on_structure_page(pg, total):
+            # type riêng (không phải "page_done") để không cộng dồn vào bộ đếm
+            # pagesDone/% của ProcessingStep.jsx và ProgressPanel.jsx ở frontend.
+            task["progress"].append({
+                "type": "structure_page", "page": pg, "total": total,
+                "phase": "structure",
+            })
+        vision_counts = vision_scan_structure(client, doc, q_page_count, fallback_clients,
+                                               on_page=_on_structure_page)
+        detected_counts = {
+            sec: max(text_counts.get(sec, 0), vision_counts.get(sec, 0))
+            for sec in set(text_counts) | set(vision_counts)
+        }
 
         all_questions: list[dict] = []
         last_q_per_section: dict[str, int] = {}

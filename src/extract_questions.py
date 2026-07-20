@@ -337,6 +337,54 @@ def auto_detect_section_counts(doc: fitz.Document, section_q_start_page: dict,
     return counts
 
 
+def vision_scan_structure(client: Groq, doc: fitz.Document, page_count: int,
+                           fallback_clients: list = None, on_page=None) -> dict:
+    """
+    Lượt quét 1 (trước khi trích nội dung): đọc ẢNH từng trang bằng Groq Vision để xác
+    định số câu lớn nhất thực sự có trong mỗi phần. Đáng tin cậy hơn
+    auto_detect_section_counts (chỉ đọc text layer của PDF) vì:
+      - PDF scan ảnh không có text layer → auto_detect_section_counts mù, fallback về
+        số hardcode trong SECTION_POINTS (vd PHẦN I mặc định 12), cắt mất câu thật.
+      - Định dạng "Câu N:" (dấu hai chấm) không khớp regex text-layer.
+    Trả về dict: section -> max_question_number (rỗng nếu Vision không đọc được gì,
+    khi đó nơi gọi nên tiếp tục dùng auto_detect_section_counts).
+    """
+    prompt = (
+        "Đây là một trang đề thi. Liệt kê MỌI số thứ tự câu hỏi (dạng \"Câu N\") xuất hiện "
+        "trên trang này, phân theo phần thi (PHẦN I, PHẦN II, PHẦN III...). Nếu đề không "
+        "chia phần, dùng khoá \"PHẦN I\" cho tất cả câu.\n"
+        "Trả về CHỈ JSON dạng {\"PHẦN I\": [1,2,3]}. Trang không có câu hỏi nào → trả về {}."
+    )
+    fb = fallback_clients or []
+    max_per_section: dict = {}
+    for i in range(page_count):
+        img_b64 = page_to_base64(doc[i])
+        try:
+            raw = call_groq_vision(client, img_b64, prompt, max_tokens=512, fallback_clients=fb)
+        except Exception:
+            raw = ""
+        data = None
+        if raw:
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                try:
+                    data = json.loads(repair_truncated_json(raw))
+                except Exception:
+                    data = None
+        if on_page:
+            on_page(i + 1, page_count)
+        if not isinstance(data, dict):
+            continue
+        for sec, nums in data.items():
+            if not isinstance(nums, list):
+                continue
+            nums_int = [n for n in nums if isinstance(n, int)]
+            if nums_int:
+                max_per_section[sec] = max(max_per_section.get(sec, 0), max(nums_int))
+    return max_per_section
+
+
 def build_section_context(page_idx: int, active_sections: list,
                           section_header_page: dict, q_starts: dict,
                           detected_sections: dict = None) -> str:
@@ -798,7 +846,16 @@ def run(pdf_path: Path, out_path: Path, start_page: int = 1) -> None:
 
     section_header_page, section_q_start_page, page_active_sections, detected_sections = scan_pdf_layout(doc)
     q_starts = scan_question_starts(doc, section_q_start_page, section_header_page)
-    detected_counts = auto_detect_section_counts(doc, section_q_start_page, section_header_page)
+    text_counts = auto_detect_section_counts(doc, section_q_start_page, section_header_page)
+
+    print("Đang quét cấu trúc đề bằng Vision (lượt 1)...")
+    vision_counts = vision_scan_structure(client, doc, doc.page_count, fallback_clients)
+    detected_counts = {
+        sec: max(text_counts.get(sec, 0), vision_counts.get(sec, 0))
+        for sec in set(text_counts) | set(vision_counts)
+    }
+    print("Số câu phát hiện qua text layer:", text_counts)
+    print("Số câu phát hiện qua Vision:     ", vision_counts)
 
     print("Header phần ở trang:", {k: v+1 for k, v in section_header_page.items()})
     print("Câu hỏi bắt đầu ở trang:", {k: v+1 for k, v in section_q_start_page.items()})
