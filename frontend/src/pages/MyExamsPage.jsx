@@ -73,6 +73,9 @@ const STATUS_META = {
 }
 
 function StatusBadge({ status }) {
+  // Đề chưa "Phát đề" qua link công khai (status 'draft') vẫn là đề bình thường —
+  // đã dùng được để giao trong lớp, nên không gắn mác đặc biệt nào cả.
+  if (status === 'draft') return null
   const m = STATUS_META[status] || STATUS_META.draft
   return (
     <span className="exam-status-badge"

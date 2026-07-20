@@ -3,7 +3,6 @@ import { calcMaxScore, calcScore, examStatus, fetchExamById, submitResult, scale
 import { getExamWindow } from '../store/classStore.js'
 import QuestionCard from '../components/QuestionCard.jsx'
 import ReadingTakeView from '../components/ReadingTakeView.jsx'
-import NameSelectModal from '../components/NameSelectModal.jsx'
 
 const SECTION_LABELS = {
   'PHẦN I':    { label: 'Phần I – Trắc nghiệm',         color: '#2563eb' },
@@ -629,7 +628,6 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
   const [notFound,    setNotFound]    = useState(false)
   const [status,      setStatus]      = useState('pending')
   const [pwdUnlocked, setPwdUnlocked] = useState(false)
-  const [studentName, setStudentName] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -770,16 +768,6 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
     return <PasswordGate exam={exam} onCorrect={() => setPwdUnlocked(true)} />
   }
 
-  /* ── Name selection ── */
-  if (!studentName) {
-    return (
-      <NameSelectModal
-        accountName={user.name || null}
-        onConfirm={name => setStudentName(name)}
-      />
-    )
-  }
-
   // Chỉ gắn bài nộp vào lớp khi: được giao qua lớp (đã xác minh thành viên)
   // hoặc luồng cũ mà học sinh là thành viên. Lớp đã xóa / bị mời ra khỏi lớp
   // → nộp như link công khai (không classId).
@@ -792,7 +780,7 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
   return (
     <ExamView
       exam={exam}
-      studentName={studentName}
+      studentName={user.name}
       studentId={String(user.id)}
       className={resolvedClassName}
       classId={effectiveClassId}

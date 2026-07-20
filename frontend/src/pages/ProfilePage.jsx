@@ -199,7 +199,7 @@ function TeacherStats({ userId }) {
     <div className="prof-stats-row">
       <StatCard icon={IcBook(22)}  value={exams.length} label="Đề đã tạo"    color="#059669" />
       <StatCard icon={IcChart(22)} value={pub}          label="Đã phát hành" color="#2563eb" />
-      <StatCard icon={IcClock(22)} value={draft}        label="Nháp / Chờ"   color="#f59e0b" />
+      <StatCard icon={IcClock(22)} value={draft}        label="Chưa phát link" color="#f59e0b" />
     </div>
   )
 }

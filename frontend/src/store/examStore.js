@@ -54,13 +54,14 @@ export async function fetchExamsByTeacher(userId) {
 }
 
 /** Tạo đề thi mới từ kết quả extraction */
-export function createExam({ title, result, userId, subject = 'toan' }) {
+export function createExam({ title, result, userId, subject = 'toan', grade = null }) {
   const id = genId()
   const exam = {
     id,
     title,
     createdBy:      userId,
     subject,
+    grade,
     createdAt:      new Date().toISOString(),
     source:         result.source,
     totalQuestions: result.total_questions,
@@ -73,12 +74,13 @@ export function createExam({ title, result, userId, subject = 'toan' }) {
 }
 
 /** Cập nhật đề thi đã tồn tại (sau khi edit) */
-export function updateExam(examId, { title, result }) {
+export function updateExam(examId, { title, result, grade }) {
   const exam = getExamById(examId)
   if (!exam) return null
   const updated = {
     ...exam,
     title,
+    grade:          grade !== undefined ? grade : exam.grade,
     source:         result.source,
     totalQuestions: result.total_questions,
     sections:       result.sections,

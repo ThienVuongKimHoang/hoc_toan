@@ -77,6 +77,7 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
   const [events,            setEvents]            = useState([])
   const [result,            setResult]            = useState(initialResult)
   const [title,             setTitle]             = useState(isEditing ? editingExam.title : isMix ? 'Đề phối ngẫu nhiên' : '')
+  const [examGrade,         setExamGrade]         = useState(isEditing ? (editingExam.grade || null) : null)
   const [editedResult,      setEditedResult]      = useState(null)
   const [showPreview,       setShowPreview]       = useState(false)
   const [previewEditTarget, setPreviewEditTarget] = useState(null)
@@ -133,10 +134,10 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
     const t = title.trim() || 'Đề thi chưa đặt tên'
     let exam
     if (isEditing) {
-      exam = updateExam(editingExam.id, { title: t, result: edited })
+      exam = updateExam(editingExam.id, { title: t, result: edited, grade: examGrade })
     } else {
       // Manual mode: tạo đề mới và lưu vào localStorage (chưa publish)
-      exam = createExam({ title: t, result: edited, userId: user.id, subject: examSubject })
+      exam = createExam({ title: t, result: edited, userId: user.id, subject: examSubject, grade: examGrade })
     }
     const res = await syncToServer(exam)
     if (res?.rescored > 0) {
@@ -186,6 +187,8 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
             result={result}
             title={title}
             subject={examSubject}
+            examGrade={examGrade}
+            onExamGradeChange={setExamGrade}
             onTitleChange={setTitle}
             onPreview={handlePreview}
             onSave={handleSaveOnly}

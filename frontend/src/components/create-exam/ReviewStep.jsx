@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import EditableQuestion from './EditableQuestion.jsx'
 import ReadingSection from './ReadingSection.jsx'
 import MixExamModal from '../MixExamModal.jsx'
-import { SUBJECTS } from '../SubjectBadge.jsx'
+import { SUBJECTS, GRADES } from '../SubjectBadge.jsx'
 import { subjectHasLabels } from '../../data/labels.js'
 
 function isUnanswered(q, sec) {
@@ -82,7 +82,7 @@ function isDragTrigger(e, wrapperEl) {
   return x < EDGE || x > r.width - EDGE || y < EDGE || y > r.height - EDGE
 }
 
-export default function ReviewStep({ result, title, onTitleChange, onPreview, onSave, subject = 'toan' }) {
+export default function ReviewStep({ result, title, onTitleChange, onPreview, onSave, subject = 'toan', examGrade = null, onExamGradeChange }) {
   const effectiveSections = Object.keys(result.sections || {}).filter(sec => SECTION_META[sec])
   let sectionList = effectiveSections.length > 0 ? effectiveSections : MATH_SECTIONS
   // Đề Toán (kể cả trích từ PDF) luôn có sẵn tab Tự luận để GV thêm câu upload ảnh
@@ -320,6 +320,19 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
               <span className={`rs-subject-pill subject-badge--${subject}`}>
                 {SUBJECTS[subject].icon} {SUBJECTS[subject].label}
               </span>
+            )}
+            {onExamGradeChange && (
+              <select
+                className="rs-khoi-select"
+                value={examGrade || ''}
+                onChange={e => onExamGradeChange(e.target.value || null)}
+                title="Khối lớp của đề — dùng để ưu tiên gợi ý khi giao đề trong lớp"
+              >
+                <option value="">🎓 Chưa gắn khối</option>
+                {GRADES.map(g => (
+                  <option key={g} value={g}>🎓 Khối {g}</option>
+                ))}
+              </select>
             )}
             {subjectHasLabels(subject) && (
               <div className="rs-grade-toggle">

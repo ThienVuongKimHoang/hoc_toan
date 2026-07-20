@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 
 /* ── Thống kê phổ điểm ──
-   Chia điểm (thang 10) thành 10 mốc: < 1, < 2, … , < 9, ≤ 10.
+   Chia điểm (thang 10) thành 10 khoảng: 0-1, 1-2, … , 9-10.
    Bên trái: biểu đồ cột; bên phải: bảng thống kê + điểm trung bình + mốc phổ biến nhất. */
 
 const NUM_BINS = 10
@@ -23,8 +23,12 @@ const IcList = (s = 14) => (
   </svg>
 )
 
-/* Nhãn mốc điểm: bin cuối là "≤ 10", các bin còn lại là "< n" */
-const binLabel = (i, maxScore) => (i === NUM_BINS - 1 ? `≤ ${maxScore}` : `< ${i + 1}`)
+/* Nhãn mốc điểm: khoảng "lo-hi", ví dụ 1-2, 2-3, … */
+const fmtNum = n => {
+  const r = Math.round(n * 100) / 100
+  return String(r)
+}
+const binLabel = (i, step) => `${fmtNum(i * step)}-${fmtNum((i + 1) * step)}`
 
 export default function ScoreDistribution({ subs, maxScore = 10, chartTitle }) {
   const [hover, setHover] = useState(null)
@@ -85,7 +89,7 @@ export default function ScoreDistribution({ subs, maxScore = 10, chartTitle }) {
                       <div className="sd-bar-area">
                         {on && (
                           <div className="sd-tip" style={{ bottom: `calc(${h}% + 28px)` }}>
-                            <div className="sd-tip-label">{binLabel(i, maxScore)}</div>
+                            <div className="sd-tip-label">{binLabel(i, step)}</div>
                             <div className="sd-tip-value"><i className="sd-tip-dot" />Số lượng: <b>{count}</b></div>
                           </div>
                         )}
@@ -95,7 +99,7 @@ export default function ScoreDistribution({ subs, maxScore = 10, chartTitle }) {
                           style={{ height: `${h}%`, minHeight: count > 0 ? 3 : 0 }}
                         />
                       </div>
-                      <div className="sd-xlabel">{binLabel(i, maxScore)}</div>
+                      <div className="sd-xlabel">{binLabel(i, step)}</div>
                     </div>
                   )
                 })}
@@ -119,7 +123,7 @@ export default function ScoreDistribution({ subs, maxScore = 10, chartTitle }) {
                   onMouseEnter={() => setHover(i)}
                   onMouseLeave={() => setHover(h => (h === i ? null : h))}
                 >
-                  <span className="sd-row-label">{binLabel(i, maxScore)}</span>
+                  <span className="sd-row-label">{binLabel(i, step)}</span>
                   <span className="sd-row-track">
                     <span className="sd-row-fill" style={{ width: `${(count / peak) * 100}%` }} />
                   </span>
@@ -134,7 +138,7 @@ export default function ScoreDistribution({ subs, maxScore = 10, chartTitle }) {
                 <div className="sd-foot-label">Điểm trung bình</div>
               </div>
               <div className="sd-foot-item">
-                <div className="sd-foot-value">{binLabel(modeIdx, maxScore).replace(/^[<≤]\s*/, '')}</div>
+                <div className="sd-foot-value">{binLabel(modeIdx, step)}</div>
                 <div className="sd-foot-label">Mốc điểm có nhiều học sinh đạt được nhất</div>
               </div>
             </div>
