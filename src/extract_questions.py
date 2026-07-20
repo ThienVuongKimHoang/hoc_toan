@@ -337,30 +337,45 @@ def auto_detect_section_counts(doc: fitz.Document, section_q_start_page: dict,
     return counts
 
 
+_ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI", 7: "VII"}
+
+
 def vision_scan_structure(client: Groq, doc: fitz.Document, page_count: int,
                            fallback_clients: list = None, on_page=None) -> dict:
     """
     Lượt quét 1 (trước khi trích nội dung): đọc ẢNH từng trang bằng Groq Vision để xác
-    định số câu lớn nhất thực sự có trong mỗi phần. Đáng tin cậy hơn
-    auto_detect_section_counts (chỉ đọc text layer của PDF) vì:
-      - PDF scan ảnh không có text layer → auto_detect_section_counts mù, fallback về
-        số hardcode trong SECTION_POINTS (vd PHẦN I mặc định 12), cắt mất câu thật.
-      - Định dạng "Câu N:" (dấu hai chấm) không khớp regex text-layer.
-    Trả về dict: section -> max_question_number (rỗng nếu Vision không đọc được gì,
-    khi đó nơi gọi nên tiếp tục dùng auto_detect_section_counts).
+    định số câu lớn nhất thực sự có trong mỗi phần — đáng tin cậy hơn
+    auto_detect_section_counts (chỉ đọc text layer của PDF, mù với PDF scan ảnh hoặc
+    định dạng "Câu N:" không khớp regex).
+
+    KHÔNG ép Vision phân loại sẵn vào "PHẦN I/II/III" (đề có thể chia phần theo nhiều
+    kiểu khác nhau, hoặc không ghi rõ). Thay vào đó Vision chỉ báo cáo THÔ theo đúng thứ
+    tự đọc trên trang: số thứ tự câu + nhãn phần (nếu thấy chữ rõ ràng, vd "PHẦN II",
+    "Phần 2"). Ranh giới giữa các phần được CODE tự suy ra từ dữ liệu thô đó, theo 2 dấu
+    hiệu: (a) nhãn phần mới xuất hiện, hoặc (b) số thứ tự câu bị RESET (quay về 1 sau khi
+    đã lên cao hơn) — không phụ thuộc số câu cố định của từng phần.
+
+    Trả về dict: "PHẦN I"/"PHẦN II"/... -> max_question_number (rỗng nếu Vision không đọc
+    được gì, khi đó nơi gọi nên tiếp tục dùng auto_detect_section_counts).
     """
     prompt = (
-        "Đây là một trang đề thi. Liệt kê MỌI số thứ tự câu hỏi (dạng \"Câu N\") xuất hiện "
-        "trên trang này, phân theo phần thi (PHẦN I, PHẦN II, PHẦN III...). Nếu đề không "
-        "chia phần, dùng khoá \"PHẦN I\" cho tất cả câu.\n"
-        "Trả về CHỈ JSON dạng {\"PHẦN I\": [1,2,3]}. Trang không có câu hỏi nào → trả về {}."
+        "Đây là một trang đề thi. Đọc theo thứ tự TỪ TRÊN XUỐNG DƯỚI, liệt kê MỌI câu hỏi "
+        "xuất hiện trên trang (dạng \"Câu N\").\n"
+        "Với mỗi câu, trả về 2 trường:\n"
+        "  - \"number\": số thứ tự câu (số nguyên, vd 12)\n"
+        "  - \"new_section_label\": nếu ngay TRƯỚC câu này trên trang có in rõ tiêu đề một "
+        "phần thi mới (vd \"PHẦN II\", \"Phần 2\", \"II. TỰ LUẬN\", \"Phần B\"...) thì ghi lại "
+        "ĐÚNG NGUYÊN VĂN chữ đó; nếu không thấy tiêu đề nào như vậy thì để null. "
+        "TUYỆT ĐỐI không tự suy đoán hay đặt tên phần khi không thấy chữ in thật.\n"
+        "Trả về CHỈ JSON: {\"questions\": [{\"number\": 1, \"new_section_label\": null}, ...]}. "
+        "Trang không có câu hỏi nào → {\"questions\": []}."
     )
     fb = fallback_clients or []
-    max_per_section: dict = {}
+    flat: list = []  # [(page, number, label_or_None), ...] đúng thứ tự đọc trong đề
     for i in range(page_count):
         img_b64 = page_to_base64(doc[i])
         try:
-            raw = call_groq_vision(client, img_b64, prompt, max_tokens=512, fallback_clients=fb)
+            raw = call_groq_vision(client, img_b64, prompt, max_tokens=1024, fallback_clients=fb)
         except Exception:
             raw = ""
         data = None
@@ -376,12 +391,36 @@ def vision_scan_structure(client: Groq, doc: fitz.Document, page_count: int,
             on_page(i + 1, page_count)
         if not isinstance(data, dict):
             continue
-        for sec, nums in data.items():
-            if not isinstance(nums, list):
+        for item in data.get("questions", []):
+            if not isinstance(item, dict):
                 continue
-            nums_int = [n for n in nums if isinstance(n, int)]
-            if nums_int:
-                max_per_section[sec] = max(max_per_section.get(sec, 0), max(nums_int))
+            num = item.get("number")
+            if not isinstance(num, int):
+                continue
+            label = item.get("new_section_label")
+            label = label.strip() if isinstance(label, str) and label.strip() else None
+            flat.append((i + 1, num, label))
+
+    # Suy ra ranh giới phần từ dữ liệu thô: nhãn mới HOẶC số thứ tự bị reset về 1.
+    sections: list = []          # ["PHẦN I", "PHẦN II", ...] theo thứ tự xuất hiện
+    seen_labels: dict = {}       # nhãn thô đã gặp -> phần đã gán (tránh lặp header)
+    max_per_section: dict = {}
+    last_num = None
+    for _page, num, label in flat:
+        is_new_section = not sections
+        if not is_new_section:
+            if label and label not in seen_labels:
+                is_new_section = True
+            elif not label and num == 1 and last_num not in (None, 1):
+                is_new_section = True
+        if is_new_section:
+            sections.append(f"PHẦN {_ROMAN.get(len(sections) + 1, str(len(sections) + 1))}")
+        if label:
+            seen_labels.setdefault(label, sections[-1])
+        cur_sec = sections[-1]
+        max_per_section[cur_sec] = max(max_per_section.get(cur_sec, 0), num)
+        last_num = num
+
     return max_per_section
 
 
