@@ -14,16 +14,6 @@ const IC = {
       <circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/>
     </svg>
   ),
-  createExam: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 5H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/><path d="M18.5 2.5a2 2 0 0 1 3 3L13 14l-4 1 1-4Z"/>
-    </svg>
-  ),
-  myExams: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/>
-    </svg>
-  ),
   users: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
@@ -73,8 +63,6 @@ function buildMenu(role, actions) {
   }
 
   if (hasTeacherAccess(role)) {
-    items.push({ icon: IC.createExam, label: 'Tạo đề thi',       action: actions.onCreateExam })
-    items.push({ icon: IC.myExams,    label: 'Đề thi của tôi',    action: actions.onMyExams })
     items.push({ icon: IC.users,      label: 'Quản lý lớp học',   action: actions.onGoClasses })
   }
 
@@ -86,7 +74,7 @@ function buildMenu(role, actions) {
   return items
 }
 
-export default function AccountMenu({ user, onLogout, onCreateExam, onMyExams, onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onGoTools }) {
+export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onGoTools }) {
   const [open, setOpen] = useState(false)
   const ref  = useRef(null)
   const meta = ROLE_META[user.role]
@@ -98,7 +86,7 @@ export default function AccountMenu({ user, onLogout, onCreateExam, onMyExams, o
   }, [])
 
   const close = () => setOpen(false)
-  const menuItems = buildMenu(user.role, { onCreateExam, onMyExams, onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onGoTools })
+  const menuItems = buildMenu(user.role, { onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onGoTools })
 
   return (
     <div className="acct-wrap" ref={ref}>

@@ -122,7 +122,7 @@ export async function removeCoTeacher(classId, userId) {
   return res.json()
 }
 
-export async function addAssignment(classId, { title, description, subject, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, attachments, writingTask }) {
+export async function addAssignment(classId, { title, description, subject, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, attachments, writingTask, teacherId }) {
   const res = await fetch(`${API}/${classId}/assignments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -135,6 +135,7 @@ export async function addAssignment(classId, { title, description, subject, exam
       lockScreen: !!lockScreen,
       writingTask: writingTask || null,
       attachments: attachments || [],
+      teacherId,
     }),
   })
   if (!res.ok) throw new Error('Giao bài thất bại')

@@ -37,8 +37,8 @@ const CHOICES = [
   },
 ]
 
-export default function CreateExamChoiceModal({ onChoice, onClose }) {
-  const [subject, setSubject] = useState(null)
+export default function CreateExamChoiceModal({ onChoice, onClose, initialSubject = null }) {
+  const [subject, setSubject] = useState(initialSubject)
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>

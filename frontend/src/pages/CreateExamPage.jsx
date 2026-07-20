@@ -55,12 +55,13 @@ const EMPTY_RESULT = {
 /**
  * Props:
  *   user          — user đang đăng nhập
- *   onGoMyExams   — callback về trang đề của tôi
+ *   classId       — lớp sở hữu đề (bắt buộc khi tạo đề mới, đề luôn thuộc một lớp)
+ *   onDone        — callback khi lưu xong / hủy, quay lại danh sách đề của lớp
  *   editingExam   — exam object đang sửa (optional)
  *   manualMode    — bắt đầu ở bước soạn thảo với đề trống (optional)
  *   mixResult     — pre-filled result từ Phối đề ngẫu nhiên (optional)
  */
-export default function CreateExamPage({ user, onGoMyExams, editingExam, manualMode, mixResult, subject = 'toan' }) {
+export default function CreateExamPage({ user, classId, onDone, editingExam, manualMode, mixResult, subject = 'toan' }) {
   const isEditing = !!editingExam
   const isManual  = !!manualMode && !isEditing
   const isMix     = !!mixResult && !isEditing && !isManual
@@ -126,7 +127,7 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
     fetch(`/api/exams/${exam.id}`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(exam),
+      body:    JSON.stringify({ ...exam, teacherId: user.id }),
     }).then(r => r.json()).catch(err => { console.warn(err); return null })
 
   /* ── Lưu lại (không phát đề) — dùng cho cả edit lẫn manual ── */
@@ -136,14 +137,14 @@ export default function CreateExamPage({ user, onGoMyExams, editingExam, manualM
     if (isEditing) {
       exam = updateExam(editingExam.id, { title: t, result: edited, grade: examGrade })
     } else {
-      // Manual mode: tạo đề mới và lưu vào localStorage (chưa publish)
-      exam = createExam({ title: t, result: edited, userId: user.id, subject: examSubject, grade: examGrade })
+      // Manual mode: tạo đề mới và lưu vào localStorage (chưa publish), gắn với lớp đang mở
+      exam = createExam({ title: t, result: edited, userId: user.id, classId, subject: examSubject, grade: examGrade })
     }
     const res = await syncToServer(exam)
     if (res?.rescored > 0) {
       alert(`✅ Đã lưu đề và tự động chấm lại điểm cho ${res.rescored} bài nộp theo đáp án mới.`)
     }
-    onGoMyExams()
+    onDone()
   }
 
   const handlePreview      = (edited) => { setEditedResult(edited); setShowPreview(true) }

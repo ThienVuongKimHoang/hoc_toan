@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { getExamsByTeacher, fetchExamsByTeacher, getSubmissions as getExamSubmissions, fetchExamById, scaledScore, deleteStudentSubmissions } from '../store/examStore.js'
+import {
+  fetchExamsByClass, getSubmissions as getExamSubmissions, fetchExamById, scaledScore,
+  deleteStudentSubmissions, deleteExam, setExamPublic,
+} from '../store/examStore.js'
 import QuestionStats from '../components/QuestionStats.jsx'
 import ScoreDistribution from '../components/ScoreDistribution.jsx'
 import StudentProgressModal from '../components/StudentProgressModal.jsx'
@@ -16,6 +19,10 @@ import {
 import ExerciseSolver from '../components/ExerciseSolver.jsx'
 import Geo3DViewer from '../components/Geo3DViewer.jsx'
 import CreateExamPage from './CreateExamPage.jsx'
+import CreateExamChoiceModal from '../components/CreateExamChoiceModal.jsx'
+import MixExamModal from '../components/MixExamModal.jsx'
+import PublishModal from '../components/PublishModal.jsx'
+import PracticeSettingsModal from '../components/PracticeSettingsModal.jsx'
 import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
 import SaveCaptureModal from '../components/SaveCaptureModal.jsx'
 import { isExerciseDoc } from '../utils/exerciseDocs.js'
@@ -204,7 +211,7 @@ function FileChip({ file, onRemove, onView }) {
 }
 
 /* ─── Submissions panel ─── */
-function SubmissionsPanel({ classId, assignment, members, allAssignments, onClose }) {
+function SubmissionsPanel({ classId, assignment, members, allAssignments, teacherId, onClose }) {
   const [data, setData] = useState(null)
   const [viewing, setViewing] = useState(null)
   const [confirmDel, setConfirmDel] = useState(null)   // học sinh đang chờ xác nhận xóa
@@ -277,7 +284,7 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, onClos
     setDelBusy(true)
     try {
       if (isExam) {
-        await deleteStudentSubmissions(assignment.examId, confirmDel.studentId, classId, assignment.id)
+        await deleteStudentSubmissions(assignment.examId, confirmDel.studentId, classId, assignment.id, teacherId)
       } else {
         await deleteAssignmentSubmission(classId, assignment.id, confirmDel.studentId)
       }
@@ -477,6 +484,7 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, onClos
         <GradeEssayModal
           exam={data.examObj}
           submission={gradingSub}
+          teacherId={teacherId}
           onClose={() => setGradingSub(null)}
           onSaved={() => { setGradingSub(null); reload() }}
         />
@@ -731,18 +739,17 @@ function AddTeacherModal({ teacherId, coTeachers, onClose, onAdd }) {
 }
 
 /* ─── Assignment form modal ─── */
-function AssignmentModal({ teacherId, cls, subject, mode: initialMode, onClose, onSave }) {
-  // Hiện cache localStorage ngay, rồi cập nhật bằng danh sách chuẩn từ server.
-  // Hiện MỌI đề đã lưu — đề đã "Lưu lại" đều được đồng bộ lên server nên vẫn
-  // giao trong lớp được ngay, không cần "Phát đề" (link công khai) trước.
-  const [exams, setExams] = useState(() => getExamsByTeacher(teacherId))
+function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExamId, onClose, onSave }) {
+  // Đề thi thuộc LỚP này (mọi giáo viên/co-teacher của lớp tạo ra đều hiện ở đây) —
+  // lớp khác không thấy đề của lớp này, và ngược lại.
+  const [exams, setExams] = useState([])
   useEffect(() => {
     let alive = true
-    fetchExamsByTeacher(teacherId).then(list => {
+    fetchExamsByClass(cls.id, teacherId).then(list => {
       if (alive) setExams(list)
     })
     return () => { alive = false }
-  }, [teacherId])
+  }, [cls.id, teacherId])
   const isEnglishClass = (subject || cls?.subject) === 'anh'
   // Ưu tiên đề đúng môn của lớp lên đầu, trong đó đề đúng khối của lớp lên trước —
   // .sort() ổn định nên thứ tự gốc (mới tạo trước) vẫn giữ nguyên trong từng nhóm.
@@ -760,7 +767,7 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, onClose, 
   const [mode, setMode] = useState(initialMode || 'exam')   // 'exam' | 'homework'
   const [title, setTitle] = useState('')
   const [desc, setDesc] = useState('')
-  const [examId, setExamId] = useState('')
+  const [examId, setExamId] = useState(presetExamId || '')
   const [duration, setDuration] = useState('')       // phút làm bài — tùy chỉnh cho từng lần giao
   // Homework deadline
   const [dueDate, setDueDate] = useState('')
@@ -789,6 +796,15 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, onClose, 
     // Gợi ý thời gian: lấy từ cài đặt publish nếu có, không thì mặc định 45'
     if (ex) setDuration(prev => prev || String(ex.settings?.duration || 45))
   }
+
+  // Đã chọn sẵn đề (bấm "Giao đề" từ ngân hàng đề) — điền tiêu đề/thời lượng ngay
+  // khi danh sách đề tải xong từ server (exams rỗng lúc mount).
+  useEffect(() => {
+    if (!presetExamId) return
+    const ex = exams.find(e => e.id === presetExamId)
+    if (ex && !title.trim()) setTitle(ex.title)
+    if (ex) setDuration(prev => prev || String(ex.settings?.duration || 45))
+  }, [exams, presetExamId])
 
   const submit = () => {
     if (mode === 'exam') {
@@ -1222,13 +1238,168 @@ function ProgressTab({ classId, teacherId }) {
   )
 }
 
+/* ─── Ngân hàng đề của lớp (con của tab "Bài tập", cùng cấp với 2 tab con
+   "Bài tập"/"Đề thi") — tạo/sửa/xóa đề, phát đề công khai, cài luyện tập.
+   Đề chỉ hiện ở đây khi thuộc đúng lớp này (classId) — lớp khác không thấy. ─── */
+function ExamBankPanel({ classId, teacherId, user, subject, onAssign }) {
+  const [exams, setExams] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showChoice, setShowChoice] = useState(false)
+  const [showMix, setShowMix] = useState(false)
+  const [editor, setEditor] = useState(null)          // null | { editingExam, manualMode, mixResult }
+  const [republish, setRepublish] = useState(null)     // exam đang mở PublishModal (link công khai)
+  const [practiceExam, setPracticeExam] = useState(null)
+  const [togglingPublic, setTogglingPublic] = useState(null)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    fetchExamsByClass(classId, teacherId).then(list => { setExams(list); setLoading(false) })
+  }, [classId, teacherId])
+  useEffect(() => { load() }, [load])
+
+  const handleEdit = async (exam) => {
+    const full = exam.sections ? exam : await fetchExamById(exam.id)
+    if (full) setEditor({ editingExam: full, manualMode: false, mixResult: null })
+    else alert('Không tải được nội dung đề thi từ server.')
+  }
+
+  const handleChoice = (choice) => {
+    setShowChoice(false)
+    if (choice === 'mix') { setShowMix(true); return }
+    setEditor({ editingExam: null, manualMode: choice === 'manual', mixResult: null })
+  }
+
+  const handleMixComplete = (questions) => {
+    const qs = questions.map((q, i) => ({ ...q, question_number: i + 1, section: 'PHẦN I' }))
+    setShowMix(false)
+    setEditor({
+      editingExam: null, manualMode: false,
+      mixResult: {
+        source: 'Đề phối ngẫu nhiên', total_questions: qs.length,
+        sections: { 'PHẦN I': { questions: qs, points_per_q: 0.25 } },
+      },
+    })
+  }
+
+  const handleTogglePublic = async (exam) => {
+    setTogglingPublic(exam.id)
+    try { await setExamPublic(exam.id, !exam.isPublic, teacherId); load() }
+    catch { /* ignore */ }
+    finally { setTogglingPublic(null) }
+  }
+
+  const handleDeleteExam = async (exam) => {
+    if (!confirm(`Xoá đề "${exam.title}"? Hành động không thể hoàn tác.`)) return
+    await deleteExam(exam.id, teacherId)
+    load()
+  }
+
+  if (editor) {
+    return (
+      <div className="cm-create-exam-embed">
+        <button className="cm-back-btn" style={{ marginBottom: 12 }} onClick={() => setEditor(null)}>
+          {IC.back(16)} Quay lại danh sách đề
+        </button>
+        <CreateExamPage
+          key={editor.editingExam?.id || 'new'}
+          user={user} classId={classId} subject={subject}
+          editingExam={editor.editingExam} manualMode={editor.manualMode} mixResult={editor.mixResult}
+          onDone={() => { setEditor(null); load() }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="cm-section-toolbar">
+        <span className="cm-section-count">{exams.length} đề thi</span>
+        <button className="btn-primary cm-action-btn" onClick={() => setShowChoice(true)}>
+          {IC.plus(14)} Tạo đề mới
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="cm-empty-state">Đang tải…</div>
+      ) : exams.length === 0 ? (
+        <div className="cm-empty-state">
+          <div className="cm-empty-icon">{IC.book(40)}</div>
+          <p>Lớp chưa có đề thi nào.</p>
+          <button className="btn-primary" onClick={() => setShowChoice(true)}>{IC.plus(14)} Tạo đề mới</button>
+        </div>
+      ) : (
+        <div className="my-exams-list">
+          {exams.map(exam => (
+            <div key={exam.id} className="my-exam-card">
+              <div className="mec-left">
+                <div className="mec-title">{exam.title}</div>
+                <div className="mec-meta">
+                  <span>{exam.totalQuestions} câu</span>
+                  <span>{exam.source}</span>
+                </div>
+              </div>
+              <div className="mec-right">
+                <div className="mec-actions">
+                  <button className="mec-btn mec-btn--results" onClick={() => onAssign(exam)}>
+                    {IC.plus(14)} Giao đề
+                  </button>
+                  <button className={`mec-btn mec-btn--practice ${exam.practiceSettings?.enabled ? 'mec-btn--practice-on' : ''}`}
+                    onClick={() => setPracticeExam(exam)} title="Cài đặt chế độ luyện tập">
+                    🎯 Luyện tập
+                  </button>
+                  <button className="mec-btn mec-btn--edit" onClick={() => handleEdit(exam)} title="Sửa câu hỏi">
+                    {IC.pencil(14)} Sửa
+                  </button>
+                  <button className="mec-btn mec-btn--publish" onClick={() => setRepublish(exam)}
+                    title={exam.published ? 'Cập nhật cài đặt link công khai' : 'Phát đề (link công khai)'}>
+                    {exam.published ? '⚙️ Cài đặt' : '🚀 Phát đề'}
+                  </button>
+                  {exam.published && (
+                    <button className={`mec-btn ${exam.isPublic ? 'mec-btn--public-on' : 'mec-btn--public-off'}`}
+                      onClick={() => handleTogglePublic(exam)} disabled={togglingPublic === exam.id}
+                      title={exam.isPublic ? 'Đang công khai — Click để đặt riêng tư' : 'Đặt công khai'}>
+                      {togglingPublic === exam.id ? '⏳' : exam.isPublic ? '🌐 Công khai' : '🔒 Riêng tư'}
+                    </button>
+                  )}
+                  <button className="mec-btn mec-btn--delete" onClick={() => handleDeleteExam(exam)} title="Xóa đề">
+                    {IC.trash(14)}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showChoice && (
+        <CreateExamChoiceModal onChoice={handleChoice} onClose={() => setShowChoice(false)} initialSubject={subject} />
+      )}
+      {showMix && (
+        <MixExamModal standalone subject={subject} onClose={() => setShowMix(false)} onAddQuestions={handleMixComplete} />
+      )}
+      {republish && (
+        <PublishModal exam={republish} teacherId={teacherId}
+          onClose={() => setRepublish(null)} onPublished={() => { setRepublish(null); load() }} />
+      )}
+      {practiceExam && (
+        <PracticeSettingsModal exam={practiceExam} teacherId={teacherId}
+          onClose={() => setPracticeExam(null)} onSaved={() => { setPracticeExam(null); load() }} />
+      )}
+    </div>
+  )
+}
+
 /* ─── Class detail panel ─── */
-function ClassDetail({ cls, subject, teacherId, isSuperAdmin, user, onBack, onUpdated }) {
+function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
+  // Người đang thao tác thật sự (có thể là giáo viên chính, co-teacher, hoặc admin) —
+  // KHÔNG dùng cls.teacherId vì điều đó luôn gán mọi hành động cho giáo viên chính.
+  const teacherId = user.id
   const [tab, setTab] = useState('assignments')
   const [asgnTab, setAsgnTab] = useState('homework')  // 'homework' | 'exam' (Đề thi)
   const [showAddStudent, setShowAddStudent] = useState(false)
   const [showAddTeacher, setShowAddTeacher] = useState(false)
   const [showAssignment, setShowAssignment] = useState(false)
+  const [assignPresetExam, setAssignPresetExam] = useState(null)   // đề đã chọn sẵn khi bấm "Giao đề" từ ngân hàng đề
   const [uploading, setUploading] = useState(false)
   const [viewSubs, setViewSubs] = useState(null)
   const [viewingFile, setViewingFile] = useState(null)
@@ -1282,7 +1453,7 @@ function ClassDetail({ cls, subject, teacherId, isSuperAdmin, user, onBack, onUp
 
   /* Assignments — gắn subject của môn đang xem */
   const handleAddAssignment = async (data) => {
-    await addAssignment(cls.id, { ...data, subject })
+    await addAssignment(cls.id, { ...data, subject, teacherId })
     setShowAssignment(false)
     refresh()
   }
@@ -1397,7 +1568,6 @@ function ClassDetail({ cls, subject, teacherId, isSuperAdmin, user, onBack, onUp
   const TABS = [
     ['documents', '📎 Tài liệu'],
     ['assignments', '📝 Bài tập'],
-    ['create-exam', '✏️ Tạo đề'],
     ['whiteboard', '🖊️ Bảng trắng'],
     ...(hasSolverAccess(subject) ? [['solver', '✨ Giải bài']] : []),
     ...(isMathSubject(subject) ? [['geo3d', '📐 Vẽ hình']] : []),
@@ -1516,7 +1686,7 @@ function ClassDetail({ cls, subject, teacherId, isSuperAdmin, user, onBack, onUp
           <ProgressTab classId={cls.id} teacherId={teacherId} />
         )}
 
-        {/* ── Assignments (Bài tập + Đề thi là mục con) ── */}
+        {/* ── Assignments (Bài tập + Đề thi là mục con, cùng cấp bậc) ── */}
         {tab === 'assignments' && (
           <div>
             <div className="cm-subtabs" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -1525,43 +1695,56 @@ function ClassDetail({ cls, subject, teacherId, isSuperAdmin, user, onBack, onUp
               <button className={`cm-tab ${asgnTab === 'exam' ? 'cm-tab--active' : ''}`}
                 onClick={() => setAsgnTab('exam')}>📋 Đề thi ({exams.length})</button>
             </div>
-            <div className="cm-section-toolbar">
-              <span className="cm-section-count">
-                {asgnTab === 'exam' ? `${exams.length} đề thi` : `${homeworks.length} bài tập`}
-              </span>
-              <button className="btn-primary cm-action-btn" onClick={() => setShowAssignment(true)}>
-                {IC.plus(14)} {asgnTab === 'exam' ? 'Giao đề thi' : 'Giao bài tập'}
-              </button>
-            </div>
-            {(() => {
-              const list = asgnTab === 'exam' ? exams : homeworks
-              if (list.length === 0) return (
-                <div className="cm-empty-state">
-                  <div className="cm-empty-icon">{IC.book(40)}</div>
-                  <p>{asgnTab === 'exam' ? 'Chưa giao đề thi nào.' : 'Chưa có bài tập nào.'}</p>
-                  <button className="btn-primary" onClick={() => setShowAssignment(true)}>
-                    {IC.plus(14)} {asgnTab === 'exam' ? 'Giao đề thi' : 'Giao bài tập'}
+
+            {asgnTab === 'exam' ? (
+              <>
+                {/* Ngân hàng đề của lớp — tạo/sửa/xóa/phát đề/luyện tập. Mọi giáo viên
+                    (chính + co-teacher) của lớp này tạo/thấy chung; lớp khác không thấy. */}
+                <ExamBankPanel classId={cls.id} teacherId={teacherId} user={user} subject={subject}
+                  onAssign={(exam) => { setAssignPresetExam(exam); setShowAssignment(true) }} />
+
+                <h4 className="sub-section-title" style={{ marginTop: 20 }}>Đã giao</h4>
+                <div className="cm-section-toolbar">
+                  <span className="cm-section-count">{exams.length} lượt giao đề</span>
+                  <button className="btn-primary cm-action-btn"
+                    onClick={() => { setAssignPresetExam(null); setShowAssignment(true) }}>
+                    {IC.plus(14)} Giao đề thi
                   </button>
                 </div>
-              )
-              return (
-                <div className="cm-assignment-list">
-                  {[...list].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(renderAsgnCard)}
+                {exams.length === 0 ? (
+                  <div className="cm-empty-state">
+                    <div className="cm-empty-icon">{IC.book(40)}</div>
+                    <p>Chưa giao đề thi nào.</p>
+                  </div>
+                ) : (
+                  <div className="cm-assignment-list">
+                    {[...exams].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(renderAsgnCard)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="cm-section-toolbar">
+                  <span className="cm-section-count">{homeworks.length} bài tập</span>
+                  <button className="btn-primary cm-action-btn" onClick={() => setShowAssignment(true)}>
+                    {IC.plus(14)} Giao bài tập
+                  </button>
                 </div>
-              )
-            })()}
-          </div>
-        )}
-
-        {/* ── Tạo đề (inline, không mở trang/popup riêng) ── */}
-        {tab === 'create-exam' && (
-          <div className="cm-create-exam-embed">
-            <CreateExamPage
-              key={cls.id + subject}
-              user={user}
-              subject={subject}
-              onGoMyExams={() => { setTab('assignments'); refresh() }}
-            />
+                {homeworks.length === 0 ? (
+                  <div className="cm-empty-state">
+                    <div className="cm-empty-icon">{IC.book(40)}</div>
+                    <p>Chưa có bài tập nào.</p>
+                    <button className="btn-primary" onClick={() => setShowAssignment(true)}>
+                      {IC.plus(14)} Giao bài tập
+                    </button>
+                  </div>
+                ) : (
+                  <div className="cm-assignment-list">
+                    {[...homeworks].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(renderAsgnCard)}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -1668,11 +1851,13 @@ function ClassDetail({ cls, subject, teacherId, isSuperAdmin, user, onBack, onUp
       )}
       {showAssignment && (
         <AssignmentModal teacherId={teacherId} cls={cls} subject={subject} mode={asgnTab === 'exam' ? 'exam' : 'homework'}
-          onClose={() => setShowAssignment(false)} onSave={handleAddAssignment} />
+          presetExamId={assignPresetExam?.id}
+          onClose={() => { setShowAssignment(false); setAssignPresetExam(null) }}
+          onSave={(data) => { handleAddAssignment(data); setAssignPresetExam(null) }} />
       )}
       {viewSubs && (
         <SubmissionsPanel classId={cls.id} assignment={viewSubs} members={subjMembers}
-          allAssignments={cls.assignments || []} onClose={() => setViewSubs(null)} />
+          allAssignments={cls.assignments || []} teacherId={teacherId} onClose={() => setViewSubs(null)} />
       )}
       {viewingFile && <FileViewerModal file={viewingFile} onClose={() => setViewingFile(null)} />}
       {pendingUploadFile && (
@@ -1767,7 +1952,7 @@ export default function ClassManagementPage({ user }) {
       <div className="create-topbar">
         <h1 className="exam-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{IC.users(24)} Quản lý lớp học</h1>
       </div>
-      <ClassDetail cls={selected} subject={primarySubject(selected)} teacherId={selected.teacherId}
+      <ClassDetail cls={selected} subject={primarySubject(selected)}
         isSuperAdmin={isSuperAdmin} user={user} onBack={goBack} onUpdated={reload} />
       {editCls && <ClassFormModal initial={editCls} onClose={() => setEditCls(null)} onSave={handleEdit} />}
     </div>

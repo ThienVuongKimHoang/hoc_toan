@@ -42,7 +42,6 @@ const IcAward  = (s) => <Ic size={s}><circle cx="12" cy="8" r="7"/><polyline poi
 const IcUsers  = (s) => <Ic size={s}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Ic>
 const IcServer = (s) => <Ic size={s}><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></Ic>
 const IcClose  = (s) => <Ic size={s}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Ic>
-const IcArrow  = (s) => <Ic size={s}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></Ic>
 const IcMail   = (s) => <Ic size={s}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></Ic>
 const IcUser   = (s) => <Ic size={s}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Ic>
 const IcShield = (s) => <Ic size={s}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></Ic>
@@ -246,7 +245,7 @@ function HistorySection() {
 }
 
 /* ── Main page ── */
-export default function ProfilePage({ user, onUpdateUser, onGoMyExams, onGoHome }) {
+export default function ProfilePage({ user, onUpdateUser, onGoHome }) {
   const meta = ROLE_META[user.role]
   const [editing,          setEditing]          = useState(false)
   const [nameVal,          setNameVal]          = useState(user.name)
@@ -354,16 +353,6 @@ export default function ProfilePage({ user, onUpdateUser, onGoMyExams, onGoHome 
 
         {/* ── Role-specific sections ── */}
         {user.role === ROLES.STUDENT && <HistorySection />}
-
-        {hasTeacherAccess(user.role) && (
-          <div className="prof-section">
-            <h3 className="prof-section-title">{IcBook(16)} Quản lý đề thi</h3>
-            <p className="prof-section-desc">Xem, chỉnh sửa và phát hành các đề thi của bạn.</p>
-            <button className="prof-btn prof-btn--primary prof-btn--lg" onClick={onGoMyExams}>
-              {IcArrow(15)} Xem đề thi của tôi
-            </button>
-          </div>
-        )}
 
         {(user.role === ROLES.ADMIN || user.role === ROLES.SUPERADMIN) && (
           <div className="prof-section">

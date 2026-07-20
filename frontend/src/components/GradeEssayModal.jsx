@@ -6,7 +6,7 @@ import { gradeSubmission } from '../store/examStore.js'
  * GV chấm tay câu tự luận cho MỘT bài nộp.
  * Props: exam (có sections['TỰ LUẬN']), submission (answers, manualScores, id), onClose, onSaved
  */
-export default function GradeEssayModal({ exam, submission, onClose, onSaved }) {
+export default function GradeEssayModal({ exam, submission, teacherId, onClose, onSaved }) {
   const essayQs = exam?.sections?.['TỰ LUẬN']?.questions ?? []
 
   const [scores, setScores] = useState(() => {
@@ -50,7 +50,7 @@ export default function GradeEssayModal({ exam, submission, onClose, onSaved }) 
       if (!isNaN(v)) manual[key] = v
     })
     try {
-      await gradeSubmission(exam.id, submission.id, manual)
+      await gradeSubmission(exam.id, submission.id, manual, teacherId)
       onSaved?.()
     } catch (e) {
       setErr(e.message || 'Lưu điểm thất bại.')

@@ -536,11 +536,36 @@ def _recompute_submissions(exam_id: str, exam: dict) -> int:
     return updated
 
 
+def _can_manage_exam(exam: dict, caller_id) -> bool:
+    """Người gọi có quyền tạo/sửa/xóa đề thi này không: giáo viên (chính hoặc
+    co-teacher) của lớp sở hữu đề, hoặc — với đề "mồ côi" (chưa gắn lớp, tạo
+    trước khi có tính năng scope-theo-lớp) — chính người đã tạo ra đề."""
+    if not caller_id:
+        return False
+    cid = str(caller_id)
+    class_id = exam.get("classId")
+    if class_id:
+        cls = db.get_class(class_id)
+        if cls and _is_class_teacher(cls, cid):
+            return True
+    return str(exam.get("createdBy") or "") == cid
+
+
 @app.post("/api/exams/{exam_id}")
 async def upsert_exam(exam_id: str, request: Request):
     """Lưu hoặc cập nhật một đề thi lên server. Nếu đáp án đổi → chấm lại bài đã nộp."""
     body = await request.json()
     existing = db.get_exam(exam_id) or {}
+    caller_id = body.get("teacherId")
+    if not existing:
+        class_id = body.get("classId")
+        if not class_id:
+            return JSONResponse({"error": "Thiếu lớp học cho đề thi mới"}, status_code=400)
+        cls = db.get_class(class_id)
+        if not cls or not _is_class_teacher(cls, caller_id):
+            return JSONResponse({"error": "Không có quyền tạo đề cho lớp này"}, status_code=403)
+    elif not _can_manage_exam(existing, caller_id):
+        return JSONResponse({"error": "Không có quyền sửa đề thi này"}, status_code=403)
     body.setdefault("resultsRevealed", existing.get("resultsRevealed", False))
     body.pop("submissions", None)
     db.upsert_exam(exam_id, body)
@@ -566,10 +591,15 @@ async def get_exam(exam_id: str):
 
 
 @app.delete("/api/exams/{exam_id}")
-async def delete_exam_endpoint(exam_id: str):
+async def delete_exam_endpoint(exam_id: str, teacherId: str = None):
     """Giáo viên xóa đề thi. (Trước đây route này không tồn tại nên nút xóa
     chỉ xóa localStorage — đề 'sống lại' khi mở máy khác.)
     Kèm dọn các lần giao bài trong lớp đang trỏ vào đề này."""
+    exam = db.get_exam(exam_id)
+    if not exam:
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    if not _can_manage_exam(exam, teacherId):
+        return JSONResponse({"error": "Không có quyền xóa đề thi này"}, status_code=403)
     if not db.delete_exam(exam_id):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
     return {"ok": True}
@@ -729,6 +759,8 @@ async def grade_essay_submission(exam_id: str, sub_id: str, request: Request):
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    if not _can_manage_exam(exam, body.get("teacherId")):
+        return JSONResponse({"error": "Không có quyền chấm đề thi này"}, status_code=403)
 
     # Điểm tối đa hợp lệ theo từng câu tự luận
     essay = (exam.get("sections") or {}).get("TỰ LUẬN") or {}
@@ -754,8 +786,13 @@ async def grade_essay_submission(exam_id: str, sub_id: str, request: Request):
 
 
 @app.delete("/api/exams/{exam_id}/submissions/{sub_id}")
-async def delete_one_submission(exam_id: str, sub_id: str):
+async def delete_one_submission(exam_id: str, sub_id: str, teacherId: str = None):
     """Giáo viên xóa MỘT bài nộp (một lần làm) theo id — dùng cho link công khai."""
+    exam = db.get_exam(exam_id)
+    if not exam:
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    if not _can_manage_exam(exam, teacherId):
+        return JSONResponse({"error": "Không có quyền xóa bài nộp của đề này"}, status_code=403)
     if not db.delete_submission(sub_id):
         return JSONResponse({"error": "Không tìm thấy bài nộp"}, status_code=404)
     return {"ok": True}
@@ -769,8 +806,17 @@ async def delete_student_submissions(exam_id: str, request: Request):
     student_id = body.get("studentId")
     class_id   = body.get("classId") or None
     asgn_id    = body.get("assignmentId") or None
+    teacher_id = body.get("teacherId")
     if student_id is None:
         return JSONResponse({"error": "Thiếu studentId"}, status_code=400)
+    if class_id:
+        cls = db.get_class(class_id)
+        if not cls or not _is_class_teacher(cls, teacher_id):
+            return JSONResponse({"error": "Không có quyền xóa bài nộp trong lớp này"}, status_code=403)
+    else:
+        exam = db.get_exam(exam_id)
+        if not exam or not _can_manage_exam(exam, teacher_id):
+            return JSONResponse({"error": "Không có quyền xóa bài nộp của đề này"}, status_code=403)
     # Bài nộp cũ (chưa gắn assignment_id) chỉ bị xóa kèm khi xóa từ lần giao bài
     # sớm nhất — khớp với cách chúng được hiển thị.
     include_legacy = True
@@ -784,16 +830,26 @@ async def delete_student_submissions(exam_id: str, request: Request):
 
 
 @app.post("/api/exams/{exam_id}/reveal")
-async def reveal_results(exam_id: str):
+async def reveal_results(exam_id: str, teacherId: str = None):
     """Giáo viên công bố kết quả."""
+    exam = db.get_exam(exam_id)
+    if not exam:
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    if not _can_manage_exam(exam, teacherId):
+        return JSONResponse({"error": "Không có quyền công bố kết quả đề này"}, status_code=403)
     if not db.update_exam_field(exam_id, "resultsRevealed", True):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
     return {"ok": True}
 
 
 @app.post("/api/exams/{exam_id}/hide-results")
-async def hide_results_endpoint(exam_id: str):
+async def hide_results_endpoint(exam_id: str, teacherId: str = None):
     """Giáo viên ẩn kết quả lại."""
+    exam = db.get_exam(exam_id)
+    if not exam:
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    if not _can_manage_exam(exam, teacherId):
+        return JSONResponse({"error": "Không có quyền ẩn kết quả đề này"}, status_code=403)
     if not db.update_exam_field(exam_id, "resultsRevealed", False):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
     return {"ok": True}
@@ -803,6 +859,11 @@ async def hide_results_endpoint(exam_id: str):
 async def toggle_public(exam_id: str, request: Request):
     """Giáo viên bật/tắt chế độ công khai đề thi."""
     body = await request.json()
+    exam = db.get_exam(exam_id)
+    if not exam:
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    if not _can_manage_exam(exam, body.get("teacherId")):
+        return JSONResponse({"error": "Không có quyền đổi chế độ công khai đề này"}, status_code=403)
     val = bool(body.get("isPublic", False))
     if not db.update_exam_field(exam_id, "isPublic", val):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
@@ -866,6 +927,11 @@ async def get_public_exams():
 async def save_practice_settings(exam_id: str, request: Request):
     """Giáo viên lưu cài đặt chế độ luyện tập."""
     body = await request.json()
+    exam = db.get_exam(exam_id)
+    if not exam:
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    if not _can_manage_exam(exam, body.get("teacherId")):
+        return JSONResponse({"error": "Không có quyền sửa cài đặt luyện tập đề này"}, status_code=403)
     ps = {
         "enabled":   bool(body.get("enabled", False)),
         "password":  body.get("password") or None,
@@ -1465,11 +1531,17 @@ async def create_class_endpoint(request: Request):
 
 
 def _is_class_teacher(cls: dict, user_id) -> bool:
-    """True nếu user_id là giáo viên chính HOẶC giáo viên phụ (co-teacher) của lớp."""
+    """True nếu user_id là giáo viên chính, giáo viên phụ (co-teacher) của lớp,
+    hoặc admin/super_admin (được quản lý mọi lớp)."""
+    if not user_id:
+        return False
     uid = str(user_id)
     if str(cls.get("teacherId")) == uid:
         return True
-    return any(str(ct.get("userId")) == uid for ct in cls.get("coTeachers") or [])
+    if any(str(ct.get("userId")) == uid for ct in cls.get("coTeachers") or []):
+        return True
+    viewer = db.get_user_by_id(uid)
+    return (viewer or {}).get("role") in ("admin", "super_admin")
 
 
 def _sanitize_class(cls: dict) -> dict:
@@ -1746,9 +1818,27 @@ async def remove_co_teacher_endpoint(cls_id: str, user_id: str):
     return {"ok": True}
 
 
+@app.get("/api/classes/{cls_id}/exams")
+async def class_exams_endpoint(cls_id: str, teacherId: str = None):
+    """Đề thi thuộc lớp này — mọi giáo viên (chính hoặc co-teacher) của lớp tạo
+    ra đều nằm trong danh sách; lớp khác không thấy. Dùng cho tab 'Đề thi' và
+    dropdown 'Giao đề thi'."""
+    cls = db.get_class(cls_id)
+    if not cls:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls, teacherId):
+        return JSONResponse({"error": "Không có quyền xem đề thi của lớp này"}, status_code=403)
+    return db.load_exams_by_class(cls_id)
+
+
 @app.post("/api/classes/{cls_id}/assignments")
 async def add_assignment_endpoint(cls_id: str, request: Request):
     body = await request.json()
+    cls_check = db.get_class(cls_id)
+    if not cls_check:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls_check, body.get("teacherId")):
+        return JSONResponse({"error": "Không có quyền giao bài/đề trong lớp này"}, status_code=403)
     exam_id   = body.get("examId") or None
     open_time = body.get("openTime")
     close_time = body.get("closeTime") or body.get("dueDate")

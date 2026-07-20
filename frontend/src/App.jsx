@@ -1,13 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ROLES, hasAdminAccess, hasTeacherAccess, hasMemberAccess } from './auth/mockUsers.js'
+import { ROLES, hasAdminAccess, hasTeacherAccess } from './auth/mockUsers.js'
 import Header from './components/Header.jsx'
 import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
-import CreateExamPage from './pages/CreateExamPage.jsx'
-import MyExamsPage from './pages/MyExamsPage.jsx'
 import ExamTakePage from './pages/ExamTakePage.jsx'
 import PracticeExamPage from './pages/PracticeExamPage.jsx'
-import ExamResultsPage from './pages/ExamResultsPage.jsx'
 import ExamLobbyPage from './pages/ExamLobbyPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
 import SuperAdminPage from './pages/SuperAdminPage.jsx'
@@ -15,7 +12,6 @@ import StudyPage from './pages/StudyPage.jsx'
 import ClassManagementPage from './pages/ClassManagementPage.jsx'
 import MyClassesPage from './pages/MyClassesPage.jsx'
 import AssignmentPopup from './components/AssignmentPopup.jsx'
-import CreateExamChoiceModal from './components/CreateExamChoiceModal.jsx'
 import UploadZone from './components/UploadZone.jsx'
 import ProgressPanel from './components/ProgressPanel.jsx'
 import QuestionCard from './components/QuestionCard.jsx'
@@ -23,7 +19,6 @@ import TeacherToolsModal from './components/TeacherToolsModal.jsx'
 import ExerciseSolver from './components/ExerciseSolver.jsx'
 import GeoViewerPage from './pages/GeoViewerPage.jsx'
 import WhiteboardPage from './pages/WhiteboardPage.jsx'
-import MixExamModal from './components/MixExamModal.jsx'
 
 const SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III']
 const SECTION_LABELS = {
@@ -53,7 +48,6 @@ function parseHash() {
   if (hash.startsWith('lobby/')) return { view: 'exam-lobby', examId: hash.slice(6) || null, classId: null }
   if (hash === 'lobby') return { view: 'exam-lobby', examId: null, classId: null }
   if (hash.startsWith('practice/')) return { view: 'practice-exam', examId: hash.slice(9), classId: null }
-  if (hash.startsWith('results/')) return { view: 'exam-results', examId: hash.slice(8), classId: null }
   if (hash === 'admin') return { view: 'super-admin', examId: null, classId: null, adminTab: null }
   if (hash.startsWith('admin/')) return { view: 'super-admin', examId: null, classId: null, adminTab: hash.slice(6) || null }
   if (hash === 'study') return { view: 'study', examId: null, classId: null }
@@ -186,10 +180,6 @@ export default function App() {
         setClassId(rcid ?? null)
         setAssignmentId(raid ?? null)
         setView('take-exam')
-      } else if (rv === 'create-exam') {
-        setHash('')
-        setShowCreateChoice(true)
-        setView('home')
       } else if (rv === 'my-classes' && rcid) {
         setHash(`join/${rcid}`)
         setClassId(rcid)
@@ -214,13 +204,6 @@ export default function App() {
   const [whiteboardReturnHash, setWhiteboardReturnHash] = useState(() => parseHash().whiteboardReturnHash ?? null)
   const [adminTab, setAdminTab] = useState(() => parseHash().adminTab ?? null)
   const [adminNavNonce, setAdminNavNonce] = useState(0)
-  const [editingExam, setEditingExam] = useState(null)
-  const [resultsExam, setResultsExam] = useState(null)
-  const [manualMode, setManualMode] = useState(false)
-  const [examSubject, setExamSubject] = useState('toan')
-  const [mixResult, setMixResult] = useState(null)
-  const [showMixStandalone, setShowMixStandalone] = useState(false)
-  const [showCreateChoice, setShowCreateChoice] = useState(false)
   const [showTeacherTools, setShowTeacherTools] = useState(false)
 
   useEffect(() => {
@@ -253,7 +236,6 @@ export default function App() {
   const goProfile = () => user ? (setHash(''), setView('profile')) : goLogin()
   const goLogin = () => { setHash(''); setView('login') }
   const goExam = () => user ? (setHash(''), setView('exam')) : goLogin()
-  const goMyExams = () => user ? (setHash(''), setView('my-exams')) : goLogin()
   const goAdmin = () => {
     if (!user) { goLogin(); return }
     if (!hasAdminAccess(user.role)) return
@@ -286,56 +268,6 @@ export default function App() {
     setHash(`take/${id}`); setExamId(id); setView('take-exam')
   }
 
-  // "Thử ngay miễn phí" CTA — yêu cầu đăng nhập → tạo đề
-  const goCreateExamCTA = () => {
-    if (!user) {
-      setLoginRedirect({ view: 'create-exam' })
-      setHash(''); setView('login')
-      return
-    }
-    setShowCreateChoice(true)
-  }
-
-  // Hiện modal chọn cách tạo đề (từ header/my-exams)
-  const goCreateExam = () => {
-    if (!user) { goLogin(); return }
-    setShowCreateChoice(true)
-  }
-
-  const handleCreateChoice = (choice, subject = 'toan') => {
-    setShowCreateChoice(false)
-    setExamSubject(subject)
-    if (choice === 'mix') {
-      setShowMixStandalone(true)
-      return
-    }
-    setManualMode(choice === 'manual')
-    setMixResult(null)
-    setEditingExam(null)
-    setHash('')
-    setView('create-exam')
-  }
-
-  const handleMixComplete = (questions) => {
-    const qs = questions.map((q, i) => ({
-      ...q,
-      question_number: i + 1,
-      section: 'PHẦN I',
-    }))
-    setMixResult({
-      source: 'Đề phối ngẫu nhiên',
-      total_questions: qs.length,
-      sections: {
-        'PHẦN I': { questions: qs, points_per_q: 0.25 },
-      },
-    })
-    setShowMixStandalone(false)
-    setManualMode(false)
-    setEditingExam(null)
-    setHash('')
-    setView('create-exam')
-  }
-
   // Redirect về đề thi sau khi login (giữ cả lớp/bài tập nếu vào từ link của lớp)
   const goLoginFromExam = (id, cid = null, aid = null) => {
     setLoginRedirect({ view: 'take-exam', examId: id, classId: cid, assignmentId: aid })
@@ -347,18 +279,6 @@ export default function App() {
     setHash(`practice/${id}`)
     setExamId(id)
     setView('practice-exam')
-  }
-
-  const goEdit = (exam) => {
-    setEditingExam(exam)
-    setHash('')
-    setView('edit-exam')
-  }
-
-  const goResults = (exam) => {
-    setResultsExam(exam)
-    setHash(`results/${exam.id}`)
-    setView('exam-results')
   }
 
   const goLogin_redirect = () => {
@@ -427,8 +347,6 @@ export default function App() {
       onGoLogin={goLogin}
       onGoLobby={goExamLobby}
       onLogout={handleLogout}
-      onCreateExam={goCreateExam}
-      onMyExams={goMyExams}
       onGoProfile={goProfile}
       onGoAdmin={goAdmin}
       onGoStudy={goStudy}
@@ -460,22 +378,6 @@ export default function App() {
     />
   )
 
-  /* ── Choice modal (có thể xuất hiện trên mọi view) ── */
-  const choiceModal = showCreateChoice && (
-    <CreateExamChoiceModal
-      onChoice={handleCreateChoice}
-      onClose={() => setShowCreateChoice(false)}
-    />
-  )
-
-  const mixStandaloneModal = showMixStandalone && (
-    <MixExamModal
-      standalone
-      subject={examSubject}
-      onClose={() => setShowMixStandalone(false)}
-      onAddQuestions={handleMixComplete}
-    />
-  )
 
   /* ── Views ── */
   if (view === 'super-admin') {
@@ -552,7 +454,6 @@ export default function App() {
         <ProfilePage
           user={user}
           onUpdateUser={handleUpdateUser}
-          onGoMyExams={goMyExams}
           onGoHome={goHome}
         />
         {teacherToolOverlays}
@@ -582,58 +483,6 @@ export default function App() {
   if (view === 'practice-exam') return (
     <PracticeExamPage examId={examId} onGoHome={goHome} />
   )
-
-  if (view === 'exam-results' && resultsExam) return (
-    <>
-      {header}
-      <ExamResultsPage
-        examId={resultsExam.id}
-        examTitle={resultsExam.title}
-        onGoBack={goMyExams}
-      />
-      {teacherToolOverlays}
-    </>
-  )
-
-  if (view === 'create-exam') {
-    if (!user) return (
-      <>{header}<AccessDenied message="Bạn cần đăng nhập để tạo đề thi." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
-    )
-    if (!hasTeacherAccess(user.role)) return (
-      <>{header}<AccessDenied message="Tạo đề thi chỉ dành cho Giáo viên, Admin và Super Admin." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={true} /></>
-    )
-    return (
-      <>
-        {header}
-        <CreateExamPage
-          user={user}
-          onGoMyExams={() => { setMixResult(null); goMyExams() }}
-          manualMode={manualMode}
-          mixResult={mixResult}
-          subject={examSubject}
-        />
-        {mixStandaloneModal}
-        {teacherToolOverlays}
-      </>
-    )
-  }
-
-  if (view === 'edit-exam' && editingExam) {
-    if (!user || !hasTeacherAccess(user.role)) return (
-      <>{header}<AccessDenied message="Chỉnh sửa đề thi chỉ dành cho Giáo viên, Admin và Super Admin." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={!!user} /></>
-    )
-    return (
-      <>
-        {header}
-        <CreateExamPage
-          user={user}
-          onGoMyExams={() => { setEditingExam(null); goMyExams() }}
-          editingExam={editingExam}
-        />
-        {teacherToolOverlays}
-      </>
-    )
-  }
 
   if (view === 'solver-page') {
     if (!user || !hasTeacherAccess(user.role)) return (
@@ -668,35 +517,10 @@ export default function App() {
     </>
   )
 
-  if (view === 'my-exams') {
-    if (!user) return (
-      <>{header}<AccessDenied message="Bạn cần đăng nhập để xem đề thi của mình." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
-    )
-    if (!hasMemberAccess(user.role)) return (
-      <>{header}<AccessDenied message="Vai trò Khách không được phép xem đề thi. Liên hệ Admin để nâng cấp tài khoản." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={true} /></>
-    )
-    return (
-      <>
-        {header}
-        <MyExamsPage
-          user={user}
-          onCreateExam={goCreateExam}
-          onEdit={goEdit}
-          onResults={goResults}
-        />
-        {choiceModal}
-        {mixStandaloneModal}
-        {teacherToolOverlays}
-      </>
-    )
-  }
-
   if (view === 'home') return (
     <>
       {header}
-      <HomePage onGoLobby={goExamLobby} onGoExam={goTakeExamById} onCreateExamCTA={goCreateExamCTA} user={user} />
-      {choiceModal}
-      {mixStandaloneModal}
+      <HomePage onGoLobby={goExamLobby} onGoExam={goTakeExamById} user={user} />
       {user?.role === 'hoc_sinh' && <AssignmentPopup user={user} onGoMyClasses={goMyClasses} />}
       {teacherToolOverlays}
     </>

@@ -118,6 +118,11 @@ CREATE TABLE IF NOT EXISTS exams (
 ALTER TABLE exams ADD COLUMN IF NOT EXISTS subject VARCHAR(20);
 -- Khối lớp của đề ('1'..'12') — dùng để ưu tiên sắp xếp đề khi giao trong lớp cùng khối.
 ALTER TABLE exams ADD COLUMN IF NOT EXISTS grade VARCHAR(20);
+-- Lớp sở hữu đề (đề thi thuộc về một lớp cụ thể, mọi giáo viên/co-teacher của lớp
+-- đó tạo/giao được; lớp khác không thấy). NULL = đề "mồ côi" tạo trước khi có tính
+-- năng này, hoặc chưa gắn lớp nào — vẫn hoạt động qua link công khai/luyện tập.
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS class_id VARCHAR(50);
+CREATE INDEX IF NOT EXISTS idx_exams_class ON exams(class_id);
 
 CREATE TABLE IF NOT EXISTS submissions (
     id           SERIAL       PRIMARY KEY,
@@ -264,6 +269,7 @@ def init_db():
     _migrate_notifs()
     _migrate_config()
     _migrate_password_hashes()
+    _migrate_exam_class_id()
     _ensure_super_admin()
 
 
@@ -364,6 +370,48 @@ def _migrate_exams():
         except Exception as e:
             conn.rollback()
             print(f"[DB] migrate_exams error: {e}")
+
+
+def _migrate_exam_class_id():
+    """Đề thi cũ tạo trước khi có exams.class_id → suy ra lớp sở hữu từ lịch sử
+    giao đề (classes.assignments[].examId). Khớp đúng 1 lớp thì gán; khớp nhiều
+    lớp (đề cũ từng dùng chung) thì gán theo lớp có bản ghi giao đề sớm nhất —
+    các lớp còn lại vẫn giữ nguyên bài đã giao/điểm cũ, chỉ không còn hiện đề
+    này trong danh sách đề của lớp đó nữa. Không khớp lớp nào thì để NULL
+    (đề "mồ côi", vẫn hoạt động qua link công khai/luyện tập)."""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT id FROM exams WHERE class_id IS NULL")
+            orphan_ids = {r["id"] for r in cur.fetchall()}
+            if not orphan_ids:
+                return
+            cur.execute("SELECT id, assignments FROM classes")
+            class_rows = cur.fetchall()
+
+        matches: dict = {}   # examId -> [(classId, createdAt), ...]
+        for crow in class_rows:
+            cid = crow["id"]
+            for a in (crow.get("assignments") or []):
+                eid = a.get("examId")
+                if eid and eid in orphan_ids:
+                    matches.setdefault(eid, []).append((cid, a.get("createdAt") or ""))
+        if not matches:
+            return
+
+        updates = []
+        for eid, lst in matches.items():
+            distinct = {cid for cid, _ in lst}
+            if len(distinct) == 1:
+                updates.append((eid, next(iter(distinct))))
+            else:
+                lst.sort(key=lambda t: t[1] or "")
+                updates.append((eid, lst[0][0]))
+
+        with conn.cursor() as cur:
+            for eid, cid in updates:
+                cur.execute("UPDATE exams SET class_id=%s WHERE id=%s AND class_id IS NULL", (cid, eid))
+        conn.commit()
+        print(f"[DB] Backfill exams.class_id cho {len(updates)} đề cũ")
 
 
 def _migrate_classes():
@@ -516,6 +564,7 @@ def _exam_from_row(row: dict) -> dict:
         "id":               r["id"],
         "title":            r["title"] or "",
         "createdBy":        r["created_by"],
+        "classId":          r.get("class_id"),
         "subject":          r.get("subject"),
         "grade":            r.get("grade"),
         "createdAt":        r["created_at"].isoformat() if r.get("created_at") else None,
@@ -671,18 +720,64 @@ def load_exams_by_creator(uid: str) -> list:
     return out
 
 
+def load_exams_by_class(class_id: str) -> list:
+    """Đề thi thuộc một lớp cụ thể — dùng cho tab 'Đề thi' trong lớp và dropdown
+    'Giao đề thi' (không kèm sections cho nhẹ), kèm số bài nộp."""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT e.id, e.title, e.source, e.total_questions, e.published,
+                       e.is_public, e.featured, e.results_revealed, e.created_by,
+                       e.subject, e.grade, e.created_at, e.updated_at, e.settings,
+                       e.practice_settings, e.classes_data,
+                       COALESCE(s.cnt, 0) AS submission_count
+                FROM exams e
+                LEFT JOIN (
+                    SELECT exam_id, COUNT(*) AS cnt FROM submissions GROUP BY exam_id
+                ) s ON s.exam_id = e.id
+                WHERE e.class_id = %s
+                ORDER BY e.created_at DESC NULLS LAST
+            """, (str(class_id),))
+            rows = cur.fetchall()
+    out = []
+    for r in rows:
+        rd = dict(r)
+        out.append({
+            "id":               rd["id"],
+            "title":            rd["title"] or "",
+            "source":           rd["source"] or "",
+            "totalQuestions":   rd["total_questions"] or 0,
+            "published":        bool(rd["published"]),
+            "isPublic":         bool(rd["is_public"]),
+            "featured":         bool(rd["featured"]),
+            "resultsRevealed":  bool(rd["results_revealed"]),
+            "createdBy":        rd["created_by"],
+            "classId":          str(class_id),
+            "subject":          rd.get("subject"),
+            "grade":            rd.get("grade"),
+            "createdAt":        rd["created_at"].isoformat() if rd.get("created_at") else None,
+            "updatedAt":        rd["updated_at"].isoformat() if rd.get("updated_at") else None,
+            "settings":         rd["settings"],
+            "practiceSettings": rd["practice_settings"],
+            "classes":          rd["classes_data"] or [],
+            "submissionCount":  int(rd["submission_count"]),
+        })
+    return out
+
+
 def upsert_exam(exam_id: str, exam: dict) -> None:
     """Save/update one exam. Submissions are preserved (separate table)."""
     exam.pop("submissions", None)
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO exams(id,title,created_by,subject,grade,created_at,updated_at,source,
+                INSERT INTO exams(id,title,created_by,class_id,subject,grade,created_at,updated_at,source,
                     total_questions,sections,published,is_public,featured,
                     results_revealed,settings,practice_settings,classes_data)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT(id) DO UPDATE SET
                     title=EXCLUDED.title, created_by=EXCLUDED.created_by,
+                    class_id=COALESCE(EXCLUDED.class_id, exams.class_id),
                     subject=COALESCE(EXCLUDED.subject, exams.subject),
                     grade=COALESCE(EXCLUDED.grade, exams.grade),
                     updated_at=EXCLUDED.updated_at, source=EXCLUDED.source,
@@ -693,6 +788,7 @@ def upsert_exam(exam_id: str, exam: dict) -> None:
                     classes_data=EXCLUDED.classes_data
             """, (
                 exam_id, exam.get("title", ""), str(exam.get("createdBy", "")),
+                exam.get("classId") or None,
                 exam.get("subject") or None,
                 exam.get("grade") or None,
                 exam.get("createdAt"), exam.get("updatedAt"), exam.get("source", ""),

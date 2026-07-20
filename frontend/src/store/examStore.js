@@ -26,10 +26,10 @@ export function saveExam(exam) {
   return exam
 }
 
-export function deleteExam(id) {
+export function deleteExam(id, teacherId) {
   persist(getAllExams().filter(e => e.id !== id))
   // trả promise để caller chờ server xóa xong rồi mới reload danh sách từ DB
-  return fetch(`/api/exams/${id}`, { method: 'DELETE' }).catch(() => {})
+  return fetch(`/api/exams/${id}?teacherId=${encodeURIComponent(teacherId || '')}`, { method: 'DELETE' }).catch(() => {})
 }
 
 export function getExamsByTeacher(userId) {
@@ -37,29 +37,26 @@ export function getExamsByTeacher(userId) {
   return getAllExams().filter(e => String(e.createdBy) === String(userId))
 }
 
-/** Đề thi của giáo viên lấy từ SERVER (metadata), gộp với cache localStorage.
-    Dùng cho modal giao đề trong lớp — đề vẫn hiện đủ khi đổi trình duyệt/máy. */
-export async function fetchExamsByTeacher(userId) {
-  const local = getExamsByTeacher(userId)
+/** Đề thi thuộc MỘT LỚP cụ thể, lấy từ server — dùng cho tab "Đề thi" trong lớp
+    và dropdown "Giao đề thi". teacherId phải là giáo viên (chính/co-teacher) của lớp. */
+export async function fetchExamsByClass(classId, teacherId) {
   try {
-    const res = await fetch(`/api/my-exams?userId=${encodeURIComponent(userId)}`)
-    if (!res.ok) return local
-    const server = await res.json()
-    const byId = new Map(local.map(e => [e.id, e]))
-    for (const e of server) byId.set(e.id, { ...byId.get(e.id), ...e })
-    return [...byId.values()]
+    const res = await fetch(`/api/classes/${classId}/exams?teacherId=${encodeURIComponent(teacherId || '')}`)
+    if (!res.ok) return []
+    return res.json()
   } catch {
-    return local
+    return []
   }
 }
 
-/** Tạo đề thi mới từ kết quả extraction */
-export function createExam({ title, result, userId, subject = 'toan', grade = null }) {
+/** Tạo đề thi mới từ kết quả extraction — luôn gắn với một lớp cụ thể (classId). */
+export function createExam({ title, result, userId, classId, subject = 'toan', grade = null }) {
   const id = genId()
   const exam = {
     id,
     title,
     createdBy:      userId,
+    classId:        classId || null,
     subject,
     grade,
     createdAt:      new Date().toISOString(),
@@ -93,7 +90,7 @@ export function updateExam(examId, { title, result, grade }) {
 /** Phát đề — lưu settings, đánh dấu published, đồng bộ lên server.
     Lấy đề từ localStorage, nếu trình duyệt này không có thì tải từ server
     (để "Phát đề / Cài đặt" vẫn dùng được trên máy khác). */
-export async function publishExam(examId, settings) {
+export async function publishExam(examId, settings, teacherId) {
   const exam = await fetchExamById(examId)
   if (!exam) return null
   const updated = {
@@ -114,7 +111,7 @@ export async function publishExam(examId, settings) {
     await fetch(`/api/exams/${examId}`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(updated),
+      body:    JSON.stringify({ ...updated, teacherId }),
     })
   } catch (e) {
     console.warn('Không thể lưu đề thi lên server:', e)
@@ -200,11 +197,11 @@ export async function getSubmissions(examId) {
 }
 
 /** Giáo viên chấm tay câu tự luận cho một bài nộp. manualScores = { TL_1: 1.5, ... } */
-export async function gradeSubmission(examId, subId, manualScores) {
+export async function gradeSubmission(examId, subId, manualScores, teacherId) {
   const res = await fetch(`/api/exams/${examId}/submissions/${subId}/grade`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ manualScores }),
+    body:    JSON.stringify({ manualScores, teacherId }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -213,46 +210,39 @@ export async function gradeSubmission(examId, subId, manualScores) {
   return res.json()
 }
 
-/** Giáo viên xóa MỘT bài nộp (một lần làm) theo id — dùng cho link công khai */
-export async function deleteSubmission(examId, subId) {
-  const res = await fetch(`/api/exams/${examId}/submissions/${subId}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('Không thể xóa bài nộp')
-  return res.json()
-}
-
 /** Giáo viên xóa TẤT CẢ bài làm của một học sinh (mọi lần làm) cho đề này */
-export async function deleteStudentSubmissions(examId, studentId, classId = null, assignmentId = null) {
+export async function deleteStudentSubmissions(examId, studentId, classId = null, assignmentId = null, teacherId = null) {
   const res = await fetch(`/api/exams/${examId}/submissions/delete-student`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ studentId, classId, assignmentId }),
+    body:    JSON.stringify({ studentId, classId, assignmentId, teacherId }),
   })
   if (!res.ok) throw new Error('Không thể xóa bài làm của học sinh')
   return res.json()
 }
 
 /** Giáo viên công bố kết quả */
-export async function revealResults(examId) {
-  const res = await fetch(`/api/exams/${examId}/reveal`, { method: 'POST' })
+export async function revealResults(examId, teacherId) {
+  const res = await fetch(`/api/exams/${examId}/reveal?teacherId=${encodeURIComponent(teacherId || '')}`, { method: 'POST' })
   if (!res.ok) throw new Error('Không thể công bố kết quả')
   return res.json()
 }
 
 /** Giáo viên ẩn kết quả */
-export async function hideResultsToggle(examId) {
-  const res = await fetch(`/api/exams/${examId}/hide-results`, { method: 'POST' })
+export async function hideResultsToggle(examId, teacherId) {
+  const res = await fetch(`/api/exams/${examId}/hide-results?teacherId=${encodeURIComponent(teacherId || '')}`, { method: 'POST' })
   if (!res.ok) throw new Error('Không thể ẩn kết quả')
   return res.json()
 }
 
 /** Bật/tắt chế độ công khai đề thi */
-export async function setExamPublic(examId, isPublic) {
+export async function setExamPublic(examId, isPublic, teacherId) {
   const exam = getExamById(examId)
   if (exam) saveExam({ ...exam, isPublic })
   const res = await fetch(`/api/exams/${examId}/toggle-public`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ isPublic }),
+    body:    JSON.stringify({ isPublic, teacherId }),
   })
   if (!res.ok) throw new Error('Thao tác thất bại')
   return res.json()
@@ -266,13 +256,13 @@ export async function fetchPublicExams() {
 }
 
 /** Giáo viên lưu cài đặt chế độ luyện tập */
-export async function savePracticeSettings(examId, settings) {
+export async function savePracticeSettings(examId, settings, teacherId) {
   const exam = getExamById(examId)
   if (exam) saveExam({ ...exam, practiceSettings: settings })
   const res = await fetch(`/api/exams/${examId}/practice-settings`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(settings),
+    body:    JSON.stringify({ ...settings, teacherId }),
   })
   if (!res.ok) throw new Error('Lưu cài đặt luyện tập thất bại')
   return res.json()

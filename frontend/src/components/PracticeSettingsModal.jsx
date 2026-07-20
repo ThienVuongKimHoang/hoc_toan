@@ -11,7 +11,7 @@ function fromLocalInput(str) {
   return str ? new Date(str).toISOString() : null
 }
 
-export default function PracticeSettingsModal({ exam, onClose, onSaved }) {
+export default function PracticeSettingsModal({ exam, teacherId, onClose, onSaved }) {
   const ps = exam.practiceSettings || {}
 
   const [enabled,   setEnabled]   = useState(ps.enabled   ?? false)
@@ -45,7 +45,7 @@ export default function PracticeSettingsModal({ exam, onClose, onSaved }) {
         password:  password.trim() || null,
         openTime:  fromLocalInput(openTime),
         closeTime: fromLocalInput(closeTime),
-      })
+      }, teacherId)
       onSaved?.()
       onClose()
     } catch (e) {

@@ -59,7 +59,7 @@ function toLocalIso(d) {
 
 const DEFAULT_DURATION = 90
 
-export default function PublishModal({ exam, onClose, onPublished }) {
+export default function PublishModal({ exam, teacherId, onClose, onPublished }) {
   const [durH,        setDurH]        = useState(1)
   const [durM,        setDurM]        = useState(30)
   const defaultOpen = toLocalIso(new Date(Date.now() + 5 * 60 * 1000))
@@ -128,7 +128,7 @@ export default function PublishModal({ exam, onClose, onPublished }) {
       hideResults,
       lockScreen,
       classes:     validClasses,
-    })
+    }, teacherId)
     setPublishedClasses(validClasses)
     setLink(shareUrl(exam.id))
   }

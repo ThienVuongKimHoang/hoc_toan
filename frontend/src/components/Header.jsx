@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import AccountMenu from './AccountMenu.jsx'
 import NotificationBell from './NotificationBell.jsx'
 
-export default function Header({ user, onGoHome, onGoLogin, onGoLobby, onLogout, onCreateExam, onMyExams, onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onOpenClass, onOpenReports, onGoTools }) {
+export default function Header({ user, onGoHome, onGoLogin, onGoLobby, onLogout, onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onOpenClass, onOpenReports, onGoTools }) {
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -27,8 +27,6 @@ export default function Header({ user, onGoHome, onGoLogin, onGoLobby, onLogout,
                 user={user}
                 onLogout={onLogout}
                 onGoHome={onGoHome}
-                onCreateExam={onCreateExam}
-                onMyExams={onMyExams}
                 onGoProfile={onGoProfile}
                 onGoAdmin={onGoAdmin}
                 onGoStudy={onGoStudy}
