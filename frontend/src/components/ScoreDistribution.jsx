@@ -93,7 +93,7 @@ export default function ScoreDistribution({ subs, maxScore = 10, chartTitle }) {
                             <div className="sd-tip-value"><i className="sd-tip-dot" />Số lượng: <b>{count}</b></div>
                           </div>
                         )}
-                        <span className="sd-count">{count}</span>
+                        {count > 0 && <span className="sd-count">{count}</span>}
                         <div
                           className="sd-bar"
                           style={{ height: `${h}%`, minHeight: count > 0 ? 3 : 0 }}
