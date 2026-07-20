@@ -1037,14 +1037,13 @@ function AttendanceTab({ classId, teacherId, members, schedule }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState([])
-  const toolbarRef = useRef(null)
 
   const loadHistory = useCallback(async () => setHistory(await getAttendanceHistory(classId)), [classId])
   useEffect(() => { loadHistory() }, [loadHistory])
 
   const goToDate = (d) => {
     setDate(d)
-    toolbarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   useEffect(() => {
@@ -1081,7 +1080,7 @@ function AttendanceTab({ classId, teacherId, members, schedule }) {
 
   return (
     <div>
-      <div className="cm-section-toolbar" ref={toolbarRef}>
+      <div className="cm-section-toolbar">
         <input className="cm-input" type="date" value={date} max={todayStr}
           onChange={e => setDate(e.target.value)} style={{ maxWidth: 180 }} />
         {info && (
