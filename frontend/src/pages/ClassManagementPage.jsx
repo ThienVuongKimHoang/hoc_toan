@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { getExamsByTeacher, fetchExamsByTeacher, getSubmissions as getExamSubmissions, fetchExamById, scaledScore, deleteStudentSubmissions } from '../store/examStore.js'
 import QuestionStats from '../components/QuestionStats.jsx'
 import ScoreDistribution from '../components/ScoreDistribution.jsx'
+import StudentProgressModal from '../components/StudentProgressModal.jsx'
 import {
   addAssignment, addCoTeacher, addDocument, addMemberToClass, createClass,
   deleteAssignmentSubmission,
@@ -727,8 +728,8 @@ function AddTeacherModal({ teacherId, coTeachers, onClose, onAdd }) {
 /* ─── Assignment form modal ─── */
 function AssignmentModal({ teacherId, cls, subject, mode: initialMode, onClose, onSave }) {
   // Hiện cache localStorage ngay, rồi cập nhật bằng danh sách chuẩn từ server.
-  // Hiện MỌI đề đã lưu (kể cả đề nháp chưa phát công khai) — đề đã "Lưu lại" đều
-  // được đồng bộ lên server nên vẫn giao trong lớp được.
+  // Hiện MỌI đề đã lưu — đề đã "Lưu lại" đều được đồng bộ lên server nên vẫn
+  // giao trong lớp được ngay, không cần "Phát đề" (link công khai) trước.
   const [exams, setExams] = useState(() => getExamsByTeacher(teacherId))
   useEffect(() => {
     let alive = true
@@ -738,6 +739,16 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, onClose, 
     return () => { alive = false }
   }, [teacherId])
   const isEnglishClass = (subject || cls?.subject) === 'anh'
+  // Ưu tiên đề đúng môn của lớp lên đầu, trong đó đề đúng khối của lớp lên trước —
+  // .sort() ổn định nên thứ tự gốc (mới tạo trước) vẫn giữ nguyên trong từng nhóm.
+  const targetSubject = subject || cls?.subject || null
+  const targetGrade   = cls?.grade || null
+  const examRank = (e) => {
+    const subjRank  = targetSubject ? (e.subject === targetSubject ? 0 : 1) : 0
+    const gradeRank = targetGrade   ? (e.grade   === targetGrade   ? 0 : 1) : 0
+    return subjRank * 2 + gradeRank
+  }
+  const sortedExams = [...exams].sort((a, b) => examRank(a) - examRank(b))
   const today = new Date().toISOString().slice(0, 10)
   const weekLater = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10)
 
@@ -833,14 +844,20 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, onClose, 
                 ) : (
                   <select className="cm-input cm-select" value={examId} onChange={e => pickExam(e.target.value)} autoFocus>
                     <option value="">— Chọn đề —</option>
-                    {exams.map(e => (
-                      <option key={e.id} value={e.id}>{e.published ? e.title : `${e.title} — nháp`}</option>
-                    ))}
+                    {sortedExams.map(e => {
+                      const tagBits = []
+                      if (e.subject && SUBJECTS[e.subject]) tagBits.push(SUBJECTS[e.subject].label)
+                      if (e.grade) tagBits.push(gradeLabel(e.grade))
+                      const tag = tagBits.join(' · ')
+                      return (
+                        <option key={e.id} value={e.id}>{tag ? `[${tag}] ${e.title}` : e.title}</option>
+                      )
+                    })}
                   </select>
                 )}
                 {selectedExam && (
                   <div className="cm-info-note">
-                    📊 {selectedExam.totalQuestions} câu{selectedExam.published ? '' : ' · 📝 đề nháp (chưa phát công khai, vẫn giao được)'}
+                    📊 {selectedExam.totalQuestions} câu
                   </div>
                 )}
 
@@ -1127,6 +1144,7 @@ function ProgressTab({ classId, teacherId }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
+  const [selected, setSelected] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -1145,7 +1163,8 @@ function ProgressTab({ classId, teacherId }) {
     <div className="cm-member-list">
       {data.students.map(st => (
         <div key={st.studentId} className="cm-member-row"
-          style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8, cursor: 'pointer' }}
+          onClick={() => setSelected(st)}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="cm-member-avatar">{st.studentName?.[0]?.toUpperCase() || '?'}</div>
             <div style={{ flex: 1, fontWeight: 600 }}>{st.studentName}</div>
@@ -1157,9 +1176,9 @@ function ProgressTab({ classId, teacherId }) {
           {st.attendance.vang > 0 && (
             <div style={{ fontSize: 12, color: '#dc2626' }}>Vắng {st.attendance.vang} buổi</div>
           )}
-          {st.assignments.missedTitles.length > 0 && (
+          {st.assignments.missed.length > 0 && (
             <div style={{ fontSize: 12, color: '#dc2626' }}>
-              Bỏ bài: {st.assignments.missedTitles.join(', ')}
+              Bỏ bài: {st.assignments.missed.map(m => m.title).join(', ')}
             </div>
           )}
           {st.scoreHistory.length > 0 && (
@@ -1174,6 +1193,10 @@ function ProgressTab({ classId, teacherId }) {
           )}
         </div>
       ))}
+
+      {selected && (
+        <StudentProgressModal student={selected} onClose={() => setSelected(null)} />
+      )}
     </div>
   )
 }

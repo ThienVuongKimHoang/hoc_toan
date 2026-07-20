@@ -2167,6 +2167,7 @@ async def class_progress_endpoint(cls_id: str, teacherId: str = None):
         return JSONResponse({"error": "Không có quyền xem tiến độ lớp này"}, status_code=403)
 
     attend_stats = db.class_attendance_stats(cls_id)
+    attend_detail = db.class_attendance_detail(cls_id)
     now = datetime.now(_tz.utc)
 
     def _parse(iso):
@@ -2178,11 +2179,13 @@ async def class_progress_endpoint(cls_id: str, teacherId: str = None):
     per_student = {}
     for m in cls.get("members", []):
         sid = str(m.get("userId"))
+        attendance = dict(attend_stats.get(sid) or
+                          {"total": 0, "coMat": 0, "vang": 0, "tre": 0, "phep": 0, "rate": None})
+        attendance["detail"] = attend_detail.get(sid, [])
         per_student[sid] = {
             "studentId": sid, "studentName": m.get("name", ""),
-            "attendance": attend_stats.get(sid) or
-                {"total": 0, "coMat": 0, "vang": 0, "tre": 0, "phep": 0, "rate": None},
-            "assignments": {"submitted": 0, "total": 0, "missedTitles": []},
+            "attendance": attendance,
+            "assignments": {"submitted": 0, "total": 0, "missed": []},
             "scoreHistory": [],
         }
 
@@ -2212,7 +2215,10 @@ async def class_progress_endpoint(cls_id: str, teacherId: str = None):
                         "score": score, "maxScore": max_score,
                     })
             elif is_over:
-                st["assignments"]["missedTitles"].append(asgn.get("title", ""))
+                st["assignments"]["missed"].append({
+                    "title": asgn.get("title", ""),
+                    "date": asgn.get("closeTime") or asgn.get("dueDate"),
+                })
 
     for st in per_student.values():
         st["scoreHistory"].sort(key=lambda x: x.get("date") or "")

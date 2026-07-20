@@ -116,6 +116,8 @@ CREATE TABLE IF NOT EXISTS exams (
 );
 -- Môn học của đề (toan | ly | hoa | anh | van…) — quyết định bộ nhãn chủ đề khi soạn/sửa
 ALTER TABLE exams ADD COLUMN IF NOT EXISTS subject VARCHAR(20);
+-- Khối lớp của đề ('1'..'12') — dùng để ưu tiên sắp xếp đề khi giao trong lớp cùng khối.
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS grade VARCHAR(20);
 
 CREATE TABLE IF NOT EXISTS submissions (
     id           SERIAL       PRIMARY KEY,
@@ -515,6 +517,7 @@ def _exam_from_row(row: dict) -> dict:
         "title":            r["title"] or "",
         "createdBy":        r["created_by"],
         "subject":          r.get("subject"),
+        "grade":            r.get("grade"),
         "createdAt":        r["created_at"].isoformat() if r.get("created_at") else None,
         "updatedAt":        r["updated_at"].isoformat() if r.get("updated_at") else None,
         "source":           r["source"] or "",
@@ -632,7 +635,7 @@ def load_exams_by_creator(uid: str) -> list:
             cur.execute("""
                 SELECT e.id, e.title, e.source, e.total_questions, e.published,
                        e.is_public, e.featured, e.results_revealed, e.created_by,
-                       e.subject, e.created_at, e.updated_at, e.settings,
+                       e.subject, e.grade, e.created_at, e.updated_at, e.settings,
                        e.practice_settings, e.classes_data,
                        COALESCE(s.cnt, 0) AS submission_count
                 FROM exams e
@@ -657,6 +660,7 @@ def load_exams_by_creator(uid: str) -> list:
             "resultsRevealed":  bool(rd["results_revealed"]),
             "createdBy":        rd["created_by"],
             "subject":          rd.get("subject"),
+            "grade":            rd.get("grade"),
             "createdAt":        rd["created_at"].isoformat() if rd.get("created_at") else None,
             "updatedAt":        rd["updated_at"].isoformat() if rd.get("updated_at") else None,
             "settings":         rd["settings"],
@@ -673,13 +677,14 @@ def upsert_exam(exam_id: str, exam: dict) -> None:
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO exams(id,title,created_by,subject,created_at,updated_at,source,
+                INSERT INTO exams(id,title,created_by,subject,grade,created_at,updated_at,source,
                     total_questions,sections,published,is_public,featured,
                     results_revealed,settings,practice_settings,classes_data)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT(id) DO UPDATE SET
                     title=EXCLUDED.title, created_by=EXCLUDED.created_by,
                     subject=COALESCE(EXCLUDED.subject, exams.subject),
+                    grade=COALESCE(EXCLUDED.grade, exams.grade),
                     updated_at=EXCLUDED.updated_at, source=EXCLUDED.source,
                     total_questions=EXCLUDED.total_questions, sections=EXCLUDED.sections,
                     published=EXCLUDED.published, is_public=EXCLUDED.is_public,
@@ -689,6 +694,7 @@ def upsert_exam(exam_id: str, exam: dict) -> None:
             """, (
                 exam_id, exam.get("title", ""), str(exam.get("createdBy", "")),
                 exam.get("subject") or None,
+                exam.get("grade") or None,
                 exam.get("createdAt"), exam.get("updatedAt"), exam.get("source", ""),
                 exam.get("totalQuestions", 0),
                 json.dumps(exam.get("sections") or {}, ensure_ascii=False),
@@ -1363,6 +1369,30 @@ def list_attendance_sessions(cls_id: str, limit: int = 30) -> list:
         sess["counts"] = {"coMat": d["co_mat_count"], "vang": d["vang_count"],
                            "tre": d["tre_count"], "phep": d["phep_count"]}
         out.append(sess)
+    return out
+
+
+def class_attendance_detail(cls_id: str) -> dict:
+    """Chi tiết các buổi vắng/trễ của từng học sinh (dùng cho tab Tiến độ):
+    {studentId: [{date, status}, ...]} — chỉ gồm buổi 'vang' hoặc 'tre', sắp theo ngày tăng dần."""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT r.student_id, s.session_date, r.status
+                FROM attendance_records r
+                JOIN attendance_sessions s ON s.id = r.session_id
+                WHERE s.class_id=%s AND r.status IN ('vang', 'tre')
+                ORDER BY s.session_date
+            """, (cls_id,))
+            rows = cur.fetchall()
+    out = {}
+    for r in rows:
+        d = dict(r)
+        sid = d["student_id"]
+        out.setdefault(sid, []).append({
+            "date": d["session_date"].isoformat() if d["session_date"] else None,
+            "status": d["status"],
+        })
     return out
 
 

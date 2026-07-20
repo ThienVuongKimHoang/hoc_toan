@@ -4925,6 +4925,73 @@ button { font-family: inherit; }
   .sd-xlabel { font-size: 0.64rem; }
 }
 
+/* ── Chi tiết tiến độ học sinh (StudentProgressModal) ── */
+.spd-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.spd-summary-item {
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 14px;
+  padding: 14px 12px;
+  text-align: center;
+}
+.spd-summary-value {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #1e293b;
+  line-height: 1.2;
+}
+.spd-summary-value small { font-size: 0.85rem; font-weight: 700; color: #94a3b8; }
+.spd-summary-label {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-top: 4px;
+  line-height: 1.35;
+}
+
+.spd-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.spd-detail-card {
+  background: #fff;
+  border: 1px solid #e6ebf2;
+  border-radius: 14px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+.spd-detail-head {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 8px;
+}
+.spd-detail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.spd-detail-list li {
+  font-size: 0.78rem;
+  color: #334155;
+}
+.spd-detail-list li small { color: #94a3b8; }
+.spd-detail-empty {
+  font-size: 0.76rem;
+  color: #94a3b8;
+}
+
+@media (max-width: 860px) {
+  .spd-summary, .spd-detail-grid { grid-template-columns: 1fr; }
+}
+
 /* ── Per-question statistics ── */
 .er-qstats {
   background: #fff;
@@ -8599,6 +8666,18 @@ button { font-family: inherit; }
 }
 .rs-grade-btn.active { background: #2563eb; color: #fff; }
 .rs-grade-btn:not(.active):hover { background: #e2e8f0; }
+.rs-khoi-select {
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1.5px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #475569;
+  font-family: inherit;
+  cursor: pointer;
+}
+.rs-khoi-select:hover { background: #e2e8f0; }
 .rs-mix-btn {
   display: flex;
   align-items: center;
