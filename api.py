@@ -2803,8 +2803,7 @@ async def generate_questions_api(request: Request):
     )
 
     try:
-        keys   = load_api_keys()
-        client = Groq(api_key=keys[0])
+        keys = load_api_keys()
 
         if image_b64:
             # Vision path: ảnh + prompt gộp vào 1 message user
@@ -2826,9 +2825,24 @@ async def generate_questions_api(request: Request):
             ]
             model = _GEN_TEXT_MODEL
 
-        resp = client.chat.completions.create(
-            model=model, messages=messages, max_tokens=4096, temperature=0.7,
-        )
+        # Xoay vòng qua các key dự phòng nếu key hiện tại bị rate-limit (429)
+        resp = None
+        last_err = None
+        for key in keys:
+            try:
+                resp = Groq(api_key=key).chat.completions.create(
+                    model=model, messages=messages, max_tokens=4096, temperature=0.7,
+                )
+                break
+            except Exception as e:
+                last_err = e
+                err_str = str(e)
+                if "429" in err_str or "rate_limit" in err_str.lower():
+                    continue
+                raise
+        if resp is None:
+            raise last_err
+
         raw_full = resp.choices[0].message.content or ""
         raw_full = raw_full.strip()
         # Strip markdown fences
