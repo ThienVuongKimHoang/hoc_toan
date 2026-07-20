@@ -2763,7 +2763,7 @@ _GEN_SECTION_PROMPTS = {
 }
 
 
-_GEN_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+_GEN_VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
 _GEN_TEXT_MODEL   = "llama-3.3-70b-versatile"
 
 
