@@ -87,6 +87,14 @@ async def _block_banned_ips(request: Request, call_next):
     return await call_next(request)
 
 
+@app.get("/api/security/check-ip")
+async def security_check_ip():
+    """Nginx gọi endpoint này qua auth_request để hỏi IP hiện tại có bị cấm không.
+    Middleware _block_banned_ips đã trả 403 cho IP bị cấm trước khi tới đây,
+    nên handler này chỉ chạy khi IP không bị cấm → luôn trả 200."""
+    return {"ok": True}
+
+
 @app.on_event("startup")
 async def _startup():
     db.init_db()
