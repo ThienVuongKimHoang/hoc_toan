@@ -31,6 +31,7 @@ const IcEdit    = (s) => <Ic size={s}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 
 const IcKey     = (s) => <Ic size={s}><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></Ic>
 const IcCheck   = (s) => <Ic size={s}><polyline points="20 6 9 17 4 12"/></Ic>
 const IcLock    = (s) => <Ic size={s}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></Ic>
+const IcBan     = (s) => <Ic size={s}><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></Ic>
 
 /* ── KPI Card ── */
 function KpiCard({ label, value, sub, color = '#2563eb', icon }) {
@@ -820,6 +821,209 @@ function ConfigTab() {
   )
 }
 
+/* ═══════════════════════════════════════════════════════ TAB: SECURITY ══ */
+function BanIpModal({ initialIp = '', onSave, onClose }) {
+  const [ip, setIp]         = useState(initialIp)
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  const handleSave = async () => {
+    if (!ip.trim()) { setErr('Vui lòng nhập địa chỉ IP.'); return }
+    setSaving(true)
+    try { await onSave(ip.trim(), reason.trim()) } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="sa-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="sa-modal sa-modal--sm">
+        <div className="sa-modal-header">
+          <h3>{IcBan(16)} Cấm địa chỉ IP</h3>
+          <button className="sa-modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <input
+            className="sa-config-input"
+            placeholder="Địa chỉ IP (vd. 203.0.113.10)"
+            value={ip}
+            onChange={e => { setIp(e.target.value); setErr('') }}
+            autoFocus
+            disabled={!!initialIp}
+          />
+          <input
+            className="sa-config-input"
+            placeholder="Lý do (không bắt buộc)"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+          />
+          {err && <div style={{ color: '#ef4444', fontSize: '0.82rem' }}>⚠️ {err}</div>}
+        </div>
+        <div className="sa-modal-footer">
+          <button className="sa-btn sa-btn--ghost" onClick={onClose}>Huỷ</button>
+          <button className="sa-btn sa-btn--danger" onClick={handleSave} disabled={saving}>
+            {saving ? '⏳ Đang cấm…' : <>{IcBan(14)} Cấm IP</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SecurityTab({ viewerId }) {
+  const [attempts, setAttempts]     = useState([])
+  const [banned, setBanned]         = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [banning, setBanning]       = useState(null)   // null | true (form trắng) | "1.2.3.4" (từ 1 dòng)
+  const [unbanning, setUnbanning]   = useState(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await fetch(`/api/admin/login-attempts?viewerId=${encodeURIComponent(viewerId)}`)
+      if (r.ok) {
+        const data = await r.json()
+        setAttempts(data.attempts || [])
+        setBanned(data.banned || [])
+      }
+    } catch {}
+    setLoading(false)
+  }, [viewerId])
+
+  useEffect(() => { load() }, [load])
+
+  const handleBan = async (ip, reason) => {
+    try {
+      await fetch('/api/admin/banned-ips', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ viewerId, ip, reason }),
+      })
+      await load()
+    } catch {}
+    setBanning(null)
+  }
+
+  const handleUnban = async (ip) => {
+    try {
+      await fetch(`/api/admin/banned-ips/${encodeURIComponent(ip)}?viewerId=${encodeURIComponent(viewerId)}`, {
+        method: 'DELETE',
+      })
+      await load()
+    } catch {}
+    setUnbanning(null)
+  }
+
+  const bannedSet = new Set(banned.map(b => b.ip))
+  const fmt     = iso => iso ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
+  const fmtLock = s => s <= 0 ? '—' : (s >= 60 ? `${Math.ceil(s / 60)} phút` : `${s} giây`)
+
+  return (
+    <div className="sa-exams">
+      {banning && (
+        <BanIpModal
+          initialIp={typeof banning === 'string' ? banning : ''}
+          onSave={handleBan}
+          onClose={() => setBanning(null)}
+        />
+      )}
+      {unbanning && (
+        <ConfirmModal
+          title="Gỡ cấm IP"
+          body={`Cho phép địa chỉ IP "${unbanning}" truy cập trở lại?`}
+          onConfirm={() => handleUnban(unbanning)}
+          onClose={() => setUnbanning(null)}
+        />
+      )}
+
+      <div className="sa-toolbar">
+        <div className="sa-count-badge">{attempts.length} IP có lịch sử đăng nhập sai</div>
+        <button className="sa-btn sa-btn--primary" onClick={() => setBanning(true)}>
+          {IcBan(14)} Cấm IP thủ công
+        </button>
+        <button className="sa-refresh-btn sa-refresh-btn--sm" onClick={load}>{IcRefresh(14)}</button>
+      </div>
+
+      {loading ? (
+        <div className="sa-loading">Đang tải…</div>
+      ) : (
+        <>
+          <div className="sa-config-title" style={{ marginTop: 8 }}>IP đang bị theo dõi (đăng nhập sai)</div>
+          <div className="sa-table-wrap">
+            <table className="sa-table">
+              <thead>
+                <tr>
+                  <th>Địa chỉ IP</th>
+                  <th>Số lần sai</th>
+                  <th>Đang khoá</th>
+                  <th>Cập nhật lúc</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attempts.length === 0 ? (
+                  <tr><td colSpan={5} className="sa-empty">Chưa có IP nào đăng nhập sai.</td></tr>
+                ) : attempts.map(a => (
+                  <tr key={a.ip}>
+                    <td><code className="sa-code">{a.ip}</code></td>
+                    <td>{a.failCount}</td>
+                    <td>{a.lockedSeconds > 0
+                      ? <span className="sa-badge" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>{IcLock(12)} {fmtLock(a.lockedSeconds)}</span>
+                      : '—'}</td>
+                    <td>{fmt(a.updatedAt)}</td>
+                    <td>
+                      <div className="sa-actions">
+                        {bannedSet.has(a.ip) ? (
+                          <span className="sa-badge" style={{ background: '#f1f5f9', color: '#475569' }}>Đã cấm</span>
+                        ) : (
+                          <button className="sa-act-btn sa-act-btn--del" title="Cấm IP này" onClick={() => setBanning(a.ip)}>
+                            {IcBan(14)}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="sa-config-title" style={{ marginTop: 24 }}>IP đã bị cấm truy cập</div>
+          <div className="sa-table-wrap">
+            <table className="sa-table">
+              <thead>
+                <tr>
+                  <th>Địa chỉ IP</th>
+                  <th>Lý do</th>
+                  <th>Cấm lúc</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {banned.length === 0 ? (
+                  <tr><td colSpan={4} className="sa-empty">Chưa cấm IP nào.</td></tr>
+                ) : banned.map(b => (
+                  <tr key={b.ip}>
+                    <td><code className="sa-code">{b.ip}</code></td>
+                    <td>{b.reason || '—'}</td>
+                    <td>{fmt(b.bannedAt)}</td>
+                    <td>
+                      <div className="sa-actions">
+                        <button className="sa-act-btn" title="Gỡ cấm" onClick={() => setUnbanning(b.ip)}>
+                          {IcCheck(14)}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 /* ═══════════════════════════════════════════════════════════ MAIN PAGE ══ */
 const TABS = [
   { key: 'stats',  label: 'Thống kê',          icon: IcStats },
@@ -827,11 +1031,15 @@ const TABS = [
   { key: 'users',  label: 'Người dùng',          icon: IcUsers },
   { key: 'config', label: 'Cấu hình hệ thống',   icon: IcConfig },
   { key: 'reports', label: 'Báo cáo',            icon: IcReports },
+  { key: 'security', label: 'Bảo mật / Chặn IP', icon: IcBan, superAdminOnly: true },
   { key: 'site',   label: 'Nội dung trang chủ',   icon: IcGlobe },
 ]
 
 export default function SuperAdminPage({ user, onGoHome, initialTab, navNonce }) {
-  const [tab,       setTab]       = useState(initialTab || 'stats')
+  const visibleTabs = TABS.filter(t => !t.superAdminOnly || user?.role === 'super_admin')
+  const [tab,       setTab]       = useState(
+    initialTab && visibleTabs.some(t => t.key === initialTab) ? initialTab : 'stats'
+  )
   const [collapsed, setCollapsed] = useState(() =>
     localStorage.getItem('sa_sidebar_collapsed') === 'true'
   )
@@ -839,7 +1047,7 @@ export default function SuperAdminPage({ user, onGoHome, initialTab, navNonce })
   // Cho phép điều hướng thẳng vào 1 tab từ bên ngoài (vd: bấm thông báo báo cáo).
   // Phụ thuộc navNonce (tăng mỗi lần điều hướng) để nhảy tab được kể cả khi bấm lại đúng tab cũ.
   useEffect(() => {
-    if (initialTab) setTab(initialTab)
+    if (initialTab && visibleTabs.some(t => t.key === initialTab)) setTab(initialTab)
   }, [navNonce]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleSidebar = () => {
@@ -855,6 +1063,7 @@ export default function SuperAdminPage({ user, onGoHome, initialTab, navNonce })
     users:  <UsersTab />,
     config: <ConfigTab />,
     reports: <ReportsTab viewerId={user.id} />,
+    security: <SecurityTab viewerId={user.id} />,
     site:   <SiteContentTab />,
   }[tab]
 
@@ -870,7 +1079,7 @@ export default function SuperAdminPage({ user, onGoHome, initialTab, navNonce })
         </div>
 
         <nav className="sa-sidebar-nav">
-          {TABS.map(t => {
+          {visibleTabs.map(t => {
             const Icon = t.icon
             return (
               <button
@@ -901,7 +1110,7 @@ export default function SuperAdminPage({ user, onGoHome, initialTab, navNonce })
             <span className="sa-topbar-crown">👑</span>
             <div>
               <h1 className="sa-topbar-title">
-                {TABS.find(t => t.key === tab)?.label}
+                {visibleTabs.find(t => t.key === tab)?.label}
               </h1>
               <p className="sa-topbar-sub">
                 Đăng nhập: <strong>{user?.name}</strong> · {ROLE_META[user?.role]?.icon} {ROLE_META[user?.role]?.label}

@@ -239,6 +239,14 @@ CREATE TABLE IF NOT EXISTS login_attempts (
     locked_until TIMESTAMPTZ,
     updated_at   TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Danh sách IP bị super_admin cấm truy cập thẳng
+CREATE TABLE IF NOT EXISTS banned_ips (
+    ip         VARCHAR(64)  PRIMARY KEY,
+    reason     VARCHAR(500) DEFAULT '',
+    banned_by  BIGINT,
+    banned_at  TIMESTAMPTZ  DEFAULT NOW()
+);
 """
 
 # ── Init + migrate ─────────────────────────────────────────────────────────────
@@ -1078,6 +1086,68 @@ def clear_login_attempts(ip: str) -> None:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM login_attempts WHERE ip=%s", (ip,))
         conn.commit()
+
+
+def list_login_attempts() -> list:
+    """Danh sách IP đang có lịch sử đăng nhập sai (cho super_admin theo dõi)."""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT ip, fail_count, locked_until, updated_at
+                  FROM login_attempts
+                 ORDER BY fail_count DESC, updated_at DESC
+            """)
+            rows = [dict(r) for r in cur.fetchall()]
+    now = datetime.now(timezone.utc)
+    out = []
+    for r in rows:
+        locked_until = r["locked_until"]
+        locked_seconds = max(0, int((locked_until - now).total_seconds() + 0.999)) if locked_until else 0
+        out.append({
+            "ip":            r["ip"],
+            "failCount":     r["fail_count"],
+            "lockedSeconds": locked_seconds,
+            "updatedAt":     r["updated_at"].isoformat() if r["updated_at"] else None,
+        })
+    return out
+
+
+# ── Cấm IP (banned_ips) ─────────────────────────────────────────────────────────
+
+def list_banned_ips() -> list:
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT ip, reason, banned_by, banned_at FROM banned_ips ORDER BY banned_at DESC")
+            rows = [dict(r) for r in cur.fetchall()]
+    return [{
+        "ip":        r["ip"],
+        "reason":    r["reason"] or "",
+        "bannedBy":  r["banned_by"],
+        "bannedAt":  r["banned_at"].isoformat() if r["banned_at"] else None,
+    } for r in rows]
+
+
+def ban_ip(ip: str, reason: str = "", banned_by=None) -> None:
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO banned_ips (ip, reason, banned_by, banned_at)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (ip) DO UPDATE
+                   SET reason = EXCLUDED.reason,
+                       banned_by = EXCLUDED.banned_by,
+                       banned_at = NOW()
+            """, (ip, reason or "", banned_by))
+        conn.commit()
+
+
+def unban_ip(ip: str) -> bool:
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM banned_ips WHERE ip=%s", (ip,))
+            deleted = cur.rowcount > 0
+        conn.commit()
+    return deleted
 
 
 # ── Users ──────────────────────────────────────────────────────────────────────

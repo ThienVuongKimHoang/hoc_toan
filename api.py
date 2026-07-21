@@ -57,6 +57,9 @@ import ielts_grading as ielts
 # task_id → {"status": pending|running|done|error, "progress": [...], "result": ..., "error": ...}
 TASKS: dict[str, dict] = {}
 
+# Cache trong RAM các IP bị cấm, nạp lại khi khởi động + mỗi lần super_admin ban/unban
+BANNED_IPS: set[str] = set()
+
 app = FastAPI(title="Hoc Toan API")
 app.add_middleware(
     CORSMiddleware,
@@ -65,9 +68,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+def _client_ip(request: Request) -> str:
+    """Lấy IP thật của client, ưu tiên header do Nginx set (X-Forwarded-For / X-Real-IP)."""
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    return request.client.host if request.client else "unknown"
+
+
+@app.middleware("http")
+async def _block_banned_ips(request: Request, call_next):
+    if _client_ip(request) in BANNED_IPS:
+        return JSONResponse({"error": "Địa chỉ IP của bạn đã bị cấm truy cập."}, status_code=403)
+    return await call_next(request)
+
+
 @app.on_event("startup")
 async def _startup():
     db.init_db()
+    BANNED_IPS.update(ip["ip"] for ip in db.list_banned_ips())
     _migrate_split_multisubject_classes()
     asyncio.create_task(_report_scanner_loop())
 
@@ -1281,23 +1304,57 @@ async def remove_super_admin(user_id: str):
     return {"ok": True, "user": updated}
 
 
+def _require_super_admin(viewer_id: str):
+    """Trả về JSONResponse 403 nếu viewer_id không phải super_admin, ngược lại None."""
+    viewer = db.get_user_by_id(viewer_id) if viewer_id else None
+    if (viewer or {}).get("role") != "super_admin":
+        return JSONResponse({"error": "Chỉ super_admin mới có quyền này."}, status_code=403)
+    return None
+
+
+@app.get("/api/admin/login-attempts")
+async def admin_login_attempts(viewerId: str = None):
+    """Danh sách IP có lịch sử đăng nhập sai + IP đang bị cấm, cho super_admin theo dõi."""
+    denied = _require_super_admin(viewerId)
+    if denied:
+        return denied
+    return {
+        "attempts": db.list_login_attempts(),
+        "banned":   db.list_banned_ips(),
+    }
+
+
+@app.post("/api/admin/banned-ips")
+async def admin_ban_ip(request: Request):
+    """Super_admin cấm thẳng một địa chỉ IP truy cập toàn bộ hệ thống."""
+    body = await request.json()
+    denied = _require_super_admin(body.get("viewerId"))
+    if denied:
+        return denied
+    ip = (body.get("ip") or "").strip()
+    if not ip:
+        return JSONResponse({"error": "Thiếu địa chỉ IP."}, status_code=400)
+    reason = (body.get("reason") or "").strip()
+    db.ban_ip(ip, reason=reason, banned_by=body.get("viewerId"))
+    BANNED_IPS.add(ip)
+    return {"ok": True, "ip": ip}
+
+
+@app.delete("/api/admin/banned-ips/{ip}")
+async def admin_unban_ip(ip: str, viewerId: str = None):
+    """Super_admin gỡ cấm một địa chỉ IP."""
+    denied = _require_super_admin(viewerId)
+    if denied:
+        return denied
+    db.unban_ip(ip)
+    BANNED_IPS.discard(ip)
+    return {"ok": True, "ip": ip}
 
 
 # ─── End Super Admin endpoints ────────────────────────────────────────────────
 
 
 # ─── User management ──────────────────────────────────────────────────────────
-
-
-def _client_ip(request: Request) -> str:
-    """Lấy IP thật của client, ưu tiên header do Nginx set (X-Forwarded-For / X-Real-IP)."""
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
-    return request.client.host if request.client else "unknown"
 
 
 @app.post("/api/auth/login")
