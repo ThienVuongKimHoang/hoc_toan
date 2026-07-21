@@ -4448,6 +4448,71 @@ button { font-family: inherit; }
 }
 .ps-toggle-label { font-size: 0.95rem; font-weight: 600; color: #1e293b; }
 
+/* Banner "đang diễn ra, kết thúc sau…" kiểu sale-off cho chế độ luyện tập
+   (báo hiệu khung giờ luyện tập giáo viên đặt sắp đóng — không liên quan tới
+   đồng hồ tự đặt riêng của học sinh khi làm bài). */
+.practice-sale-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  width: 100%;
+  background: linear-gradient(90deg, #dc2626, #f97316);
+  color: #fff;
+  padding: 14px 20px;
+  border-radius: 14px;
+  box-shadow: 0 10px 28px -10px rgba(220,38,38,0.55);
+}
+.psb-left { display: flex; align-items: center; gap: 10px; }
+.psb-fire {
+  font-size: 1.6rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgba(255,255,255,0.55));
+  animation: psb-pulse 1.2s ease-in-out infinite;
+}
+@keyframes psb-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.18); }
+}
+.psb-copy { display: flex; flex-direction: column; line-height: 1.3; }
+.psb-eyebrow { font-weight: 800; font-size: 0.92rem; letter-spacing: 0.02em; text-transform: uppercase; }
+.psb-sub { font-size: 0.76rem; opacity: 0.92; }
+.psb-clock { display: flex; align-items: center; gap: 6px; }
+.psb-box {
+  background: rgba(255,255,255,0.97);
+  color: #b91c1c;
+  border-radius: 8px;
+  min-width: 46px;
+  padding: 4px 6px 3px;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+}
+.psb-box .psb-num {
+  display: block;
+  font-size: 1.3rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+}
+.psb-box small {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #dc2626;
+  opacity: 0.85;
+  margin-top: 1px;
+}
+.psb-colon { font-size: 1.25rem; font-weight: 800; opacity: 0.85; }
+@media (max-width: 480px) {
+  .practice-sale-banner { padding: 12px 14px; }
+  .psb-eyebrow { font-size: 0.8rem; }
+  .psb-box { min-width: 38px; }
+  .psb-box .psb-num { font-size: 1.05rem; }
+}
+
 /* ═══════════════════════════════════════════
    EXAM RESULTS PAGE
 ═══════════════════════════════════════════ */

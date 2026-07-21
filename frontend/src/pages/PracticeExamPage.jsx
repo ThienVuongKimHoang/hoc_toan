@@ -34,6 +34,47 @@ function fmtDt(iso) {
   })
 }
 
+/* ── Countdown hook ── */
+function useCountdown(targetIso) {
+  const calc = () => Math.max(0, new Date(targetIso).getTime() - Date.now())
+  const [ms, setMs] = useState(calc)
+  useEffect(() => {
+    const t = setInterval(() => setMs(calc()), 1000)
+    return () => clearInterval(t)
+  }, [targetIso])
+  return ms
+}
+
+/* ── Banner "đang diễn ra, kết thúc sau…" kiểu sale-off, báo hiệu chế độ luyện
+   tập đang mở và sắp đóng — hiển thị ngay khi học sinh vào (trước/trong khi làm). ── */
+function PracticeSaleCountdown({ closeTime }) {
+  const msLeft = useCountdown(closeTime)
+  if (msLeft <= 0) return null
+  const s  = Math.floor(msLeft / 1000)
+  const hh = Math.floor(s / 3600)
+  const mm = Math.floor((s % 3600) / 60)
+  const ss = s % 60
+  const pad = n => String(n).padStart(2, '0')
+  return (
+    <div className="practice-sale-banner">
+      <div className="psb-left">
+        <span className="psb-fire">🔥</span>
+        <div className="psb-copy">
+          <span className="psb-eyebrow">Luyện tập đang diễn ra</span>
+          <span className="psb-sub">Kết thúc sau</span>
+        </div>
+      </div>
+      <div className="psb-clock">
+        <div className="psb-box"><span className="psb-num">{pad(hh)}</span><small>Giờ</small></div>
+        <span className="psb-colon">:</span>
+        <div className="psb-box"><span className="psb-num">{pad(mm)}</span><small>Phút</small></div>
+        <span className="psb-colon">:</span>
+        <div className="psb-box"><span className="psb-num">{pad(ss)}</span><small>Giây</small></div>
+      </div>
+    </div>
+  )
+}
+
 /* ── Gate screens ── */
 function GateScreen({ icon, title, desc, children, onGoHome }) {
   return (
@@ -52,7 +93,7 @@ function GateScreen({ icon, title, desc, children, onGoHome }) {
 }
 
 /* ── Password gate ── */
-function PasswordGate({ examId, onVerified, onGoHome }) {
+function PasswordGate({ examId, closeTime, onVerified, onGoHome }) {
   const [pwd,     setPwd]     = useState('')
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
@@ -70,40 +111,45 @@ function PasswordGate({ examId, onVerified, onGoHome }) {
 
   return (
     <div className="et-locked">
-      <div className="etl-card" style={{ maxWidth: 380 }}>
-        <div className="etl-icon">🔑</div>
-        <h1 className="etl-title">Nhập mật khẩu</h1>
-        <p style={{ color: '#64748b', marginTop: 6 }}>Đề luyện tập này được bảo vệ bằng mật khẩu</p>
-        <form onSubmit={handle} style={{ width: '100%', marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <input
-            ref={ref}
-            type="password"
-            className="lobby-input"
-            style={{ paddingLeft: 16 }}
-            placeholder="Nhập mật khẩu…"
-            value={pwd}
-            onChange={e => { setPwd(e.target.value); setError('') }}
-            autoFocus
-          />
-          {error && <div className="lobby-error">{error}</div>}
-          <button type="submit" className="lobby-submit" disabled={loading || !pwd.trim()}>
-            {loading ? '⏳ Đang xác minh…' : '→ Tiếp tục'}
-          </button>
-        </form>
-        <button className="mec-btn" style={{ marginTop: 12 }} onClick={onGoHome}>← Quay lại</button>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%', maxWidth: 380 }}>
+        {closeTime && <PracticeSaleCountdown closeTime={closeTime} />}
+        <div className="etl-card" style={{ maxWidth: 380 }}>
+          <div className="etl-icon">🔑</div>
+          <h1 className="etl-title">Nhập mật khẩu</h1>
+          <p style={{ color: '#64748b', marginTop: 6 }}>Đề luyện tập này được bảo vệ bằng mật khẩu</p>
+          <form onSubmit={handle} style={{ width: '100%', marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <input
+              ref={ref}
+              type="password"
+              className="lobby-input"
+              style={{ paddingLeft: 16 }}
+              placeholder="Nhập mật khẩu…"
+              value={pwd}
+              onChange={e => { setPwd(e.target.value); setError('') }}
+              autoFocus
+            />
+            {error && <div className="lobby-error">{error}</div>}
+            <button type="submit" className="lobby-submit" disabled={loading || !pwd.trim()}>
+              {loading ? '⏳ Đang xác minh…' : '→ Tiếp tục'}
+            </button>
+          </form>
+          <button className="mec-btn" style={{ marginTop: 12 }} onClick={onGoHome}>← Quay lại</button>
+        </div>
       </div>
     </div>
   )
 }
 
 /* ── Timer setup ── */
-function TimerSetupModal({ defaultMins, onStart }) {
+function TimerSetupModal({ defaultMins, closeTime, onStart }) {
   const [useTimer, setUseTimer] = useState(true)
   const [hrs,  setHrs]  = useState(Math.floor(defaultMins / 60))
   const [mins, setMins] = useState(defaultMins % 60)
   return (
     <div className="modal-overlay">
-      <div className="modal-box practice-setup-box">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, width: '100%', maxWidth: 440 }}>
+        {closeTime && <PracticeSaleCountdown closeTime={closeTime} />}
+        <div className="modal-box practice-setup-box">
         <div className="nsm-icon">🏋️</div>
         <h2 className="nsm-title">Chế độ Tập Luyện</h2>
         <p className="nsm-sub">Câu trả lời hiển thị ngay. Kết quả không được lưu.</p>
@@ -145,6 +191,7 @@ function TimerSetupModal({ defaultMins, onStart }) {
           onClick={() => onStart(useTimer ? hrs * 60 + mins : null)}>
           Bắt đầu tập luyện →
         </button>
+        </div>
       </div>
     </div>
   )
@@ -268,7 +315,7 @@ export default function PracticeExamPage({ examId, onGoHome }) {
   )
 
   if (step === 'gate-password') return (
-    <PasswordGate examId={examId} onVerified={handlePasswordVerified} onGoHome={onGoHome} />
+    <PasswordGate examId={examId} closeTime={info?.closeTime} onVerified={handlePasswordVerified} onGoHome={onGoHome} />
   )
 
   if (!exam) return (
@@ -278,6 +325,7 @@ export default function PracticeExamPage({ examId, onGoHome }) {
   if (step === 'timer-setup') return (
     <TimerSetupModal
       defaultMins={90}
+      closeTime={info?.closeTime}
       onStart={(mins) => { setTimerMs(mins ? mins * 60_000 : null); setStep('practice') }}
     />
   )
