@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GSF301 · Ôn tập Sea Freight Forwarding</title>
+  <style>
+    :root {
+      --navy: #0b2545;
+      --navy2: #13315c;
+      --blue: #2a6f97;
+      --sky: #61a5c2;
+      --gold: #f2b705;
+      --bg: #eef2f7;
+      --card: #ffffff;
+      --ok: #16a34a;
+      --bad: #dc2626;
+      --ink: #1a2434;
+      --muted: #6b7891;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, var(--bg), #dde5f0);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 18px 16px 60px; }
+    header.app {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      background: linear-gradient(120deg, var(--navy), var(--navy2));
+      color: #fff; border-radius: 18px; padding: 18px 22px; margin-bottom: 18px;
+      box-shadow: 0 10px 30px rgba(11,37,69,.25);
+    }
+    .logo {
+      width: 46px; height: 46px; border-radius: 12px; flex: none;
+      background: var(--gold); color: var(--navy); font-weight: 800;
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.25);
+    }
+    header.app h1 { margin: 0; font-size: 20px; letter-spacing: .3px; }
+    header.app p { margin: 3px 0 0; font-size: 13px; opacity: .8; }
+    .stat { margin-left: auto; text-align: right; font-size: 12px; opacity: .85; }
+
+    .panel { background: var(--card); border-radius: 16px; padding: 14px; margin-bottom: 16px; box-shadow: 0 4px 18px rgba(18,49,92,.08); }
+    .label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 0 0 8px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      border: 1.5px solid #d5deec; background: #f6f9fd; color: var(--navy2);
+      padding: 7px 13px; border-radius: 999px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all .15s; user-select: none;
+    }
+    .chip:hover { border-color: var(--sky); }
+    .chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+    .chip.mode.active { background: var(--gold); color: var(--navy); border-color: var(--gold); }
+    .chip .badge { opacity: .6; font-weight: 500; margin-left: 5px; }
+
+    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .toggle {
+      display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
+      color: var(--navy2); cursor: pointer; user-select: none;
+    }
+    .switch { width: 40px; height: 22px; border-radius: 999px; background: #c7d2e2; position: relative; transition: .2s; flex: none; }
+    .switch.on { background: var(--blue); }
+    .switch b { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: .2s; }
+    .switch.on b { left: 20px; }
+    .btn {
+      border: none; border-radius: 11px; padding: 10px 16px; font-size: 14px; font-weight: 700;
+      cursor: pointer; transition: transform .08s, box-shadow .15s; background: var(--navy); color: #fff;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn.ghost { background: #eef2f8; color: var(--navy2); }
+    .btn.gold { background: var(--gold); color: var(--navy); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    .progress { height: 8px; border-radius: 999px; background: #e3e9f2; overflow: hidden; margin: 4px 0 0; }
+    .progress > i { display: block; height: 100%; background: linear-gradient(90deg, var(--blue), var(--sky)); transition: width .3s; }
+
+    /* Flashcard */
+    .fc-scene { perspective: 1400px; margin: 6px 0 14px; }
+    .fc {
+      position: relative; width: 100%; min-height: 300px; cursor: pointer;
+      transform-style: preserve-3d; transition: transform .5s; text-align: center;
+    }
+    .fc.flipped { transform: rotateY(180deg); }
+    .fc-face {
+      position: absolute; inset: 0; backface-visibility: hidden; border-radius: 20px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 30px 26px; box-shadow: 0 12px 34px rgba(18,49,92,.16);
+    }
+    .fc-front { background: linear-gradient(140deg, var(--navy), var(--navy2)); color: #fff; }
+    .fc-back { background: #fff; color: var(--ink); transform: rotateY(180deg); border: 2px solid var(--gold); }
+    .fc-tag { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; padding: 4px 12px; border-radius: 999px; margin-bottom: 16px; }
+    .fc-front .fc-tag { background: rgba(242,183,5,.22); color: var(--gold); }
+    .fc-back .fc-tag { background: #eef4ff; color: var(--blue); }
+    .fc-term { font-size: 26px; font-weight: 800; line-height: 1.3; }
+    .fc-def { font-size: 18px; line-height: 1.55; max-width: 640px; }
+    .fc-hint { position: absolute; bottom: 14px; font-size: 12px; opacity: .55; }
+    .fc-nav { display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .counter { font-weight: 700; color: var(--navy2); min-width: 70px; text-align: center; }
+
+    /* Matching */
+    .match-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .col-title { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+    .m-item {
+      border: 2px solid #d9e2f0; background: #f8fafd; border-radius: 12px; padding: 11px 13px;
+      margin-bottom: 10px; cursor: pointer; font-size: 14px; line-height: 1.4; transition: all .12s;
+    }
+    .m-item.term { font-weight: 700; color: var(--navy); }
+    .m-item.sel { border-color: var(--blue); background: #e7f1fb; box-shadow: 0 0 0 3px rgba(97,165,194,.25); }
+    .m-item.matched { border-color: var(--ok); background: #eafaf0; color: var(--ok); cursor: default; opacity: .8; }
+    .m-item.wrong { border-color: var(--bad); background: #fdeaea; animation: shake .3s; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
+
+    /* Quiz */
+    .q-question { background: linear-gradient(140deg, var(--navy), var(--navy2)); color: #fff; border-radius: 16px; padding: 20px 22px; margin-bottom: 16px; }
+    .q-question .q-tag { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); }
+    .q-question .q-text { font-size: 19px; font-weight: 600; line-height: 1.5; margin-top: 8px; }
+    .q-opt {
+      display: block; width: 100%; text-align: left; border: 2px solid #dbe4f1; background: #fff;
+      border-radius: 12px; padding: 13px 15px; margin-bottom: 10px; font-size: 15px; cursor: pointer;
+      transition: all .12s; color: var(--ink); font-weight: 600;
+    }
+    .q-opt:hover:not(:disabled) { border-color: var(--sky); background: #f4f9fd; }
+    .q-opt.correct { border-color: var(--ok); background: #eafaf0; color: var(--ok); }
+    .q-opt.wrong { border-color: var(--bad); background: #fdeaea; color: var(--bad); }
+    .q-opt:disabled { cursor: default; }
+    .q-explain { background: #f6f9fd; border: 1.5px solid #d5deec; border-radius: 12px;
+      padding: 13px 15px; font-size: 14px; line-height: 1.55; color: var(--ink); margin-top: 4px; }
+
+    /* List */
+    .list-item { border-bottom: 1px solid #eef2f8; padding: 12px 4px; }
+    .list-item:last-child { border-bottom: none; }
+    .list-term { font-weight: 700; color: var(--navy); font-size: 15px; }
+    .list-def { color: var(--ink); font-size: 14px; line-height: 1.5; margin-top: 3px; }
+    .unit-head { font-size: 13px; font-weight: 800; color: var(--gold); background: var(--navy); padding: 8px 14px; border-radius: 10px; margin: 16px 0 8px; }
+    .unit-head:first-child { margin-top: 0; }
+
+    .empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+    .center { text-align: center; }
+    footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 24px; }
+
+    #loading { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 15px; }
+
+    @media (max-width: 560px) {
+      .fc-term { font-size: 21px; } .fc-def { font-size: 16px; }
+      .match-grid { gap: 8px; } .m-item { font-size: 13px; }
+      header.app h1 { font-size: 17px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div id="loading">Đang tải bộ ôn tập…</div>
+  </div>
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
