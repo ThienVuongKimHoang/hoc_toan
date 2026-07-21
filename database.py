@@ -231,6 +231,14 @@ CREATE TABLE IF NOT EXISTS admin_config (
     key   VARCHAR(100) PRIMARY KEY,
     value JSONB        DEFAULT 'null'
 );
+
+-- Chống dò mật khẩu: theo dõi số lần đăng nhập sai theo địa chỉ IP
+CREATE TABLE IF NOT EXISTS login_attempts (
+    ip           VARCHAR(64) PRIMARY KEY,
+    fail_count   INT         NOT NULL DEFAULT 0,
+    locked_until TIMESTAMPTZ,
+    updated_at   TIMESTAMPTZ DEFAULT NOW()
+);
 """
 
 # ── Init + migrate ─────────────────────────────────────────────────────────────
@@ -1013,6 +1021,63 @@ def strip_exam_assignments(exam_id: str) -> int:
             n = cur.rowcount
         conn.commit()
     return n
+
+
+# ── Chống dò mật khẩu (rate-limit đăng nhập theo IP) ───────────────────────────
+# Sai quá _LOGIN_LOCK_THRESHOLD lần → khoá _LOGIN_LOCK_BASE_SECONDS giây,
+# mỗi lần sai tiếp theo nhân đôi thời gian khoá (tối đa _LOGIN_LOCK_MAX_SECONDS).
+
+_LOGIN_LOCK_THRESHOLD    = 5
+_LOGIN_LOCK_BASE_SECONDS = 60
+_LOGIN_LOCK_MAX_SECONDS  = 24 * 3600
+
+
+def get_login_lock_seconds(ip: str) -> int:
+    """Số giây IP này còn bị khoá đăng nhập (0 nếu không bị khoá)."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT locked_until FROM login_attempts WHERE ip=%s", (ip,))
+            row = cur.fetchone()
+    if not row or not row[0]:
+        return 0
+    remaining = (row[0] - datetime.now(timezone.utc)).total_seconds()
+    return max(0, int(remaining + 0.999))
+
+
+def register_login_failure(ip: str) -> int:
+    """Ghi nhận 1 lần đăng nhập sai từ IP này.
+    Trả về số giây bị khoá (0 nếu chưa vượt ngưỡng)."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO login_attempts (ip, fail_count, updated_at)
+                VALUES (%s, 1, NOW())
+                ON CONFLICT (ip) DO UPDATE
+                   SET fail_count = login_attempts.fail_count + 1,
+                       updated_at = NOW()
+                RETURNING fail_count
+            """, (ip,))
+            fail_count = cur.fetchone()[0]
+            lock_seconds = 0
+            if fail_count > _LOGIN_LOCK_THRESHOLD:
+                lock_seconds = min(
+                    _LOGIN_LOCK_BASE_SECONDS * (2 ** (fail_count - _LOGIN_LOCK_THRESHOLD - 1)),
+                    _LOGIN_LOCK_MAX_SECONDS,
+                )
+                cur.execute(
+                    "UPDATE login_attempts SET locked_until = NOW() + %s * INTERVAL '1 second' WHERE ip=%s",
+                    (lock_seconds, ip),
+                )
+        conn.commit()
+    return lock_seconds
+
+
+def clear_login_attempts(ip: str) -> None:
+    """Xoá lịch sử đăng nhập sai của IP này (gọi khi đăng nhập thành công)."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM login_attempts WHERE ip=%s", (ip,))
+        conn.commit()
 
 
 # ── Users ──────────────────────────────────────────────────────────────────────
