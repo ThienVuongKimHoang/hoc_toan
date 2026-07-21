@@ -7670,41 +7670,52 @@ button { font-family: inherit; }
 .mc-exam-subinfo {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   flex-wrap: wrap;
   font-size: 0.78rem;
   color: #64748b;
-  margin-top: 6px;
+  margin-top: 8px;
 }
+.mc-exam-subinfo span { display: inline-flex; align-items: center; gap: 4px; }
 .mc-exam-subinfo .mc-dot { color: #cbd5e1; }
 .mc-submitted-info {
   display: flex; align-items: center; gap: 5px;
   font-size: 0.78rem; color: #059669; margin-top: 5px;
 }
-.mc-submit-btn { padding: 7px 14px; font-size: 0.82rem; white-space: nowrap; flex-shrink: 0; }
+.mc-submit-btn {
+  padding: 10px 16px; font-size: 0.82rem; white-space: nowrap; flex-shrink: 0;
+  min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
 .mc-submit-btn--resubmit { background: #059669; }
 .mc-submit-btn--resubmit:hover { background: #047857; }
 
 /* Badge nổi bật kiểu "sale off" — đề này đang mở luyện tập, học sinh bấm vào
-   để tham gia ngay từ trang lớp học, không cần đợi link riêng từ giáo viên. */
+   để tham gia ngay từ trang lớp học, không cần đợi link riêng từ giáo viên.
+   min-height 44px = vùng chạm tối thiểu trên di động. */
 .mc-practice-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  min-height: 44px;
   margin-top: 8px;
-  padding: 6px 12px;
+  padding: 8px 16px;
   border-radius: 999px;
   background: linear-gradient(90deg, #dc2626, #f97316);
   color: #fff;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   text-decoration: none;
   box-shadow: 0 4px 12px -4px rgba(220,38,38,0.55);
   transition: transform 0.12s, box-shadow 0.12s;
 }
 .mc-practice-badge:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -4px rgba(220,38,38,0.65); }
-.mc-practice-fire { animation: psb-pulse 1.2s ease-in-out infinite; }
-.mc-practice-arrow { opacity: 0.85; }
+.mc-practice-fire {
+  display: inline-flex;
+  filter: drop-shadow(0 0 4px rgba(255,255,255,0.5));
+  animation: psb-pulse 1.2s ease-in-out infinite;
+}
+.mc-practice-arrow { display: inline-flex; opacity: 0.85; }
 
 /* ── student exam link box ── */
 .mc-exam-link-box {

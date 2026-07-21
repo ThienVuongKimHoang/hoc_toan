@@ -50,6 +50,14 @@ const IC = {
   eye:      (s=16) => <Svg size={s}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></Svg>,
   key:      (s=16) => <Svg size={s}><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></Svg>,
   folder:   (s=16) => <Svg size={s}><path d="M4 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.5L11 4H4z"/></Svg>,
+  award:    (s=16) => <Svg size={s}><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></Svg>,
+  barChart: (s=16) => <Svg size={s}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></Svg>,
+  history:  (s=16) => <Svg size={s}><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></Svg>,
+  repeat:   (s=16) => <Svg size={s}><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></Svg>,
+  flame:    (s=16) => <Svg size={s}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></Svg>,
+  lock:     (s=16) => <Svg size={s}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></Svg>,
+  timer:    (s=16) => <Svg size={s}><line x1="10" y1="2" x2="14" y2="2"/><line x1="12" y1="14" x2="15" y2="11"/><circle cx="12" cy="14" r="8"/></Svg>,
+  chevronRight: (s=16) => <Svg size={s}><polyline points="9 18 15 12 9 6"/></Svg>,
 }
 
 /* ─── File type helper ─── */
@@ -277,9 +285,14 @@ function examWindowStatus(a) {
 }
 
 const SCORE_MODE_LABEL = {
-  highest: '🏆 Điểm cao nhất',
-  average: '➗ Điểm trung bình',
-  latest:  '🕒 Lần gần nhất',
+  highest: 'Điểm cao nhất',
+  average: 'Điểm trung bình',
+  latest:  'Lần gần nhất',
+}
+const SCORE_MODE_ICON = {
+  highest: 'award',
+  average: 'barChart',
+  latest:  'history',
 }
 
 /* Đề đang trong giờ luyện tập (mở, chưa đóng) hay không */
@@ -310,9 +323,9 @@ function PracticeActiveBadge({ examId, closeTime }) {
   }, [closeTime])
   return (
     <a className="mc-practice-badge" href={`#practice/${examId}`}>
-      <span className="mc-practice-fire">🔥</span>
+      <span className="mc-practice-fire">{IC.flame(15)}</span>
       <span>Đang mở luyện tập{closeTime ? ` · còn ${fmtCountdown(new Date(closeTime).getTime() - now)}` : ''}</span>
-      <span className="mc-practice-arrow">→</span>
+      <span className="mc-practice-arrow">{IC.chevronRight(14)}</span>
     </a>
   )
 }
@@ -353,17 +366,17 @@ function ExamAssignmentCard({ assignment, cls, user }) {
   return (
     <div className={`mc-asgn-card mc-asgn-card--exam ${st === 'closed' ? 'mc-asgn-card--overdue' : ''}`}>
       <div className="mc-asgn-main">
-        <div className="mc-asgn-title">📋 {assignment.title}</div>
+        <div className="mc-asgn-title">{IC.file(14)} {assignment.title}</div>
         {assignment.description && <div className="mc-asgn-desc">{assignment.description}</div>}
         <div className="mc-asgn-meta">
           <span className={`cm-window-chip ${statusMeta.cls}`}>{IC.clock(12)} {statusMeta.label}</span>
-          {assignment.duration ? <span className="cm-exam-chip">⏱ {assignment.duration} phút</span> : null}
+          {assignment.duration ? <span className="cm-exam-chip">{IC.timer(12)} {assignment.duration} phút</span> : null}
         </div>
         <div className="mc-exam-subinfo">
-          <span>{SCORE_MODE_LABEL[scoreMode]}</span>
+          <span>{IC[SCORE_MODE_ICON[scoreMode]](13)} {SCORE_MODE_LABEL[scoreMode]}</span>
           <span className="mc-dot">•</span>
           <span>
-            🔁 {maxAttempts ? `${used ?? '…'}/${maxAttempts} lượt làm` : (used != null ? `Đã làm ${used} lần · không giới hạn lượt` : 'Không giới hạn lượt làm')}
+            {IC.repeat(13)} {maxAttempts ? `${used ?? '…'}/${maxAttempts} lượt làm` : (used != null ? `Đã làm ${used} lần · không giới hạn lượt` : 'Không giới hạn lượt làm')}
           </span>
         </div>
         {practiceActiveNow(practiceInfo) && (
@@ -376,7 +389,7 @@ function ExamAssignmentCard({ assignment, cls, user }) {
         </a>
       ) : (
         <button className="btn-primary mc-submit-btn" disabled>
-          {exhausted ? '🔒 Hết lượt' : st === 'pending' ? '🔒 Chưa mở' : 'Đã đóng'}
+          {exhausted ? <>{IC.lock(13)} Hết lượt</> : st === 'pending' ? <>{IC.lock(13)} Chưa mở</> : 'Đã đóng'}
         </button>
       )}
     </div>
