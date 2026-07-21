@@ -524,12 +524,18 @@ function UsersTab() {
     try { return JSON.parse(localStorage.getItem('hoctoan_user')) } catch { return null }
   })()
 
-  const filtered = users.filter(u => {
-    const q = search.toLowerCase()
-    if (q && !u.name.toLowerCase().includes(q) && !(u.email || '').toLowerCase().includes(q)) return false
-    if (filter !== 'all' && u.role !== filter) return false
-    return true
-  })
+  const filtered = users
+    .filter(u => {
+      const q = search.toLowerCase()
+      if (q && !u.name.toLowerCase().includes(q) && !(u.email || '').toLowerCase().includes(q)) return false
+      if (filter !== 'all' && u.role !== filter) return false
+      return true
+    })
+    // Ưu tiên hiển thị: super_admin -> admin -> giáo viên -> học sinh -> khách
+    .sort((a, b) => {
+      const tierDiff = (ROLE_META[b.role]?.tier ?? -1) - (ROLE_META[a.role]?.tier ?? -1)
+      return tierDiff !== 0 ? tierDiff : a.name.localeCompare(b.name, 'vi')
+    })
   const pages     = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
   const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
