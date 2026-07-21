@@ -277,9 +277,9 @@ function examWindowStatus(a) {
 }
 
 const SCORE_MODE_LABEL = {
-  highest: '🏆 Tính điểm cao nhất',
-  average: '➗ Tính điểm trung bình',
-  latest:  '🕒 Tính lần làm gần nhất',
+  highest: '🏆 Điểm cao nhất',
+  average: '➗ Điểm trung bình',
+  latest:  '🕒 Lần gần nhất',
 }
 
 /* Đề đang trong giờ luyện tập (mở, chưa đóng) hay không */
@@ -356,14 +356,14 @@ function ExamAssignmentCard({ assignment, cls, user }) {
         <div className="mc-asgn-title">📋 {assignment.title}</div>
         {assignment.description && <div className="mc-asgn-desc">{assignment.description}</div>}
         <div className="mc-asgn-meta">
-          <span className="cm-exam-chip">{IC.play(12)} Đề thi</span>
-          {assignment.duration ? <span className="cm-exam-chip">⏱ {assignment.duration} phút</span> : null}
           <span className={`cm-window-chip ${statusMeta.cls}`}>{IC.clock(12)} {statusMeta.label}</span>
+          {assignment.duration ? <span className="cm-exam-chip">⏱ {assignment.duration} phút</span> : null}
         </div>
-        <div className="mc-asgn-meta" style={{marginTop:4}}>
-          <span className="cm-exam-chip">{SCORE_MODE_LABEL[scoreMode]}</span>
-          <span className="cm-exam-chip">
-            🔁 {maxAttempts ? `${used ?? '…'}/${maxAttempts} lần` : (used != null ? `${used} lần · không giới hạn` : 'Không giới hạn')}
+        <div className="mc-exam-subinfo">
+          <span>{SCORE_MODE_LABEL[scoreMode]}</span>
+          <span className="mc-dot">•</span>
+          <span>
+            🔁 {maxAttempts ? `${used ?? '…'}/${maxAttempts} lượt làm` : (used != null ? `Đã làm ${used} lần · không giới hạn lượt` : 'Không giới hạn lượt làm')}
           </span>
         </div>
         {practiceActiveNow(practiceInfo) && (

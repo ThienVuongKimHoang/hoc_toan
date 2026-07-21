@@ -7666,7 +7666,17 @@ button { font-family: inherit; }
 .mc-asgn-main { flex: 1; min-width: 0; }
 .mc-asgn-title { font-size: 0.95rem; font-weight: 700; color: #1e293b; margin-bottom: 3px; }
 .mc-asgn-desc  { font-size: 0.82rem; color: #64748b; margin-bottom: 5px; }
-.mc-asgn-meta  { display: flex; gap: 8px; flex-wrap: wrap; }
+.mc-asgn-meta  { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.mc-exam-subinfo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 6px;
+}
+.mc-exam-subinfo .mc-dot { color: #cbd5e1; }
 .mc-submitted-info {
   display: flex; align-items: center; gap: 5px;
   font-size: 0.78rem; color: #059669; margin-top: 5px;
