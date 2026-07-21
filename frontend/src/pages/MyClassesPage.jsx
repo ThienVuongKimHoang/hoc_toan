@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { getClassByCode, getClassesByStudent, getExamWindow, getPendingForStudent, joinClassByCode, submitAssignment, uploadFile } from '../store/classStore.js'
+import { getPracticeInfo } from '../store/examStore.js'
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, gradeLabel } from '../components/SubjectBadge.jsx'
 import { BandChip, IeltsGradeModal, IeltsStatsModal } from '../components/IeltsGrade.jsx'
 import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
@@ -281,6 +282,41 @@ const SCORE_MODE_LABEL = {
   latest:  '🕒 Tính lần làm gần nhất',
 }
 
+/* Đề đang trong giờ luyện tập (mở, chưa đóng) hay không */
+function practiceActiveNow(info) {
+  if (!info?.enabled) return false
+  const now = Date.now()
+  if (info.openTime  && now < new Date(info.openTime).getTime())  return false
+  if (info.closeTime && now > new Date(info.closeTime).getTime()) return false
+  return true
+}
+
+function fmtCountdown(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const p = n => String(n).padStart(2, '0')
+  return h > 0 ? `${p(h)}:${p(m)}:${p(s % 60)}` : `${p(m)}:${p(s % 60)}`
+}
+
+/* Badge nổi bật kiểu "sale off" báo đề này đang mở luyện tập — bấm vào để vào
+   luyện tập ngay, không cần đợi giáo viên gửi link riêng. */
+function PracticeActiveBadge({ examId, closeTime }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    if (!closeTime) return
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [closeTime])
+  return (
+    <a className="mc-practice-badge" href={`#practice/${examId}`}>
+      <span className="mc-practice-fire">🔥</span>
+      <span>Đang mở luyện tập{closeTime ? ` · còn ${fmtCountdown(new Date(closeTime).getTime() - now)}` : ''}</span>
+      <span className="mc-practice-arrow">→</span>
+    </a>
+  )
+}
+
 /* ─── Exam assignment card (đề thi được giao) ─── */
 function ExamAssignmentCard({ assignment, cls, user }) {
   const st = examWindowStatus(assignment)
@@ -297,6 +333,14 @@ function ExamAssignmentCard({ assignment, cls, user }) {
       .catch(() => {})
     return () => { alive = false }
   }, [cls.id, assignment.examId, assignment.id, user?.id])
+
+  // Đề này có đang mở chế độ luyện tập không (độc lập với lần giao bài chính thức)
+  const [practiceInfo, setPracticeInfo] = useState(null)
+  useEffect(() => {
+    let alive = true
+    getPracticeInfo(assignment.examId).then(info => { if (alive) setPracticeInfo(info) }).catch(() => {})
+    return () => { alive = false }
+  }, [assignment.examId])
 
   const exhausted = maxAttempts != null && used != null && used >= maxAttempts
 
@@ -322,6 +366,9 @@ function ExamAssignmentCard({ assignment, cls, user }) {
             🔁 {maxAttempts ? `${used ?? '…'}/${maxAttempts} lần` : (used != null ? `${used} lần · không giới hạn` : 'Không giới hạn')}
           </span>
         </div>
+        {practiceActiveNow(practiceInfo) && (
+          <PracticeActiveBadge examId={assignment.examId} closeTime={practiceInfo.closeTime} />
+        )}
       </div>
       {st === 'open' && !exhausted ? (
         <a className="btn-primary mc-submit-btn" href={`#take/${assignment.examId}/${cls.id}/${assignment.id}`}>

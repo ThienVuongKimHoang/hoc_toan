@@ -7675,6 +7675,27 @@ button { font-family: inherit; }
 .mc-submit-btn--resubmit { background: #059669; }
 .mc-submit-btn--resubmit:hover { background: #047857; }
 
+/* Badge nổi bật kiểu "sale off" — đề này đang mở luyện tập, học sinh bấm vào
+   để tham gia ngay từ trang lớp học, không cần đợi link riêng từ giáo viên. */
+.mc-practice-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #dc2626, #f97316);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 4px 12px -4px rgba(220,38,38,0.55);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.mc-practice-badge:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -4px rgba(220,38,38,0.65); }
+.mc-practice-fire { animation: psb-pulse 1.2s ease-in-out infinite; }
+.mc-practice-arrow { opacity: 0.85; }
+
 /* ── student exam link box ── */
 .mc-exam-link-box {
   display: flex;
