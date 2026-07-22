@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { calcMaxScore, calcScore, examStatus, fetchExamById, submitResult, scaledScore, verifyLockEscape } from '../store/examStore.js'
+import { examStatus, fetchExamById, submitResult, scaledScore, verifyLockEscape } from '../store/examStore.js'
 import { getExamWindow } from '../store/classStore.js'
 import QuestionCard from '../components/QuestionCard.jsx'
 import ReadingTakeView from '../components/ReadingTakeView.jsx'
@@ -405,15 +405,15 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   const handleSubmit = async (auto = false) => {
     if (!auto && !confirm('Nộp bài? Bạn không thể thay đổi sau khi nộp.')) return
     setSubmitting(true)
-    const score    = calcScore(exam, answers)
-    const maxScore = calcMaxScore(exam)
     const timeSpent = Math.max(0, Math.round((Date.now() - effStart) / 1000))  // giây
     try {
-      await submitResult(exam.id, { studentName, studentId, answers, score, maxScore, className, classId, assignmentId,
+      // Điểm do SERVER chấm (client không còn nhận đáp án đúng qua GET đề nữa,
+      // nên không thể tự tính điểm ở đây như trước).
+      const result = await submitResult(exam.id, { studentName, studentId, answers, className, classId, assignmentId,
                                     startedAt: new Date(effStart).toISOString(), timeSpent,
                                     violationCount: lockOn ? violations : null })
-      setFinalScore(score)
-      setFinalMax(maxScore)
+      setFinalScore(result.score)
+      setFinalMax(result.maxScore)
       setSubmitted(true)
     } catch (e) {
       setSubmitErr(e?.message || 'Nộp bài thất bại. Vui lòng thử lại.')

@@ -234,8 +234,8 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
         ? [...sameExam].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))[0].id
         : assignment.id
       Promise.all([
-        getExamSubmissions(assignment.examId),
-        fetchExamById(assignment.examId),
+        getExamSubmissions(assignment.examId, teacherId),
+        fetchExamById(assignment.examId, teacherId),
       ])
         .then(([d, examObj]) => {
           const all = (d.submissions || []).filter(s =>
@@ -271,7 +271,7 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
         })
         .catch(() => setData({ submissions: [], rawSubs: [], examObj: null, mode }))
     } else {
-      getSubmissions(classId, assignment.id)
+      getSubmissions(classId, assignment.id, teacherId)
         .then(setData)
         .catch(() => setData({ submissions: [], members: members || [] }))
     }
@@ -1258,7 +1258,7 @@ function ExamBankPanel({ classId, teacherId, user, subject, onAssign }) {
   useEffect(() => { load() }, [load])
 
   const handleEdit = async (exam) => {
-    const full = exam.sections ? exam : await fetchExamById(exam.id)
+    const full = exam.sections ? exam : await fetchExamById(exam.id, teacherId)
     if (full) setEditor({ editingExam: full, manualMode: false, mixResult: null })
     else alert('Không tải được nội dung đề thi từ server.')
   }
@@ -1913,7 +1913,7 @@ export default function ClassManagementPage({ user }) {
   }
 
   const handleEdit = async ({ name, description, grade, subject, joinPassword, schedule, settings }) => {
-    await updateClassInfo(editCls.id, { name, description, grade: grade || null, subject: subject || null, joinPassword, schedule, settings })
+    await updateClassInfo(editCls.id, { name, description, grade: grade || null, subject: subject || null, joinPassword, schedule, settings }, user.id)
     setEditCls(null)
     reload()
   }
@@ -1925,7 +1925,7 @@ export default function ClassManagementPage({ user }) {
       ? `Bạn đang xóa lớp của giáo viên khác: ${cls.teacherName || 'không rõ'}. Xác nhận xóa?`
       : 'Xoá lớp học này? Hành động không thể hoàn tác.'
     if (!confirm(msg)) return
-    await deleteClass(id)
+    await deleteClass(id, user.id)
     if (nav.classId === id) goNav(nav.grade, null)   // đang mở lớp bị xoá → về danh sách khối
     reload()
   }

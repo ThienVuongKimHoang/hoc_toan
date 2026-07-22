@@ -47,18 +47,18 @@ export async function createClass({ name, description, grade, subject, teacherId
   return res.json()
 }
 
-export async function updateClassInfo(classId, updates) {
+export async function updateClassInfo(classId, updates, teacherId) {
   const res = await fetch(`${API}/${classId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updates),
+    body: JSON.stringify({ ...updates, teacherId }),
   })
   if (!res.ok) throw new Error('Cập nhật thất bại')
   return res.json()
 }
 
-export async function deleteClass(classId) {
-  const res = await fetch(`${API}/${classId}`, { method: 'DELETE' })
+export async function deleteClass(classId, teacherId) {
+  const res = await fetch(`${API}/${classId}?teacherId=${encodeURIComponent(teacherId || '')}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Xóa lớp thất bại')
   return res.json()
 }
@@ -186,8 +186,8 @@ export async function deleteAssignmentSubmission(classId, assignmentId, studentI
   return res.json()
 }
 
-export async function getSubmissions(classId, assignmentId) {
-  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/submissions`)
+export async function getSubmissions(classId, assignmentId, teacherId) {
+  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/submissions?teacherId=${encodeURIComponent(teacherId || '')}`)
   if (!res.ok) throw new Error('Không lấy được bài nộp')
   return res.json()
 }

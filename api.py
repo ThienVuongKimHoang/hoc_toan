@@ -5,6 +5,7 @@ Chạy: uvicorn api:app --reload --port 8000
 """
 
 import asyncio
+import copy
 import json
 import os
 import sys
@@ -60,7 +61,15 @@ TASKS: dict[str, dict] = {}
 # Cache trong RAM các IP bị cấm, nạp lại khi khởi động + mỗi lần super_admin ban/unban
 BANNED_IPS: set[str] = set()
 
-app = FastAPI(title="Hoc Toan API")
+# Mặc định ẩn Swagger/ReDoc/OpenAPI schema (không lộ danh sách endpoint cho người ngoài).
+# Bật lại khi cần xem docs lúc dev: export ENABLE_API_DOCS=1
+_ENABLE_DOCS = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
+app = FastAPI(
+    title="Hoc Toan API",
+    docs_url="/docs" if _ENABLE_DOCS else None,
+    redoc_url="/redoc" if _ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if _ENABLE_DOCS else None,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -582,6 +591,18 @@ def _can_manage_exam(exam: dict, caller_id) -> bool:
     return str(exam.get("createdBy") or "") == cid
 
 
+def _strip_answers(exam: dict) -> dict:
+    """Bản copy của đề thi đã bỏ đáp án đúng khỏi mọi câu hỏi — dùng khi trả đề
+    cho người không phải giáo viên sở hữu (học sinh làm bài thật, khách vãng lai)."""
+    stripped = copy.deepcopy(exam)
+    for section in (stripped.get("sections") or {}).values():
+        for q in (section.get("questions") or []):
+            q.pop("answer", None)
+            for sub in (q.get("sub_questions") or []):
+                sub.pop("correct_answer", None)
+    return stripped
+
+
 @app.post("/api/exams/{exam_id}")
 async def upsert_exam(exam_id: str, request: Request):
     """Lưu hoặc cập nhật một đề thi lên server. Nếu đáp án đổi → chấm lại bài đã nộp."""
@@ -613,11 +634,18 @@ async def upsert_exam(exam_id: str, request: Request):
 
 
 @app.get("/api/exams/{exam_id}")
-async def get_exam(exam_id: str):
-    """Lấy đề thi theo ID (không trả về submissions)."""
+async def get_exam(exam_id: str, teacherId: str = None):
+    """Lấy đề thi theo ID (không trả về submissions).
+    Ẩn đáp án đúng khỏi response trừ khi người gọi là giáo viên sở hữu đề, hoặc
+    đề đang bật chế độ luyện tập (practiceSettings.enabled — nơi đáp án được
+    cố ý hiển thị ngay sau mỗi câu, đã có mật khẩu/lịch riêng ở practice-verify)."""
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    is_owner = _can_manage_exam(exam, teacherId)
+    practice_open = bool((exam.get("practiceSettings") or {}).get("enabled"))
+    if not is_owner and not practice_open:
+        exam = _strip_answers(exam)
     return exam
 
 
@@ -762,15 +790,19 @@ async def submit_exam(exam_id: str, request: Request):
     if not ok:
         return JSONResponse(
             {"error": f"Bạn đã làm đủ {max_attempts} lần cho phép."}, status_code=403)
-    return {"ok": True, "submissionIndex": result}
+    # Trả kèm điểm SERVER đã chấm để client hiển thị ngay — client không còn nhận
+    # được đáp án đúng qua GET /api/exams/{id} nên không thể tự tính điểm nữa.
+    return {"ok": True, "submissionIndex": result, "score": score, "maxScore": max_score}
 
 
 @app.get("/api/exams/{exam_id}/submissions")
-async def get_submissions(exam_id: str):
+async def get_submissions(exam_id: str, teacherId: str = None):
     """Giáo viên xem danh sách bài nộp."""
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    if not _can_manage_exam(exam, teacherId):
+        return JSONResponse({"error": "Không có quyền xem bài nộp của đề này"}, status_code=403)
     subs = db.get_submissions(exam_id)
     return {
         "submissions":     subs,
@@ -1799,6 +1831,11 @@ async def get_class_endpoint(cls_id: str):
 @app.put("/api/classes/{cls_id}")
 async def update_class_endpoint(cls_id: str, request: Request):
     body = await request.json()
+    cls0 = db.get_class(cls_id)
+    if not cls0:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, body.get("teacherId")):
+        return JSONResponse({"error": "Không có quyền sửa lớp này"}, status_code=403)
 
     def mutate(cls):
         for k in ("name", "description", "joinPassword", "grade", "schedule", "settings"):
@@ -1819,7 +1856,12 @@ async def update_class_endpoint(cls_id: str, request: Request):
 
 
 @app.delete("/api/classes/{cls_id}")
-async def delete_class_endpoint(cls_id: str):
+async def delete_class_endpoint(cls_id: str, teacherId: str = None):
+    cls0 = db.get_class(cls_id)
+    if not cls0:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, teacherId):
+        return JSONResponse({"error": "Không có quyền xóa lớp này"}, status_code=403)
     if not db.delete_class(cls_id):
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     return {"ok": True}
@@ -2114,9 +2156,11 @@ async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request
 
 
 @app.get("/api/classes/{cls_id}/assignments/{asgn_id}/submissions")
-async def get_assignment_submissions(cls_id: str, asgn_id: str):
+async def get_assignment_submissions(cls_id: str, asgn_id: str, teacherId: str = None):
     cls = db.get_class(cls_id)
     if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls, teacherId):
+        return JSONResponse({"error": "Không có quyền xem bài nộp của lớp này"}, status_code=403)
     for a in cls.get("assignments", []):
         if a["id"] == asgn_id:
             return {"submissions": a.get("submissions", []), "members": cls.get("members", [])}

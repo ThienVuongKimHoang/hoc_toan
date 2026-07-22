@@ -31,7 +31,9 @@ services:
       - ./src/output:/app/src/output
       - ./uploads:/app/uploads
     ports:
-      - "8000:8000"
+      # Chỉ mở ra localhost để debug — traffic thật đi qua Nginx (frontend) proxy /api/,
+      # tránh lộ backend (docs, headers, IP-ban middleware bị bypass) ra ngoài.
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy

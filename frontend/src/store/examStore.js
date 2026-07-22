@@ -145,15 +145,21 @@ export function classShareUrl(examId, classId) {
   return `${window.location.origin}${window.location.pathname}#take/${examId}/${classId}`
 }
 
-/** Tải đề thi: ưu tiên localStorage, nếu không có thì fetch từ server */
-export async function fetchExamById(id) {
-  const local = getExamById(id)
-  if (local) return local
+/** Tải đề thi. Truyền teacherId khi giáo viên cần xem/sửa đề (kèm đáp án đúng) —
+ * không truyền thì server tự ẩn đáp án (học sinh làm bài thật). Cache localStorage
+ * chỉ dùng cho lượt fetch có teacherId, tránh lộ/kẹt bản đã ẩn đáp án giữa các vai trò
+ * dùng chung trình duyệt. */
+export async function fetchExamById(id, teacherId) {
+  if (teacherId) {
+    const local = getExamById(id)
+    if (local) return local
+  }
   try {
-    const res = await fetch(`/api/exams/${id}`)
+    const qs = teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : ''
+    const res = await fetch(`/api/exams/${id}${qs}`)
     if (!res.ok) return null
     const exam = await res.json()
-    saveExam(exam)
+    if (teacherId) saveExam(exam)
     return exam
   } catch {
     return null
@@ -190,8 +196,8 @@ export async function submitResult(examId, { studentName, studentId, answers, sc
 }
 
 /** Giáo viên lấy danh sách bài nộp */
-export async function getSubmissions(examId) {
-  const res = await fetch(`/api/exams/${examId}/submissions`)
+export async function getSubmissions(examId, teacherId) {
+  const res = await fetch(`/api/exams/${examId}/submissions?teacherId=${encodeURIComponent(teacherId || '')}`)
   if (!res.ok) throw new Error('Không thể lấy kết quả')
   return res.json()
 }
