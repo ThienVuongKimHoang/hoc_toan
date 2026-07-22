@@ -1506,8 +1506,11 @@ async def api_auth_google(request: Request):
         # Email đã tồn tại nhưng chưa liên kết Google → liên kết
         db.update_user(user["id"], {"google_id": google_id, "avatar": avatar})
 
-    # 4. Trả về user (bỏ password) kèm session token
-    return _issue_session(user)
+    # 4. Trả về user (bỏ password) kèm session token — tài khoản Google chưa có
+    # khối lớp thì báo cho client biết để hỏi thêm họ tên + lớp trước khi vào trang chủ
+    result = _issue_session(user)
+    result["needsProfile"] = user.get("role") in ("khach", "hoc_sinh") and not user.get("grade")
+    return result
 
 
 
@@ -1551,6 +1554,28 @@ async def api_get_me(user: dict = Depends(require_auth)):
     """Thông tin user hiện tại — suy ra từ session token, không còn nhận userId
     tự khai từ client (trước đây cho phép xem profile của bất kỳ ai)."""
     return user
+
+
+@app.put("/api/auth/profile")
+async def api_update_profile(request: Request, user: dict = Depends(require_auth)):
+    """Người dùng tự cập nhật hồ sơ của mình (họ tên, khối lớp) — dùng để hoàn
+    tất thông tin ngay sau khi đăng nhập bằng Google, vốn chỉ có sẵn tên."""
+    body = await request.json()
+    fields = {}
+    if "name" in body:
+        name = (body.get("name") or "").strip()
+        if not name:
+            return JSONResponse({"error": "Vui lòng nhập họ tên."}, status_code=400)
+        fields["name"] = name
+    if "grade" in body:
+        grade = (body.get("grade") or "").strip()
+        fields["grade"] = grade or None
+    if not fields:
+        return JSONResponse({"error": "Không có thông tin để cập nhật."}, status_code=400)
+    updated = db.update_user(user["id"], fields)
+    if not updated:
+        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
+    return updated
 
 
 @app.get("/api/admin/users")

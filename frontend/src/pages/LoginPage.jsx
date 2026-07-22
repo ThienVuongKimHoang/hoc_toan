@@ -27,8 +27,79 @@ function TabBar({ mode, onChange }) {
   )
 }
 
+/* ── Bổ sung hồ sơ sau khi đăng nhập Google (chưa có khối lớp) ── */
+function CompleteProfileModal({ user, onDone }) {
+  const [name, setName] = useState(user.name || '')
+  const [grade, setGrade] = useState(user.grade || '')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!name.trim()) { setError('Vui lòng nhập họ tên.'); return }
+    if (!grade) { setError('Vui lòng chọn cấp độ (khối lớp).'); return }
+    setLoading(true); setError('')
+    try {
+      const res = await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({ name: name.trim(), grade }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Cập nhật thất bại.'); return }
+      onDone({ ...user, ...data, needsProfile: false })
+    } catch {
+      setError('Không thể kết nối server.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: 400 }}>
+        <div className="modal-header">
+          <h2>Hoàn tất hồ sơ</h2>
+        </div>
+        <form onSubmit={handleSubmit} noValidate style={{ padding: '20px 24px 24px' }}>
+          <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0 0 16px' }}>
+            Chào {user.name || 'bạn'} 👋 Cho trung tâm biết thêm để hỗ trợ đúng lộ trình học nhé.
+          </p>
+          <div className="form-group">
+            <label>Họ và tên</label>
+            <div className="input-wrap">
+              <span className="input-icon">👤</span>
+              <input type="text" value={name} autoFocus
+                onChange={e => { setName(e.target.value); setError('') }} autoComplete="name" />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Cấp độ (khối lớp)</label>
+            <div className="input-wrap">
+              <span className="input-icon">🎓</span>
+              <select value={grade}
+                onChange={e => { setGrade(e.target.value); setError('') }}
+                style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none', font: 'inherit', color: 'inherit' }}>
+                <option value="">— Chọn cấp độ —</option>
+                {GRADES.map(g => <option key={g} value={g}>{gradeLabel(g)}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {error && <div className="form-error">⚠️ {error}</div>}
+
+          <button type="submit" className="btn-login" disabled={loading}>
+            {loading && <span className="spin" />}
+            {loading ? 'Đang lưu…' : 'Hoàn tất'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 /* ── Login form ── */
-function LoginForm({ onLogin, onSwitchToRegister }) {
+function LoginForm({ onLogin, onSwitchToRegister, onNeedsProfile }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPwd, setShowPwd] = useState(false)
@@ -68,7 +139,11 @@ function LoginForm({ onLogin, onSwitchToRegister }) {
               return
             }
 
-            onLogin(data)
+            if (data.needsProfile) {
+              onNeedsProfile(data)
+            } else {
+              onLogin(data)
+            }
 
           } catch (err) {
             setError('Không thể kết nối server.')
@@ -293,6 +368,7 @@ function RegisterForm({ onLogin }) {
 /* ── Main page ── */
 function LoginPage({ onLogin, onGoHome }) {
   const [mode, setMode] = useState('login')
+  const [pendingProfileUser, setPendingProfileUser] = useState(null)
 
   return (
     <div className="login-page">
@@ -350,7 +426,7 @@ function LoginPage({ onLogin, onGoHome }) {
             </div>
 
             {mode === 'login'
-              ? <LoginForm onLogin={onLogin} onSwitchToRegister={() => setMode('register')} />
+              ? <LoginForm onLogin={onLogin} onSwitchToRegister={() => setMode('register')} onNeedsProfile={setPendingProfileUser} />
               : <RegisterForm onLogin={onLogin} />
             }
 
@@ -360,6 +436,13 @@ function LoginPage({ onLogin, onGoHome }) {
           </div>
         </div>
       </div>
+
+      {pendingProfileUser && (
+        <CompleteProfileModal
+          user={pendingProfileUser}
+          onDone={(finalUser) => { setPendingProfileUser(null); onLogin(finalUser) }}
+        />
+      )}
     </div>
   )
 }
