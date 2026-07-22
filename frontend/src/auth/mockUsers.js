@@ -63,23 +63,9 @@ export const MOCK_USERS = [
 ]
 
 const REG_KEY = 'hoctoan_registered_users'
-const USER_KEY = 'hoctoan_user'
 
 function getRegistered() {
   try { return JSON.parse(localStorage.getItem(REG_KEY)) || [] } catch { return [] }
-}
-
-/** Token phiên đăng nhập hiện tại (nếu có) — đọc trực tiếp từ localStorage vì
- * store/*.js không giữ state React của user. */
-export function getToken() {
-  try { return JSON.parse(localStorage.getItem(USER_KEY))?.token || null } catch { return null }
-}
-
-/** Gộp header Authorization: Bearer <token> vào request — dùng cho mọi gọi API
- * cần đăng nhập. Không có token thì trả nguyên headers gốc (server sẽ 401). */
-export function authHeaders(extra = {}) {
-  const token = getToken()
-  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra
 }
 
 export function hasTeacherAccess(role) {

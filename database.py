@@ -11,7 +11,7 @@ import hmac as _hmac
 import json
 import os
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -247,16 +247,6 @@ CREATE TABLE IF NOT EXISTS banned_ips (
     banned_by  BIGINT,
     banned_at  TIMESTAMPTZ  DEFAULT NOW()
 );
-
--- Session đăng nhập: token ngẫu nhiên phát khi login/register/google, xác minh
--- danh tính người gọi ở mọi request thay vì tin ID client tự khai.
-CREATE TABLE IF NOT EXISTS sessions (
-    token      VARCHAR(64) PRIMARY KEY,
-    user_id    BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    expires_at TIMESTAMPTZ NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 """
 
 # ── Init + migrate ─────────────────────────────────────────────────────────────
@@ -1178,40 +1168,6 @@ def _user_from_row(row: dict, pwd: bool = False) -> dict:
     if pwd:
         d["password"] = r["password"]
     return d
-
-
-# ── Session đăng nhập (token → user) ──────────────────────────────────────────
-
-def create_session(token: str, user_id, ttl_days: int = 30) -> None:
-    with _C() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO sessions (token, user_id, expires_at) VALUES (%s, %s, %s)",
-                (token, int(user_id), datetime.now(timezone.utc) + timedelta(days=ttl_days)),
-            )
-        conn.commit()
-
-
-def get_session_user(token: str) -> Optional[dict]:
-    """Trả user gắn với token nếu còn hiệu lực, None nếu token sai/hết hạn."""
-    if not token:
-        return None
-    with _C() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
-                SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
-                 WHERE s.token = %s AND s.expires_at > NOW()
-            """, (token,))
-            row = cur.fetchone()
-    return _user_from_row(dict(row)) if row else None
-
-
-def delete_session(token: str) -> None:
-    with _C() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM sessions WHERE token=%s", (token,))
-        conn.commit()
-
 
 def get_user_by_email(email: str, pwd: bool = False) -> Optional[dict]:
     with _C() as conn:
