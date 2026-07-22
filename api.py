@@ -8,14 +8,15 @@ import asyncio
 import copy
 import json
 import os
+import secrets
 import sys
 import tempfile
 import uuid
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 import fitz
-from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -94,6 +95,46 @@ async def _block_banned_ips(request: Request, call_next):
     if _client_ip(request) in BANNED_IPS:
         return JSONResponse({"error": "Địa chỉ IP của bạn đã bị cấm truy cập."}, status_code=403)
     return await call_next(request)
+
+
+@app.exception_handler(HTTPException)
+async def _http_exception_handler(request: Request, exc: HTTPException):
+    """Giữ đúng format lỗi hiện tại của app ({"error": ...}) thay vì {"detail": ...}
+    mặc định của FastAPI, để các đoạn frontend đọc err.error không cần đổi."""
+    return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
+
+
+# ── Xác thực: session token thay cho teacherId/studentId/viewerId client tự khai ──
+
+SESSION_TTL_DAYS = 30
+
+
+async def get_current_user(request: Request) -> Optional[dict]:
+    """Người gọi đã đăng nhập (nếu có) — suy ra từ header Authorization: Bearer <token>.
+    Trả None nếu không có/token sai/hết hạn — dùng cho route vẫn cho phép ẩn danh."""
+    auth = request.headers.get("authorization") or ""
+    if not auth.lower().startswith("bearer "):
+        return None
+    return db.get_session_user(auth[7:].strip())
+
+
+async def require_auth(user: Optional[dict] = Depends(get_current_user)) -> dict:
+    """Bắt buộc đã đăng nhập — 401 nếu thiếu/hết hạn token."""
+    if not user:
+        raise HTTPException(401, "Chưa đăng nhập hoặc phiên đã hết hạn.")
+    return user
+
+
+async def require_admin(user: dict = Depends(require_auth)) -> dict:
+    if user.get("role") not in ("admin", "super_admin"):
+        raise HTTPException(403, "Không có quyền truy cập.")
+    return user
+
+
+async def require_super_admin(user: dict = Depends(require_auth)) -> dict:
+    if user.get("role") != "super_admin":
+        raise HTTPException(403, "Chỉ super_admin mới có quyền này.")
+    return user
 
 
 @app.get("/api/security/check-ip")
@@ -604,11 +645,11 @@ def _strip_answers(exam: dict) -> dict:
 
 
 @app.post("/api/exams/{exam_id}")
-async def upsert_exam(exam_id: str, request: Request):
+async def upsert_exam(exam_id: str, request: Request, caller: dict = Depends(require_auth)):
     """Lưu hoặc cập nhật một đề thi lên server. Nếu đáp án đổi → chấm lại bài đã nộp."""
     body = await request.json()
     existing = db.get_exam(exam_id) or {}
-    caller_id = body.get("teacherId")
+    caller_id = caller["id"]
     if not existing:
         class_id = body.get("classId")
         if not class_id:
@@ -634,15 +675,17 @@ async def upsert_exam(exam_id: str, request: Request):
 
 
 @app.get("/api/exams/{exam_id}")
-async def get_exam(exam_id: str, teacherId: str = None):
-    """Lấy đề thi theo ID (không trả về submissions).
-    Ẩn đáp án đúng khỏi response trừ khi người gọi là giáo viên sở hữu đề, hoặc
-    đề đang bật chế độ luyện tập (practiceSettings.enabled — nơi đáp án được
-    cố ý hiển thị ngay sau mỗi câu, đã có mật khẩu/lịch riêng ở practice-verify)."""
+async def get_exam(exam_id: str, caller: Optional[dict] = Depends(get_current_user)):
+    """Lấy đề thi theo ID (không trả về submissions). Route công khai (học sinh
+    làm bài/xem đề qua link không cần đăng nhập). Ẩn đáp án đúng khỏi response
+    trừ khi người gọi là giáo viên sở hữu đề (suy từ session token, không còn
+    tự khai), hoặc đề đang bật chế độ luyện tập (practiceSettings.enabled — nơi
+    đáp án được cố ý hiển thị ngay sau mỗi câu, đã có mật khẩu/lịch riêng ở
+    practice-verify)."""
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
-    is_owner = _can_manage_exam(exam, teacherId)
+    is_owner = _can_manage_exam(exam, caller["id"] if caller else None)
     practice_open = bool((exam.get("practiceSettings") or {}).get("enabled"))
     if not is_owner and not practice_open:
         exam = _strip_answers(exam)
@@ -650,14 +693,14 @@ async def get_exam(exam_id: str, teacherId: str = None):
 
 
 @app.delete("/api/exams/{exam_id}")
-async def delete_exam_endpoint(exam_id: str, teacherId: str = None):
+async def delete_exam_endpoint(exam_id: str, caller: dict = Depends(require_auth)):
     """Giáo viên xóa đề thi. (Trước đây route này không tồn tại nên nút xóa
     chỉ xóa localStorage — đề 'sống lại' khi mở máy khác.)
     Kèm dọn các lần giao bài trong lớp đang trỏ vào đề này."""
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
-    if not _can_manage_exam(exam, teacherId):
+    if not _can_manage_exam(exam, caller["id"]):
         return JSONResponse({"error": "Không có quyền xóa đề thi này"}, status_code=403)
     if not db.delete_exam(exam_id):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
@@ -724,8 +767,10 @@ def _exam_assignment(cls_id, exam_id, asgn_id=None):
 
 
 @app.post("/api/exams/{exam_id}/submit")
-async def submit_exam(exam_id: str, request: Request):
-    """Học sinh nộp bài thi."""
+async def submit_exam(exam_id: str, request: Request, caller: Optional[dict] = Depends(get_current_user)):
+    """Học sinh nộp bài thi. Route công khai (luyện tập/đề public không cần đăng
+    nhập) — nhưng khi nộp QUA LỚP và có đăng nhập, danh tính lấy từ session token
+    (không tin studentId client tự khai) để tránh học sinh mạo danh bạn cùng lớp."""
     body = await request.json()
     exam = db.get_exam(exam_id)
     if not exam:
@@ -737,11 +782,12 @@ async def submit_exam(exam_id: str, request: Request):
     asgn_id      = body.get("assignmentId") or None
     max_attempts = None
     legacy_owner = None
+    student_id   = caller["id"] if (caller and cls_id) else body.get("studentId")
     if cls_id:
         cls, asgn, legacy_owner = _exam_assignment(cls_id, exam_id, asgn_id)
         if not cls:
             return JSONResponse({"error": "Lớp học không còn tồn tại."}, status_code=403)
-        if not _is_class_member(cls, body.get("studentId")):
+        if not _is_class_member(cls, student_id):
             return JSONResponse(
                 {"error": "Bạn không (còn) thuộc lớp này nên không thể nộp bài qua lớp."},
                 status_code=403)
@@ -775,7 +821,7 @@ async def submit_exam(exam_id: str, request: Request):
         "timeSpent":   body.get("timeSpent"),   # giây làm bài
         "violationCount": body.get("violationCount"),   # số lần vi phạm khóa màn hình
         "studentName":  body.get("studentName", "Ẩn danh"),
-        "studentId":    body.get("studentId"),
+        "studentId":    student_id,
         "answers":      answers,
         "score":        score,
         "maxScore":     max_score,
@@ -796,12 +842,12 @@ async def submit_exam(exam_id: str, request: Request):
 
 
 @app.get("/api/exams/{exam_id}/submissions")
-async def get_submissions(exam_id: str, teacherId: str = None):
+async def get_submissions(exam_id: str, caller: dict = Depends(require_auth)):
     """Giáo viên xem danh sách bài nộp."""
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
-    if not _can_manage_exam(exam, teacherId):
+    if not _can_manage_exam(exam, caller["id"]):
         return JSONResponse({"error": "Không có quyền xem bài nộp của đề này"}, status_code=403)
     subs = db.get_submissions(exam_id)
     return {
@@ -813,7 +859,7 @@ async def get_submissions(exam_id: str, teacherId: str = None):
 
 
 @app.post("/api/exams/{exam_id}/submissions/{sub_id}/grade")
-async def grade_essay_submission(exam_id: str, sub_id: str, request: Request):
+async def grade_essay_submission(exam_id: str, sub_id: str, request: Request, caller: dict = Depends(require_auth)):
     """Giáo viên chấm tay câu tự luận (TỰ LUẬN) cho một bài nộp.
     body: { manualScores: { "TL_1": 1.5, ... } }. Điểm mỗi câu bị kẹp trong [0, điểm tối đa của câu].
     Điểm tổng = điểm tự động (trắc nghiệm/trả lời ngắn) + tổng điểm tự luận."""
@@ -822,7 +868,7 @@ async def grade_essay_submission(exam_id: str, sub_id: str, request: Request):
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
-    if not _can_manage_exam(exam, body.get("teacherId")):
+    if not _can_manage_exam(exam, caller["id"]):
         return JSONResponse({"error": "Không có quyền chấm đề thi này"}, status_code=403)
 
     # Điểm tối đa hợp lệ theo từng câu tự luận
@@ -849,12 +895,12 @@ async def grade_essay_submission(exam_id: str, sub_id: str, request: Request):
 
 
 @app.delete("/api/exams/{exam_id}/submissions/{sub_id}")
-async def delete_one_submission(exam_id: str, sub_id: str, teacherId: str = None):
+async def delete_one_submission(exam_id: str, sub_id: str, caller: dict = Depends(require_auth)):
     """Giáo viên xóa MỘT bài nộp (một lần làm) theo id — dùng cho link công khai."""
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
-    if not _can_manage_exam(exam, teacherId):
+    if not _can_manage_exam(exam, caller["id"]):
         return JSONResponse({"error": "Không có quyền xóa bài nộp của đề này"}, status_code=403)
     if not db.delete_submission(sub_id):
         return JSONResponse({"error": "Không tìm thấy bài nộp"}, status_code=404)
@@ -862,23 +908,22 @@ async def delete_one_submission(exam_id: str, sub_id: str, teacherId: str = None
 
 
 @app.post("/api/exams/{exam_id}/submissions/delete-student")
-async def delete_student_submissions(exam_id: str, request: Request):
+async def delete_student_submissions(exam_id: str, request: Request, caller: dict = Depends(require_auth)):
     """Giáo viên xóa TẤT CẢ bài làm của một học sinh cho đề này.
     Truyền classId để giới hạn trong một lớp; bỏ trống = bài nộp qua link công khai."""
     body = await request.json()
     student_id = body.get("studentId")
     class_id   = body.get("classId") or None
     asgn_id    = body.get("assignmentId") or None
-    teacher_id = body.get("teacherId")
     if student_id is None:
         return JSONResponse({"error": "Thiếu studentId"}, status_code=400)
     if class_id:
         cls = db.get_class(class_id)
-        if not cls or not _is_class_teacher(cls, teacher_id):
+        if not cls or not _is_class_teacher(cls, caller["id"]):
             return JSONResponse({"error": "Không có quyền xóa bài nộp trong lớp này"}, status_code=403)
     else:
         exam = db.get_exam(exam_id)
-        if not exam or not _can_manage_exam(exam, teacher_id):
+        if not exam or not _can_manage_exam(exam, caller["id"]):
             return JSONResponse({"error": "Không có quyền xóa bài nộp của đề này"}, status_code=403)
     # Bài nộp cũ (chưa gắn assignment_id) chỉ bị xóa kèm khi xóa từ lần giao bài
     # sớm nhất — khớp với cách chúng được hiển thị.
@@ -893,12 +938,12 @@ async def delete_student_submissions(exam_id: str, request: Request):
 
 
 @app.post("/api/exams/{exam_id}/reveal")
-async def reveal_results(exam_id: str, teacherId: str = None):
+async def reveal_results(exam_id: str, caller: dict = Depends(require_auth)):
     """Giáo viên công bố kết quả."""
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
-    if not _can_manage_exam(exam, teacherId):
+    if not _can_manage_exam(exam, caller["id"]):
         return JSONResponse({"error": "Không có quyền công bố kết quả đề này"}, status_code=403)
     if not db.update_exam_field(exam_id, "resultsRevealed", True):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
@@ -906,12 +951,12 @@ async def reveal_results(exam_id: str, teacherId: str = None):
 
 
 @app.post("/api/exams/{exam_id}/hide-results")
-async def hide_results_endpoint(exam_id: str, teacherId: str = None):
+async def hide_results_endpoint(exam_id: str, caller: dict = Depends(require_auth)):
     """Giáo viên ẩn kết quả lại."""
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
-    if not _can_manage_exam(exam, teacherId):
+    if not _can_manage_exam(exam, caller["id"]):
         return JSONResponse({"error": "Không có quyền ẩn kết quả đề này"}, status_code=403)
     if not db.update_exam_field(exam_id, "resultsRevealed", False):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
@@ -919,13 +964,13 @@ async def hide_results_endpoint(exam_id: str, teacherId: str = None):
 
 
 @app.post("/api/exams/{exam_id}/toggle-public")
-async def toggle_public(exam_id: str, request: Request):
+async def toggle_public(exam_id: str, request: Request, caller: dict = Depends(require_auth)):
     """Giáo viên bật/tắt chế độ công khai đề thi."""
     body = await request.json()
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
-    if not _can_manage_exam(exam, body.get("teacherId")):
+    if not _can_manage_exam(exam, caller["id"]):
         return JSONResponse({"error": "Không có quyền đổi chế độ công khai đề này"}, status_code=403)
     val = bool(body.get("isPublic", False))
     if not db.update_exam_field(exam_id, "isPublic", val):
@@ -987,13 +1032,13 @@ async def get_public_exams():
 
 
 @app.post("/api/exams/{exam_id}/practice-settings")
-async def save_practice_settings(exam_id: str, request: Request):
+async def save_practice_settings(exam_id: str, request: Request, caller: dict = Depends(require_auth)):
     """Giáo viên lưu cài đặt chế độ luyện tập."""
     body = await request.json()
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
-    if not _can_manage_exam(exam, body.get("teacherId")):
+    if not _can_manage_exam(exam, caller["id"]):
         return JSONResponse({"error": "Không có quyền sửa cài đặt luyện tập đề này"}, status_code=403)
     ps = {
         "enabled":   bool(body.get("enabled", False)),
@@ -1056,7 +1101,7 @@ async def verify_practice_password(exam_id: str, request: Request):
 # ─── Super Admin endpoints ────────────────────────────────────────────────────
 
 @app.get("/api/admin/stats")
-async def admin_stats():
+async def admin_stats(caller: dict = Depends(require_admin)):
     """Thống kê tổng quan cho super admin."""
     import psutil
     data = db.load_exams()
@@ -1110,23 +1155,20 @@ async def admin_stats():
 
 
 @app.get("/api/admin/exams")
-async def admin_all_exams():
+async def admin_all_exams(caller: dict = Depends(require_admin)):
     """Danh sách tất cả đề thi (kèm submission count) cho super admin."""
     return db.load_exams_meta()
 
 
 @app.get("/api/my-exams")
-async def my_exams(userId: str = ""):
-    """Đề thi do một giáo viên tạo (metadata, không kèm sections). Nguồn chuẩn
-    cho trang 'Đề thi của tôi' và modal giao đề — không phụ thuộc localStorage."""
-    uid = str(userId)
-    if not uid:
-        return []
-    return db.load_exams_by_creator(uid)
+async def my_exams(caller: dict = Depends(require_auth)):
+    """Đề thi do giáo viên đang đăng nhập tạo (metadata, không kèm sections).
+    Nguồn chuẩn cho trang 'Đề thi của tôi' và modal giao đề."""
+    return db.load_exams_by_creator(str(caller["id"]))
 
 
 @app.delete("/api/admin/exams/{exam_id}")
-async def admin_delete_exam(exam_id: str):
+async def admin_delete_exam(exam_id: str, caller: dict = Depends(require_admin)):
     """Super admin xoá đề thi."""
     if not db.delete_exam(exam_id):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
@@ -1134,7 +1176,7 @@ async def admin_delete_exam(exam_id: str):
 
 
 @app.post("/api/admin/exams/{exam_id}/feature")
-async def admin_feature_exam(exam_id: str, request: Request):
+async def admin_feature_exam(exam_id: str, request: Request, caller: dict = Depends(require_admin)):
     """Super admin đánh dấu/bỏ đánh dấu đề thi nổi bật."""
     body = await request.json()
     val = bool(body.get("featured", False))
@@ -1144,13 +1186,13 @@ async def admin_feature_exam(exam_id: str, request: Request):
 
 
 @app.get("/api/admin/config")
-async def admin_get_config():
+async def admin_get_config(caller: dict = Depends(require_admin)):
     """Lấy cấu hình hệ thống."""
     return db.load_config()
 
 
 @app.post("/api/admin/config")
-async def admin_save_config(request: Request):
+async def admin_save_config(request: Request, caller: dict = Depends(require_admin)):
     """Lưu cấu hình hệ thống."""
     body = await request.json()
     cfg = db.load_config()
@@ -1268,7 +1310,7 @@ async def get_site_content():
 
 
 @app.post("/api/site-content")
-async def save_site_content(request: Request):
+async def save_site_content(request: Request, caller: dict = Depends(require_admin)):
     """Super admin lưu nội dung trang chủ."""
     body = await request.json()
     db.save_config({"site_content": body})
@@ -1297,7 +1339,7 @@ async def site_register(request: Request):
 
 
 @app.post("/api/admin/super-admins")
-async def create_super_admin(request: Request):
+async def create_super_admin(request: Request, caller: dict = Depends(require_super_admin)):
     """Tạo tài khoản super_admin mới hoặc nâng cấp user hiện có."""
     body     = await request.json()
     email    = (body.get("email") or "").strip().lower()
@@ -1330,13 +1372,13 @@ async def create_super_admin(request: Request):
 
 
 @app.get("/api/admin/super-admins")
-async def list_super_admins():
+async def list_super_admins(caller: dict = Depends(require_super_admin)):
     """Danh sách tất cả super_admin."""
     return db.get_super_admins()
 
 
 @app.delete("/api/admin/super-admins/{user_id}")
-async def remove_super_admin(user_id: str):
+async def remove_super_admin(user_id: str, caller: dict = Depends(require_super_admin)):
     """Hạ cấp super_admin xuống giao_vien."""
     updated = db.set_super_admin(user_id, enable=False)
     if not updated:
@@ -1344,20 +1386,9 @@ async def remove_super_admin(user_id: str):
     return {"ok": True, "user": updated}
 
 
-def _require_super_admin(viewer_id: str):
-    """Trả về JSONResponse 403 nếu viewer_id không phải super_admin, ngược lại None."""
-    viewer = db.get_user_by_id(viewer_id) if viewer_id else None
-    if (viewer or {}).get("role") != "super_admin":
-        return JSONResponse({"error": "Chỉ super_admin mới có quyền này."}, status_code=403)
-    return None
-
-
 @app.get("/api/admin/login-attempts")
-async def admin_login_attempts(viewerId: str = None):
+async def admin_login_attempts(caller: dict = Depends(require_super_admin)):
     """Danh sách IP có lịch sử đăng nhập sai + IP đang bị cấm, cho super_admin theo dõi."""
-    denied = _require_super_admin(viewerId)
-    if denied:
-        return denied
     return {
         "attempts": db.list_login_attempts(),
         "banned":   db.list_banned_ips(),
@@ -1365,27 +1396,21 @@ async def admin_login_attempts(viewerId: str = None):
 
 
 @app.post("/api/admin/banned-ips")
-async def admin_ban_ip(request: Request):
+async def admin_ban_ip(request: Request, caller: dict = Depends(require_super_admin)):
     """Super_admin cấm thẳng một địa chỉ IP truy cập toàn bộ hệ thống."""
     body = await request.json()
-    denied = _require_super_admin(body.get("viewerId"))
-    if denied:
-        return denied
     ip = (body.get("ip") or "").strip()
     if not ip:
         return JSONResponse({"error": "Thiếu địa chỉ IP."}, status_code=400)
     reason = (body.get("reason") or "").strip()
-    db.ban_ip(ip, reason=reason, banned_by=body.get("viewerId"))
+    db.ban_ip(ip, reason=reason, banned_by=caller["id"])
     BANNED_IPS.add(ip)
     return {"ok": True, "ip": ip}
 
 
 @app.delete("/api/admin/banned-ips/{ip}")
-async def admin_unban_ip(ip: str, viewerId: str = None):
+async def admin_unban_ip(ip: str, caller: dict = Depends(require_super_admin)):
     """Super_admin gỡ cấm một địa chỉ IP."""
-    denied = _require_super_admin(viewerId)
-    if denied:
-        return denied
     db.unban_ip(ip)
     BANNED_IPS.discard(ip)
     return {"ok": True, "ip": ip}
@@ -1395,6 +1420,14 @@ async def admin_unban_ip(ip: str, viewerId: str = None):
 
 
 # ─── User management ──────────────────────────────────────────────────────────
+
+
+def _issue_session(user: dict) -> dict:
+    """Tạo session mới cho user vừa đăng nhập/đăng ký — trả object user (không
+    password) kèm field `token` mà client phải gửi lại qua Authorization header."""
+    token = secrets.token_urlsafe(32)
+    db.create_session(token, user["id"], SESSION_TTL_DAYS)
+    return {**{k: v for k, v in user.items() if k != "password"}, "token": token}
 
 
 @app.post("/api/auth/login")
@@ -1430,7 +1463,7 @@ async def api_login(request: Request):
             db.update_user_password(str(user["id"]), db.hash_password(password))
         except Exception:
             pass
-    return {k: v for k, v in user.items() if k != "password"}
+    return _issue_session(user)
 
 
 GOOGLE_CLIENT_ID = "397583765451-5i31p5rc3dk9ug7ld4c0qpd8nclu3d1g.apps.googleusercontent.com"
@@ -1472,8 +1505,8 @@ async def api_auth_google(request: Request):
         # Email đã tồn tại nhưng chưa liên kết Google → liên kết
         db.update_user(user["id"], {"google_id": google_id, "avatar": avatar})
 
-    # 4. Trả về user (bỏ password)
-    return {k: v for k, v in user.items() if k != "password"}
+    # 4. Trả về user (bỏ password) kèm session token
+    return _issue_session(user)
 
 
 
@@ -1498,29 +1531,42 @@ async def api_register(request: Request):
         "grade":        (body.get("grade") or "").strip() or None,   # cấp độ (khối lớp)
         "isRegistered": True,
     }
-    return db.add_user(new_user)
+    user = db.add_user(new_user)
+    return _issue_session(user)
+
+
+@app.post("/api/auth/logout")
+async def api_logout(request: Request):
+    """Đăng xuất: huỷ session hiện tại. Luôn trả ok — logout không có token
+    hợp lệ (đã hết hạn/đã xoá rồi) không phải lỗi cần báo cho client."""
+    auth = request.headers.get("authorization") or ""
+    if auth.lower().startswith("bearer "):
+        db.delete_session(auth[7:].strip())
+    return {"ok": True}
+
+
 @app.get("/api/auth/me")
-async def api_get_me(userId: str):
-    """Lấy thông tin user mới nhất từ DB (để sync role sau khi admin thay đổi)."""
-    user = db.get_user_by_id(userId)
-    if not user:
-        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
-    return {k: v for k, v in user.items() if k != "password"}
+async def api_get_me(user: dict = Depends(require_auth)):
+    """Thông tin user hiện tại — suy ra từ session token, không còn nhận userId
+    tự khai từ client (trước đây cho phép xem profile của bất kỳ ai)."""
+    return user
+
 
 @app.get("/api/admin/users")
-async def admin_list_users():
+async def admin_list_users(caller: dict = Depends(require_admin)):
     """Admin xem toàn bộ người dùng (không trả password)."""
     return db.load_users()
 
 
 @app.get("/api/users/search")
-async def search_users(q: str = "", role: str = "", grade: str = ""):
-    """Tìm kiếm người dùng theo query, role & cấp độ (grade)."""
+async def search_users(q: str = "", role: str = "", grade: str = "", caller: dict = Depends(require_auth)):
+    """Tìm kiếm người dùng theo query, role & cấp độ (grade) — giáo viên dùng để
+    thêm học sinh/đồng giáo viên vào lớp, nên chỉ cần đăng nhập, không cần admin."""
     return db.search_users(q=q.strip(), role=role, grade=grade)
 
 
 @app.put("/api/admin/users/{user_id}/role")
-async def admin_update_user_role(user_id: str, request: Request):
+async def admin_update_user_role(user_id: str, request: Request, caller: dict = Depends(require_super_admin)):
     body     = await request.json()
     new_role = body.get("role")
     if not new_role:
@@ -1532,7 +1578,7 @@ async def admin_update_user_role(user_id: str, request: Request):
 
 
 @app.put("/api/admin/users/{user_id}/grade")
-async def admin_update_user_grade(user_id: str, request: Request):
+async def admin_update_user_grade(user_id: str, request: Request, caller: dict = Depends(require_admin)):
     """Admin sửa cấp độ lớp (khối) của người dùng. Gửi grade='' hoặc null để bỏ."""
     body = await request.json()
     raw = body.get("grade")
@@ -1544,14 +1590,14 @@ async def admin_update_user_grade(user_id: str, request: Request):
 
 
 @app.delete("/api/admin/users/{user_id}")
-async def admin_delete_user(user_id: str):
+async def admin_delete_user(user_id: str, caller: dict = Depends(require_admin)):
     if not db.delete_user(user_id):
         return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
     return {"ok": True}
 
 
 @app.put("/api/admin/users/{user_id}/password")
-async def admin_reset_user_password(user_id: str, request: Request):
+async def admin_reset_user_password(user_id: str, request: Request, caller: dict = Depends(require_super_admin)):
     body         = await request.json()
     new_password = (body.get("password") or "").strip()
     if len(new_password) < 6:
@@ -1628,7 +1674,7 @@ def _migrate_split_multisubject_classes() -> None:
 
 
 @app.post("/api/classes")
-async def create_class_endpoint(request: Request):
+async def create_class_endpoint(request: Request, caller: dict = Depends(require_auth)):
     body = await request.json()
     cid = _cls_id()
     # Mỗi lớp = 1 khối + ĐÚNG 1 môn. Nhận `subject`; chấp nhận `subjects[]` từ client
@@ -1644,7 +1690,7 @@ async def create_class_endpoint(request: Request):
         "subject": subject,                                # môn của lớp (toan|ly|hoa|anh|van|khac)
         "grade": (body.get("grade") or "").strip() or None,  # cấp độ (khối lớp)
         "subjects": subjects,                              # = [subject] để tương thích helper lọc
-        "teacherId": body.get("teacherId"), "teacherName": body.get("teacherName", ""),
+        "teacherId": caller["id"], "teacherName": caller.get("name", ""),
         "createdAt": body.get("createdAt", _now_iso()),
         "joinCode": _join_code(), "joinPassword": body.get("joinPassword") or None,
         "members": [], "assignments": [], "documents": [],
@@ -1678,29 +1724,32 @@ def _sanitize_class(cls: dict) -> dict:
 
 @app.get("/api/classes")
 async def list_classes(teacherId: str = None, studentId: str = None, email: str = None,
-                        viewAll: bool = False, viewerId: str = None):
+                        viewAll: bool = False, viewerId: str = None,
+                        caller: dict = Depends(require_auth)):
+    """teacherId/studentId/viewerId chỉ còn dùng như CỜ chọn chế độ xem (giá trị bị
+    bỏ qua) — danh tính thật luôn lấy từ session, tránh client tự khai ID của người khác."""
     if viewAll:
         # Chỉ super_admin mới được xem TOÀN BỘ lớp trong hệ thống.
-        viewer = db.get_user_by_id(viewerId) if viewerId is not None else None
-        if (viewer or {}).get("role") != "super_admin":
+        if caller.get("role") != "super_admin":
             return []
         return db.list_all_classes()
     if teacherId:
-        return db.list_classes_by_teacher_or_coteacher(teacherId)
+        return db.list_classes_by_teacher_or_coteacher(caller["id"])
     if studentId:
-        return [_sanitize_class(c) for c in db.list_classes_by_student(studentId, email)]
+        return [_sanitize_class(c) for c in db.list_classes_by_student(caller["id"], caller.get("email"))]
     return []
 
 
 @app.get("/api/students/pending")
-async def student_pending(studentId: str = None, email: str = None):
+async def student_pending(caller: dict = Depends(require_auth)):
     """
     Danh sách bài/đề HỌC SINH CHƯA HOÀN THÀNH, tính trực tiếp từ DB:
       - Bài tập nộp file: chưa nộp & chưa quá hạn.
       - Đề thi: chưa làm lần nào (đếm bài nộp của ĐỀ theo lớp) & chưa đóng.
+    Luôn tính cho CHÍNH người gọi (suy từ session), không nhận studentId tự khai.
     """
-    if not studentId:
-        return {"count": 0, "items": []}
+    student_id = caller["id"]
+    email = caller.get("email")
 
     now = datetime.now(_tz.utc)
 
@@ -1712,7 +1761,7 @@ async def student_pending(studentId: str = None, email: str = None):
 
     items = []
     subs_cache = {}   # examId -> submissions (tránh query lặp)
-    for cls in db.list_classes_by_student(studentId, email):
+    for cls in db.list_classes_by_student(student_id, email):
         cid = cls.get("id")
         asgns = cls.get("assignments", [])
         for a in asgns:
@@ -1727,14 +1776,14 @@ async def student_pending(studentId: str = None, email: str = None):
                 legacy_owner = _legacy_owner_id(_asgn_candidates(cls, eid))
                 used = sum(
                     1 for s in subs_cache[eid]
-                    if str(s.get("studentId")) == str(studentId)
+                    if str(s.get("studentId")) == str(student_id)
                     and str(s.get("classId")) == str(cid)
                     and _sub_belongs_to_asgn(s, a.get("id"), legacy_owner)
                 )
                 if used > 0:
                     continue                                  # đã làm rồi
             else:
-                if any(str(s.get("studentId")) == str(studentId) for s in a.get("submissions", [])):
+                if any(str(s.get("studentId")) == str(student_id) for s in a.get("submissions", [])):
                     continue                                  # đã nộp file
                 if close and now > close:
                     continue                                  # quá hạn
@@ -1753,11 +1802,11 @@ async def student_pending(studentId: str = None, email: str = None):
 
 # Must come before /{cls_id} to avoid ambiguity
 @app.post("/api/classes/join")
-async def join_class_by_code(request: Request):
+async def join_class_by_code(request: Request, caller: dict = Depends(require_auth)):
     body = await request.json()
     code = (body.get("code") or "").strip().upper()
     password = body.get("password") or None
-    uid = body.get("userId"); uname = body.get("userName", ""); uemail = body.get("userEmail", "")
+    uid, uname, uemail = caller["id"], caller.get("name", ""), caller.get("email", "")
     cls = db.get_class_by_code(code)
     if not cls:
         return JSONResponse({"error": "Mã lớp không hợp lệ."}, status_code=404)
@@ -1768,8 +1817,7 @@ async def join_class_by_code(request: Request):
     em = (uemail or "").strip().lower()
 
     # Chặn theo cấp độ: chỉ học sinh cùng cấp độ với lớp mới được tham gia.
-    stu = db.get_user_by_id(uid) if uid is not None else None
-    stu_grade = (stu or {}).get("grade")
+    stu_grade = caller.get("grade")
     if cls.get("grade") and stu_grade and str(stu_grade) != str(cls.get("grade")):
         return JSONResponse(
             {"error": f"Lớp này dành cho học sinh cấp độ Lớp {cls.get('grade')}. Bạn không thể tham gia."},
@@ -1829,12 +1877,12 @@ async def get_class_endpoint(cls_id: str):
 
 
 @app.put("/api/classes/{cls_id}")
-async def update_class_endpoint(cls_id: str, request: Request):
+async def update_class_endpoint(cls_id: str, request: Request, caller: dict = Depends(require_auth)):
     body = await request.json()
     cls0 = db.get_class(cls_id)
     if not cls0:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    if not _is_class_teacher(cls0, body.get("teacherId")):
+    if not _is_class_teacher(cls0, caller["id"]):
         return JSONResponse({"error": "Không có quyền sửa lớp này"}, status_code=403)
 
     def mutate(cls):
@@ -1856,11 +1904,11 @@ async def update_class_endpoint(cls_id: str, request: Request):
 
 
 @app.delete("/api/classes/{cls_id}")
-async def delete_class_endpoint(cls_id: str, teacherId: str = None):
+async def delete_class_endpoint(cls_id: str, caller: dict = Depends(require_auth)):
     cls0 = db.get_class(cls_id)
     if not cls0:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    if not _is_class_teacher(cls0, teacherId):
+    if not _is_class_teacher(cls0, caller["id"]):
         return JSONResponse({"error": "Không có quyền xóa lớp này"}, status_code=403)
     if not db.delete_class(cls_id):
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
@@ -1868,7 +1916,7 @@ async def delete_class_endpoint(cls_id: str, teacherId: str = None):
 
 
 @app.post("/api/classes/{cls_id}/members")
-async def add_member_endpoint(cls_id: str, request: Request):
+async def add_member_endpoint(cls_id: str, request: Request, caller: dict = Depends(require_auth)):
     body = await request.json()
     em = (body.get("email") or "").strip().lower()
     subject = body.get("subject") or None   # thêm học sinh THEO MÔN
@@ -1878,6 +1926,8 @@ async def add_member_endpoint(cls_id: str, request: Request):
     cls0 = db.get_class(cls_id)
     if cls0 is None:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, caller["id"]):
+        return JSONResponse({"error": "Không có quyền thêm học sinh vào lớp này"}, status_code=403)
     if cls0.get("grade"):
         stu = db.get_user_by_id(body.get("userId")) if body.get("userId") is not None else None
         stu_grade = (stu or {}).get("grade")
@@ -1908,9 +1958,15 @@ async def add_member_endpoint(cls_id: str, request: Request):
 
 
 @app.delete("/api/classes/{cls_id}/members/{user_id}")
-async def remove_member_endpoint(cls_id: str, user_id: str, subject: str = None):
+async def remove_member_endpoint(cls_id: str, user_id: str, subject: str = None,
+                                  caller: dict = Depends(require_auth)):
     """Xoá học sinh khỏi lớp. Có `subject` → chỉ xoá khỏi MÔN đó;
     không có → xoá khỏi toàn bộ lớp (mọi môn)."""
+    cls0 = db.get_class(cls_id)
+    if cls0 is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, caller["id"]):
+        return JSONResponse({"error": "Không có quyền xóa thành viên khỏi lớp này"}, status_code=403)
     subj = subject or None
     def mutate(cls):
         def keep(m):
@@ -1926,7 +1982,7 @@ async def remove_member_endpoint(cls_id: str, user_id: str, subject: str = None)
 
 
 @app.post("/api/classes/{cls_id}/co-teachers")
-async def add_co_teacher_endpoint(cls_id: str, request: Request):
+async def add_co_teacher_endpoint(cls_id: str, request: Request, caller: dict = Depends(require_admin)):
     body = await request.json()
     uid = body.get("userId")
 
@@ -1944,7 +2000,7 @@ async def add_co_teacher_endpoint(cls_id: str, request: Request):
 
 
 @app.delete("/api/classes/{cls_id}/co-teachers/{user_id}")
-async def remove_co_teacher_endpoint(cls_id: str, user_id: str):
+async def remove_co_teacher_endpoint(cls_id: str, user_id: str, caller: dict = Depends(require_admin)):
     def mutate(cls):
         cls["coTeachers"] = [ct for ct in cls.get("coTeachers", []) if str(ct.get("userId")) != user_id]
     cls = db.update_class_atomic(cls_id, mutate)
@@ -1953,25 +2009,25 @@ async def remove_co_teacher_endpoint(cls_id: str, user_id: str):
 
 
 @app.get("/api/classes/{cls_id}/exams")
-async def class_exams_endpoint(cls_id: str, teacherId: str = None):
+async def class_exams_endpoint(cls_id: str, teacherId: str = None, caller: dict = Depends(require_auth)):
     """Đề thi thuộc lớp này — mọi giáo viên (chính hoặc co-teacher) của lớp tạo
     ra đều nằm trong danh sách; lớp khác không thấy. Dùng cho tab 'Đề thi' và
     dropdown 'Giao đề thi'."""
     cls = db.get_class(cls_id)
     if not cls:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    if not _is_class_teacher(cls, teacherId):
+    if not _is_class_teacher(cls, caller["id"]):
         return JSONResponse({"error": "Không có quyền xem đề thi của lớp này"}, status_code=403)
     return db.load_exams_by_class(cls_id)
 
 
 @app.post("/api/classes/{cls_id}/assignments")
-async def add_assignment_endpoint(cls_id: str, request: Request):
+async def add_assignment_endpoint(cls_id: str, request: Request, caller: dict = Depends(require_auth)):
     body = await request.json()
     cls_check = db.get_class(cls_id)
     if not cls_check:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    if not _is_class_teacher(cls_check, body.get("teacherId")):
+    if not _is_class_teacher(cls_check, caller["id"]):
         return JSONResponse({"error": "Không có quyền giao bài/đề trong lớp này"}, status_code=403)
     exam_id   = body.get("examId") or None
     open_time = body.get("openTime")
@@ -2031,12 +2087,16 @@ async def add_assignment_endpoint(cls_id: str, request: Request):
 
 @app.get("/api/classes/{cls_id}/exam-window/{exam_id}")
 async def get_class_exam_window(cls_id: str, exam_id: str, studentId: str = None,
-                                email: str = None, assignmentId: str = None):
+                                email: str = None, assignmentId: str = None,
+                                caller: Optional[dict] = Depends(get_current_user)):
     """
     Trả về cửa sổ thời gian (mở/đóng) của một ĐỀ THI được giao trong lớp,
     để trang làm bài giới hạn theo lớp thay vì theo link công khai.
     assignmentId có giá trị → lấy đúng lần giao bài đó (một đề có thể giao nhiều lần).
+    Có đăng nhập → danh tính lấy từ session (bỏ qua studentId/email tự khai).
     """
+    if caller:
+        studentId, email = caller["id"], caller.get("email")
     cls = db.get_class(cls_id)
     if not cls:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
@@ -2108,7 +2168,12 @@ async def get_class_exam_window(cls_id: str, exam_id: str, studentId: str = None
 
 
 @app.delete("/api/classes/{cls_id}/assignments/{asgn_id}")
-async def delete_assignment_endpoint(cls_id: str, asgn_id: str):
+async def delete_assignment_endpoint(cls_id: str, asgn_id: str, caller: dict = Depends(require_auth)):
+    cls0 = db.get_class(cls_id)
+    if cls0 is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, caller["id"]):
+        return JSONResponse({"error": "Không có quyền xóa bài tập của lớp này"}, status_code=403)
     def mutate(cls):
         cls["assignments"] = [a for a in cls.get("assignments", []) if a["id"] != asgn_id]
     cls = db.update_class_atomic(cls_id, mutate)
@@ -2117,7 +2182,8 @@ async def delete_assignment_endpoint(cls_id: str, asgn_id: str):
 
 
 @app.post("/api/classes/{cls_id}/assignments/{asgn_id}/submit")
-async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request):
+async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request,
+                                      caller: dict = Depends(require_auth)):
     body = await request.json()
     err = {}
 
@@ -2139,9 +2205,9 @@ async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request
         except Exception:
             pass
         subs = target.get("submissions", [])
-        sub = {"studentId": body.get("studentId"), "studentName": body.get("studentName", ""),
+        sub = {"studentId": caller["id"], "studentName": caller.get("name", ""),
                "submittedAt": _now_iso(), "files": body.get("files", []), "note": body.get("note", "")}
-        idx = next((j for j, s in enumerate(subs) if str(s.get("studentId")) == str(body.get("studentId"))), None)
+        idx = next((j for j, s in enumerate(subs) if str(s.get("studentId")) == str(caller["id"])), None)
         if idx is not None: subs[idx] = sub
         else: subs.append(sub)
         target["submissions"] = subs
@@ -2156,10 +2222,11 @@ async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request
 
 
 @app.get("/api/classes/{cls_id}/assignments/{asgn_id}/submissions")
-async def get_assignment_submissions(cls_id: str, asgn_id: str, teacherId: str = None):
+async def get_assignment_submissions(cls_id: str, asgn_id: str, teacherId: str = None,
+                                      caller: dict = Depends(require_auth)):
     cls = db.get_class(cls_id)
     if not cls: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    if not _is_class_teacher(cls, teacherId):
+    if not _is_class_teacher(cls, caller["id"]):
         return JSONResponse({"error": "Không có quyền xem bài nộp của lớp này"}, status_code=403)
     for a in cls.get("assignments", []):
         if a["id"] == asgn_id:
@@ -2168,8 +2235,14 @@ async def get_assignment_submissions(cls_id: str, asgn_id: str, teacherId: str =
 
 
 @app.delete("/api/classes/{cls_id}/assignments/{asgn_id}/submissions/{student_id}")
-async def delete_assignment_submission(cls_id: str, asgn_id: str, student_id: str):
+async def delete_assignment_submission(cls_id: str, asgn_id: str, student_id: str,
+                                        caller: dict = Depends(require_auth)):
     """Giáo viên xóa bài nộp (file) của một học sinh cho bài tập trong lớp."""
+    cls0 = db.get_class(cls_id)
+    if cls0 is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, caller["id"]):
+        return JSONResponse({"error": "Không có quyền xóa bài nộp của lớp này"}, status_code=403)
     err = {}
 
     def mutate(cls):
@@ -2234,8 +2307,14 @@ def _grade_submission_sync(cls_id: str, asgn_id: str, student_id: str) -> dict:
 
 
 @app.post("/api/classes/{cls_id}/assignments/{asgn_id}/grade/{student_id}")
-async def grade_submission_endpoint(cls_id: str, asgn_id: str, student_id: str):
+async def grade_submission_endpoint(cls_id: str, asgn_id: str, student_id: str,
+                                     caller: dict = Depends(require_auth)):
     """Chấm (hoặc chấm lại) bài IELTS Writing của một học sinh."""
+    cls0 = db.get_class(cls_id)
+    if cls0 is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, caller["id"]):
+        return JSONResponse({"error": "Không có quyền chấm bài của lớp này"}, status_code=403)
     _save_ai_grade(cls_id, asgn_id, student_id, {"status": "pending"})
     grade = await asyncio.to_thread(_grade_submission_sync, cls_id, asgn_id, student_id)
     if grade.get("status") == "error":
@@ -2282,8 +2361,13 @@ async def grades_summary_endpoint(cls_id: str, asgn_id: str):
 
 
 @app.post("/api/classes/{cls_id}/documents")
-async def add_class_doc_endpoint(cls_id: str, request: Request):
+async def add_class_doc_endpoint(cls_id: str, request: Request, caller: dict = Depends(require_auth)):
     body = await request.json()
+    cls0 = db.get_class(cls_id)
+    if cls0 is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, caller["id"]):
+        return JSONResponse({"error": "Không có quyền thêm tài liệu vào lớp này"}, status_code=403)
 
     def mutate(cls):
         cls.setdefault("documents", []).append(body)
@@ -2293,7 +2377,12 @@ async def add_class_doc_endpoint(cls_id: str, request: Request):
 
 
 @app.delete("/api/classes/{cls_id}/documents/{doc_id}")
-async def remove_class_doc_endpoint(cls_id: str, doc_id: str):
+async def remove_class_doc_endpoint(cls_id: str, doc_id: str, caller: dict = Depends(require_auth)):
+    cls0 = db.get_class(cls_id)
+    if cls0 is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, caller["id"]):
+        return JSONResponse({"error": "Không có quyền xóa tài liệu của lớp này"}, status_code=403)
     def mutate(cls):
         cls["documents"] = [d for d in cls.get("documents", []) if d.get("id") != doc_id]
     cls = db.update_class_atomic(cls_id, mutate)
@@ -2302,10 +2391,16 @@ async def remove_class_doc_endpoint(cls_id: str, doc_id: str):
 
 
 @app.patch("/api/classes/{cls_id}/documents/{doc_id}")
-async def update_class_doc_endpoint(cls_id: str, doc_id: str, request: Request):
+async def update_class_doc_endpoint(cls_id: str, doc_id: str, request: Request,
+                                     caller: dict = Depends(require_auth)):
     """Cập nhật một vài field của 1 document đã có (vd: order khi kéo-thả sắp xếp lại
     các bước đáp án giải) — không phải thay thế toàn bộ document."""
     body = await request.json()
+    cls0 = db.get_class(cls_id)
+    if cls0 is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, caller["id"]):
+        return JSONResponse({"error": "Không có quyền sửa tài liệu của lớp này"}, status_code=403)
 
     def mutate(cls):
         for d in cls.get("documents", []):
@@ -2318,34 +2413,33 @@ async def update_class_doc_endpoint(cls_id: str, doc_id: str, request: Request):
 
 
 @app.get("/api/notifications")
-async def get_notifications_endpoint(userId: str):
-    return db.get_notifs_for_user(userId)
+async def get_notifications_endpoint(caller: dict = Depends(require_auth)):
+    return db.get_notifs_for_user(str(caller["id"]))
 
 
 @app.post("/api/notifications/read")
-async def mark_notification_read(request: Request):
+async def mark_notification_read(request: Request, caller: dict = Depends(require_auth)):
     body = await request.json()
     db.mark_notif_read(body.get("id", ""))
     return {"ok": True}
 
 
 @app.post("/api/notifications/read-all")
-async def mark_all_read(request: Request):
-    body = await request.json()
-    db.mark_all_notifs_read(str(body.get("userId", "")))
+async def mark_all_read(caller: dict = Depends(require_auth)):
+    db.mark_all_notifs_read(str(caller["id"]))
     return {"ok": True}
 
 
 # ─── Điểm danh + Tiến độ học sinh + Báo cáo tổng hợp ──────────────────────────
 
 @app.post("/api/classes/{cls_id}/attendance")
-async def submit_attendance_endpoint(cls_id: str, request: Request):
+async def submit_attendance_endpoint(cls_id: str, request: Request, caller: dict = Depends(require_auth)):
     body = await request.json()
     cls = db.get_class(cls_id)
     if not cls:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    teacher_id = body.get("teacherId")
-    if not teacher_id or not _is_class_teacher(cls, teacher_id):
+    teacher_id = caller["id"]
+    if not _is_class_teacher(cls, teacher_id):
         return JSONResponse({"error": "Không có quyền điểm danh lớp này"}, status_code=403)
     date = (body.get("date") or "").strip()
     if not date:
@@ -2385,11 +2479,11 @@ async def attendance_history_endpoint(cls_id: str, limit: int = 30):
 
 
 @app.get("/api/classes/{cls_id}/progress")
-async def class_progress_endpoint(cls_id: str, teacherId: str = None):
+async def class_progress_endpoint(cls_id: str, caller: dict = Depends(require_auth)):
     cls = db.get_class(cls_id)
     if not cls:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
-    if not teacherId or not _is_class_teacher(cls, teacherId):
+    if not _is_class_teacher(cls, caller["id"]):
         return JSONResponse({"error": "Không có quyền xem tiến độ lớp này"}, status_code=403)
 
     attend_stats = db.class_attendance_stats(cls_id)
@@ -2454,10 +2548,8 @@ async def class_progress_endpoint(cls_id: str, teacherId: str = None):
 
 @app.get("/api/admin/reports")
 async def admin_reports_endpoint(type: str = None, classId: str = None,
-                                  limit: int = 50, offset: int = 0, viewerId: str = None):
-    viewer = db.get_user_by_id(viewerId) if viewerId is not None else None
-    if (viewer or {}).get("role") != "super_admin":
-        return JSONResponse({"error": "Không có quyền truy cập"}, status_code=403)
+                                  limit: int = 50, offset: int = 0,
+                                  caller: dict = Depends(require_super_admin)):
     return db.list_reports(type_=type, class_id=classId, limit=limit, offset=offset)
 
 

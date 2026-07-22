@@ -1,10 +1,12 @@
+import { authHeaders } from '../auth/mockUsers.js'
+
 const API = '/api/classes'
 
 /** Lưu điểm danh 1 buổi (ghi đè nếu đã điểm danh ngày đó rồi). */
 export async function submitAttendance(classId, { teacherId, date, records }) {
   const res = await fetch(`${API}/${classId}/attendance`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ teacherId, date, records: records || [] }),
   })
   const data = await res.json().catch(() => ({}))
@@ -28,7 +30,7 @@ export async function getAttendanceHistory(classId, limit = 30) {
 
 /** Tiến độ học tập của từng học sinh trong lớp (chuyên cần, nộp bài, điểm theo thời gian). Chỉ GV xem được. */
 export async function getClassProgress(classId, teacherId) {
-  const res = await fetch(`${API}/${classId}/progress?teacherId=${teacherId}`)
+  const res = await fetch(`${API}/${classId}/progress?teacherId=${teacherId}`, { headers: authHeaders() })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Không lấy được tiến độ lớp')
   return data
@@ -39,7 +41,7 @@ export async function getReports({ type = '', classId = '', limit = 50, offset =
   const qs = new URLSearchParams({ limit: String(limit), offset: String(offset), viewerId: String(viewerId) })
   if (type) qs.set('type', type)
   if (classId) qs.set('classId', classId)
-  const res = await fetch(`/api/admin/reports?${qs}`)
+  const res = await fetch(`/api/admin/reports?${qs}`, { headers: authHeaders() })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Không lấy được báo cáo')
   return data

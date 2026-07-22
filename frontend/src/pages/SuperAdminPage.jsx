@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ROLE_META } from '../auth/mockUsers.js'
+import { ROLE_META, authHeaders } from '../auth/mockUsers.js'
 import { getAllExams } from '../store/examStore.js'
 import { GRADES, gradeLabel } from '../components/SubjectBadge.jsx'
 import SiteContentTab from './SiteContentTab.jsx'
@@ -98,7 +98,7 @@ function StatsTab() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/admin/stats')
+      const r = await fetch('/api/admin/stats', { headers: authHeaders() })
       if (r.ok) setStats(await r.json())
     } catch {}
     setLoading(false)
@@ -182,7 +182,7 @@ function ExamsTab() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/admin/exams')
+      const r = await fetch('/api/admin/exams', { headers: authHeaders() })
       if (r.ok) setExams(await r.json())
     } catch {}
     setLoading(false)
@@ -204,7 +204,7 @@ function ExamsTab() {
 
   const handleDelete = async (id) => {
     try {
-      await fetch(`/api/admin/exams/${id}`, { method: 'DELETE' })
+      await fetch(`/api/admin/exams/${id}`, { method: 'DELETE', headers: authHeaders() })
       setExams(prev => prev.filter(e => e.id !== id))
     } catch {}
     setDeleting(null)
@@ -215,7 +215,7 @@ function ExamsTab() {
     try {
       await fetch(`/api/admin/exams/${id}/feature`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ featured: !current }),
       })
       setExams(prev => prev.map(e => e.id === id ? { ...e, featured: !current } : e))
@@ -228,7 +228,7 @@ function ExamsTab() {
     try {
       await fetch(`/api/exams/${id}/toggle-public`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ isPublic: !current }),
       })
       setExams(prev => prev.map(e => e.id === id ? { ...e, isPublic: !current } : e))
@@ -512,7 +512,7 @@ function UsersTab() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/admin/users')
+      const r = await fetch('/api/admin/users', { headers: authHeaders() })
       if (r.ok) setUsers(await r.json())
     } catch {}
     setLoading(false)
@@ -545,7 +545,7 @@ function UsersTab() {
       if (!prevUser || prevUser.role !== newRole) {
         await fetch(`/api/admin/users/${userId}/role`, {
           method:  'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body:    JSON.stringify({ role: newRole }),
         })
       }
@@ -553,7 +553,7 @@ function UsersTab() {
       if (!prevUser || (prevUser.grade || null) !== normGrade) {
         await fetch(`/api/admin/users/${userId}/grade`, {
           method:  'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body:    JSON.stringify({ grade: normGrade }),
         })
       }
@@ -569,7 +569,7 @@ function UsersTab() {
 
   const handleDelete = async (userId) => {
     try {
-      await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' })
+      await fetch(`/api/admin/users/${userId}`, { method: 'DELETE', headers: authHeaders() })
       setUsers(prev => prev.filter(u => String(u.id) !== String(userId)))
     } catch {}
     setDeleting(null)
@@ -579,7 +579,7 @@ function UsersTab() {
     try {
       await fetch(`/api/admin/users/${userId}/password`, {
         method:  'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body:    JSON.stringify({ password: pwd }),
       })
     } catch {}
@@ -726,7 +726,7 @@ function ConfigTab() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/admin/config')
+    fetch('/api/admin/config', { headers: authHeaders() })
       .then(r => r.ok ? r.json() : {})
       .then(data => { setCfg({ announcement: '', maxExamsPerUser: 50, allowPublicExams: true, ...data }); setLoading(false) })
       .catch(() => { setCfg({ announcement: '', maxExamsPerUser: 50, allowPublicExams: true }); setLoading(false) })
@@ -737,7 +737,7 @@ function ConfigTab() {
     try {
       await fetch('/api/admin/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(cfg),
       })
       setSaved(true)
@@ -885,7 +885,7 @@ function SecurityTab({ viewerId }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await fetch(`/api/admin/login-attempts?viewerId=${encodeURIComponent(viewerId)}`)
+      const r = await fetch(`/api/admin/login-attempts?viewerId=${encodeURIComponent(viewerId)}`, { headers: authHeaders() })
       if (r.ok) {
         const data = await r.json()
         setAttempts(data.attempts || [])
@@ -901,7 +901,7 @@ function SecurityTab({ viewerId }) {
     try {
       await fetch('/api/admin/banned-ips', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body:    JSON.stringify({ viewerId, ip, reason }),
       })
       await load()
@@ -913,6 +913,7 @@ function SecurityTab({ viewerId }) {
     try {
       await fetch(`/api/admin/banned-ips/${encodeURIComponent(ip)}?viewerId=${encodeURIComponent(viewerId)}`, {
         method: 'DELETE',
+        headers: authHeaders(),
       })
       await load()
     } catch {}

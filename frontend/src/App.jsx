@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ROLES, hasAdminAccess, hasTeacherAccess } from './auth/mockUsers.js'
+import { ROLES, hasAdminAccess, hasTeacherAccess, authHeaders, getToken } from './auth/mockUsers.js'
 import Header from './components/Header.jsx'
 import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
@@ -141,7 +141,7 @@ export default function App() {
 
     const syncRole = async () => {
       try {
-        const r = await fetch(`/api/auth/me?userId=${user.id}`)
+        const r = await fetch('/api/auth/me', { headers: authHeaders() })
         if (!r.ok) return
         const fresh = await r.json()
         if (fresh.error) return
@@ -192,7 +192,11 @@ export default function App() {
       setView('home')
     }
   }
-  const handleLogout = () => { setUser(null); localStorage.removeItem(USER_KEY); setView('home') }
+  const handleLogout = () => {
+    const token = getToken()
+    if (token) fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() }).catch(() => {})
+    setUser(null); localStorage.removeItem(USER_KEY); setView('home')
+  }
 
   /* ── Routing ── */
   const [view, setView] = useState(() => parseHash().view)

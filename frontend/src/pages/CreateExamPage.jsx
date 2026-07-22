@@ -4,6 +4,7 @@ import ProcessingStep   from '../components/create-exam/ProcessingStep.jsx'
 import ReviewStep       from '../components/create-exam/ReviewStep.jsx'
 import ExamPreviewModal from '../components/ExamPreviewModal.jsx'
 import { createExam, updateExam } from '../store/examStore.js'
+import { authHeaders } from '../auth/mockUsers.js'
 
 /* ── Step configs ── */
 const UPLOAD_STEPS = [
@@ -126,7 +127,7 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
   const syncToServer = (exam) =>
     fetch(`/api/exams/${exam.id}`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body:    JSON.stringify({ ...exam, teacherId: user.id }),
     }).then(r => r.json()).catch(err => { console.warn(err); return null })
 
