@@ -397,7 +397,9 @@ export default function QuestionCard({ q, index, examMode = false, onAnswerChang
         </span>
         {points && <span className="q-points">{points}</span>}
         {q.has_figure && <span className="q-badge img-badge">📷 Hình</span>}
-        {isEnglish && !hasAnswer && <span className="q-badge no-ans-badge">—</span>}
+        {/* Badge "chưa có đáp án" chỉ đáng tin khi có đáp án để soi (giáo viên sửa đề / luyện tập) —
+            lúc thi thật server đã ẩn q.answer nên hasAnswer luôn false, không phản ánh đúng thực tế. */}
+        {!examMode && isEnglish && !hasAnswer && <span className="q-badge no-ans-badge">—</span>}
         <span className="q-toggle">{expanded ? '▲' : '▼'}</span>
       </div>
 
