@@ -1,6 +1,7 @@
 // SiteContentTab.jsx — Super admin chỉnh sửa nội dung trang chủ (thiết kế 1a)
 import React, { useEffect, useRef, useState } from 'react'
 import { SCHEDULE_COLORS } from './HomePage.jsx'
+import { authHeaders } from '../auth/mockUsers.js'
 
 /* Lịch học: mỗi dòng trong ô = "Tên lớp @màu" (màu: xanhla, vang, cam, tim, do, xanhduong, hong, trang) */
 const cellToText = entries => (entries || []).map(e => {
@@ -173,7 +174,7 @@ export default function SiteContentTab() {
     setSaving(true); setSaved(false)
     try {
       const r = await fetch('/api/site-content', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(c),
+        method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(c),
       })
       if (!r.ok) throw new Error()
       setSaved(true)

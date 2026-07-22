@@ -1,15 +1,17 @@
+import { authHeaders } from '../auth/mockUsers.js'
+
 const API = '/api/classes'
 const REG_KEY = 'hoctoan_registered_users'
 
 export async function getClassesByTeacher(teacherId) {
-  const res = await fetch(`${API}?teacherId=${teacherId}`)
+  const res = await fetch(`${API}?teacherId=${teacherId}`, { headers: authHeaders() })
   if (!res.ok) return []
   return res.json()
 }
 
 /** Toàn bộ lớp trong hệ thống — chỉ super_admin mới được trả về dữ liệu. */
 export async function getAllClasses(viewerId) {
-  const res = await fetch(`${API}?viewAll=true&viewerId=${viewerId}`)
+  const res = await fetch(`${API}?viewAll=true&viewerId=${viewerId}`, { headers: authHeaders() })
   if (!res.ok) return []
   return res.json()
 }
@@ -17,7 +19,7 @@ export async function getAllClasses(viewerId) {
 export async function getClassesByStudent(studentId, email) {
   const qs = new URLSearchParams({ studentId: String(studentId) })
   if (email) qs.set('email', email)
-  const res = await fetch(`${API}?${qs}`)
+  const res = await fetch(`${API}?${qs}`, { headers: authHeaders() })
   if (!res.ok) return []
   return res.json()
 }
@@ -31,7 +33,7 @@ export async function getClassById(classId) {
 export async function createClass({ name, description, grade, subject, teacherId, teacherName, joinPassword, schedule, settings }) {
   const res = await fetch(API, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       name, description,
       grade: grade || null,
@@ -50,7 +52,7 @@ export async function createClass({ name, description, grade, subject, teacherId
 export async function updateClassInfo(classId, updates, teacherId) {
   const res = await fetch(`${API}/${classId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ ...updates, teacherId }),
   })
   if (!res.ok) throw new Error('Cập nhật thất bại')
@@ -58,7 +60,7 @@ export async function updateClassInfo(classId, updates, teacherId) {
 }
 
 export async function deleteClass(classId, teacherId) {
-  const res = await fetch(`${API}/${classId}?teacherId=${encodeURIComponent(teacherId || '')}`, { method: 'DELETE' })
+  const res = await fetch(`${API}/${classId}?teacherId=${encodeURIComponent(teacherId || '')}`, { method: 'DELETE', headers: authHeaders() })
   if (!res.ok) throw new Error('Xóa lớp thất bại')
   return res.json()
 }
@@ -74,7 +76,7 @@ export async function getClassByCode(code) {
 export async function joinClassByCode(code, password, user) {
   const res = await fetch(`${API}/join`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       code, password: password || null,
       userId: user.id, userName: user.name, userEmail: user.email,
@@ -88,7 +90,7 @@ export async function joinClassByCode(code, password, user) {
 export async function addMemberToClass(classId, student, subject = null) {
   const res = await fetch(`${API}/${classId}/members`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ userId: student.id, name: student.name, email: student.email, subject: subject || null }),
   })
   const data = await res.json().catch(() => ({}))
@@ -99,7 +101,7 @@ export async function addMemberToClass(classId, student, subject = null) {
 /** Xoá học sinh khỏi lớp; có subject → chỉ xoá khỏi môn đó. */
 export async function removeMemberFromClass(classId, userId, subject = null) {
   const qs = subject ? `?subject=${encodeURIComponent(subject)}` : ''
-  const res = await fetch(`${API}/${classId}/members/${userId}${qs}`, { method: 'DELETE' })
+  const res = await fetch(`${API}/${classId}/members/${userId}${qs}`, { method: 'DELETE', headers: authHeaders() })
   if (!res.ok) throw new Error('Xóa thành viên thất bại')
   return res.json()
 }
@@ -108,7 +110,7 @@ export async function removeMemberFromClass(classId, userId, subject = null) {
 export async function addCoTeacher(classId, teacher) {
   const res = await fetch(`${API}/${classId}/co-teachers`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ userId: teacher.id, name: teacher.name }),
   })
   const data = await res.json().catch(() => ({}))
@@ -117,7 +119,7 @@ export async function addCoTeacher(classId, teacher) {
 }
 
 export async function removeCoTeacher(classId, userId) {
-  const res = await fetch(`${API}/${classId}/co-teachers/${userId}`, { method: 'DELETE' })
+  const res = await fetch(`${API}/${classId}/co-teachers/${userId}`, { method: 'DELETE', headers: authHeaders() })
   if (!res.ok) throw new Error('Xóa giáo viên thất bại')
   return res.json()
 }
@@ -125,7 +127,7 @@ export async function removeCoTeacher(classId, userId) {
 export async function addAssignment(classId, { title, description, subject, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, attachments, writingTask, teacherId }) {
   const res = await fetch(`${API}/${classId}/assignments`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       title, description, subject: subject || null, examId: examId || null,
       dueDate, openTime: openTime || null, closeTime: closeTime || null,
@@ -144,9 +146,7 @@ export async function addAssignment(classId, { title, description, subject, exam
 
 /** Bài/đề học sinh CHƯA hoàn thành (tính từ DB, đề thi xét theo bài nộp của đề). */
 export async function getPendingForStudent(studentId, email) {
-  const qs = new URLSearchParams({ studentId: String(studentId) })
-  if (email) qs.set('email', email)
-  const res = await fetch(`/api/students/pending?${qs}`)
+  const res = await fetch('/api/students/pending', { headers: authHeaders() })
   if (!res.ok) return { count: 0, items: [] }
   return res.json()
 }
@@ -159,13 +159,13 @@ export async function getExamWindow(classId, examId, studentId, email, assignmen
   if (email) qs.set('email', email)
   if (assignmentId) qs.set('assignmentId', String(assignmentId))
   const s = qs.toString()
-  const res = await fetch(`${API}/${classId}/exam-window/${examId}${s ? `?${s}` : ''}`)
+  const res = await fetch(`${API}/${classId}/exam-window/${examId}${s ? `?${s}` : ''}`, { headers: authHeaders() })
   if (!res.ok) return null
   return res.json()
 }
 
 export async function removeAssignment(classId, assignmentId) {
-  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}`, { method: 'DELETE' })
+  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}`, { method: 'DELETE', headers: authHeaders() })
   if (!res.ok) throw new Error('Xóa bài tập thất bại')
   return res.json()
 }
@@ -173,7 +173,7 @@ export async function removeAssignment(classId, assignmentId) {
 export async function submitAssignment(classId, assignmentId, { studentId, studentName, files, note }) {
   const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/submit`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ studentId, studentName, files: files || [], note: note || '' }),
   })
   if (!res.ok) throw new Error('Nộp bài thất bại')
@@ -181,13 +181,13 @@ export async function submitAssignment(classId, assignmentId, { studentId, stude
 }
 
 export async function deleteAssignmentSubmission(classId, assignmentId, studentId) {
-  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/submissions/${studentId}`, { method: 'DELETE' })
+  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/submissions/${studentId}`, { method: 'DELETE', headers: authHeaders() })
   if (!res.ok) throw new Error('Xóa bài làm thất bại')
   return res.json()
 }
 
 export async function getSubmissions(classId, assignmentId, teacherId) {
-  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/submissions?teacherId=${encodeURIComponent(teacherId || '')}`)
+  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/submissions?teacherId=${encodeURIComponent(teacherId || '')}`, { headers: authHeaders() })
   if (!res.ok) throw new Error('Không lấy được bài nộp')
   return res.json()
 }
@@ -195,7 +195,7 @@ export async function getSubmissions(classId, assignmentId, teacherId) {
 export async function addDocument(classId, doc) {
   const res = await fetch(`${API}/${classId}/documents`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(doc),
   })
   if (!res.ok) throw new Error('Thêm tài liệu thất bại')
@@ -203,14 +203,14 @@ export async function addDocument(classId, doc) {
 }
 
 export async function removeDocument(classId, docId) {
-  await fetch(`${API}/${classId}/documents/${docId}`, { method: 'DELETE' })
+  await fetch(`${API}/${classId}/documents/${docId}`, { method: 'DELETE', headers: authHeaders() })
 }
 
 /** Cập nhật 1 vài field của document đã có (vd: order khi sắp xếp lại các bước đáp án giải) */
 export async function updateDocument(classId, docId, updates) {
   const res = await fetch(`${API}/${classId}/documents/${docId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(updates),
   })
   if (!res.ok) throw new Error('Cập nhật tài liệu thất bại')
@@ -219,7 +219,7 @@ export async function updateDocument(classId, docId, updates) {
 
 /** Chấm (hoặc chấm lại) bài IELTS Writing của một học sinh bằng AI */
 export async function gradeSubmission(classId, assignmentId, studentId) {
-  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/grade/${studentId}`, { method: 'POST' })
+  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/grade/${studentId}`, { method: 'POST', headers: authHeaders() })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Chấm bài thất bại')
   return data
@@ -250,7 +250,7 @@ export async function searchStudents(query = '', grade = '') {
   try {
     const params = new URLSearchParams({ role: 'hoc_sinh', q: query })
     if (grade) params.set('grade', grade)
-    const r = await fetch(`/api/users/search?${params}`)
+    const r = await fetch(`/api/users/search?${params}`, { headers: authHeaders() })
     if (r.ok) return r.json()
   } catch {}
   return []
@@ -260,7 +260,7 @@ export async function searchStudents(query = '', grade = '') {
 export async function searchTeachers(query = '') {
   try {
     const params = new URLSearchParams({ role: 'giao_vien', q: query })
-    const r = await fetch(`/api/users/search?${params}`)
+    const r = await fetch(`/api/users/search?${params}`, { headers: authHeaders() })
     if (r.ok) return r.json()
   } catch {}
   return []
