@@ -200,6 +200,7 @@ export default function SiteContentTab() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
           <div><label style={lbl}>Tên trung tâm</label><input style={inp} value={c.info?.name || ''} onChange={e => setInfo('name', e.target.value)} /></div>
           <div><label style={lbl}>Số điện thoại</label><input style={inp} value={c.info?.phone || ''} onChange={e => setInfo('phone', e.target.value)} /></div>
+          <div><label style={lbl}>Số điện thoại 2 (không bắt buộc)</label><input style={inp} value={c.info?.phone2 || ''} onChange={e => setInfo('phone2', e.target.value)} /></div>
           <div><label style={lbl}>Địa chỉ</label><input style={inp} value={c.info?.address || ''} onChange={e => setInfo('address', e.target.value)} /></div>
           <div><label style={lbl}>Link Facebook</label><input style={inp} value={c.info?.fb || ''} onChange={e => setInfo('fb', e.target.value)} /></div>
         </div>

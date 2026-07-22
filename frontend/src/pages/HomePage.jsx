@@ -25,6 +25,8 @@ const BODY = "'Be Vietnam Pro', sans-serif"
 
 // Bấm số điện thoại → mở Zalo của trung tâm
 const telHref = phone => 'https://zalo.me/' + String(phone || '').replace(/\D/g, '')
+// Danh sách số điện thoại đang cấu hình (phone + phone2, bỏ số trống)
+const phoneList = info => [info?.phone, info?.phone2].map(p => String(p || '').trim()).filter(Boolean)
 
 /* ── Icon set (inline SVG, nét đồng nhất — thay cho emoji cấu trúc) ── */
 const Svg = ({ children, size = 20, sw = 1.8, fill = 'none', style }) => (
@@ -289,9 +291,12 @@ function AdvicePopup({ info, onClose }) {
         <p className="hp-modal-text">
           Gọi ngay cho trung tâm để được <strong>kiểm tra đầu vào và tư vấn miễn phí</strong> lộ trình phù hợp nhất.
         </p>
-        <a href={telHref(info.phone)} target="_blank" rel="noopener noreferrer" className="hp-btn hp-btn--primary hp-modal-cta">
-          <IconPhone size={18} />{info.phone}
-        </a>
+        {phoneList(info).map((p, i) => (
+          <a key={p} href={telHref(p)} target="_blank" rel="noopener noreferrer"
+            className="hp-btn hp-btn--primary hp-modal-cta" style={i > 0 ? { marginTop: 10 } : undefined}>
+            <IconPhone size={18} />{p}
+          </a>
+        ))}
         <div style={{ marginTop: 14 }}>
           <a href="#lienhe" onClick={onClose} className="hp-link" style={{ color: C.badgeText, fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
             Hoặc để lại thông tin, trung tâm gọi lại →
@@ -496,9 +501,11 @@ function Contact({ info, courses }) {
             <a href={`https://www.google.com/maps?q=${encodeURIComponent(info.address || '')}`} target="_blank" rel="noopener noreferrer" className="hp-contact-item hp-link">
               <span className="hp-contact-ico"><IconPin size={19} /></span>{info.address}
             </a>
-            <a href={telHref(info.phone)} target="_blank" rel="noopener noreferrer" className="hp-contact-item hp-link">
-              <span className="hp-contact-ico"><IconPhone size={19} /></span>Hotline: <strong style={{ color: C.accentDark }}>{info.phone}</strong>
-            </a>
+            {phoneList(info).map(p => (
+              <a key={p} href={telHref(p)} target="_blank" rel="noopener noreferrer" className="hp-contact-item hp-link">
+                <span className="hp-contact-ico"><IconPhone size={19} /></span>Hotline: <strong style={{ color: C.accentDark }}>{p}</strong>
+              </a>
+            ))}
             {info.fb && (
               <a href={info.fb} target="_blank" rel="noopener noreferrer" className="hp-contact-item hp-link">
                 <span className="hp-contact-ico"><IconFacebook size={18} /></span>Facebook trung tâm
@@ -564,9 +571,11 @@ function Footer({ info }) {
           {links.map(([href, label]) => <a key={href} href={href} className="hp-link">{label}</a>)}
         </nav>
         <div className="hp-footer-contact">
-          <a href={telHref(info.phone)} target="_blank" rel="noopener noreferrer" className="hp-btn hp-btn--primary hp-footer-cta">
-            <IconPhone size={17} />{info.phone}
-          </a>
+          {phoneList(info).map(p => (
+            <a key={p} href={telHref(p)} target="_blank" rel="noopener noreferrer" className="hp-btn hp-btn--primary hp-footer-cta">
+              <IconPhone size={17} />{p}
+            </a>
+          ))}
           {info.fb && <a href={info.fb} target="_blank" rel="noopener noreferrer" className="hp-link hp-footer-fb"><IconFacebook size={16} />Fanpage</a>}
         </div>
       </div>
@@ -621,9 +630,9 @@ function MessengerChat() {
 
 /* ── Nút liên hệ nổi (Zalo · Gọi) — góc trái, để chừa góc phải cho khung chat Messenger ── */
 function ContactDock({ info }) {
-  const digits = String(info.phone || '').replace(/\D/g, '')
+  const phones = phoneList(info)
+  const digits = String(phones[0] || '').replace(/\D/g, '')
   const zalo = digits ? 'https://zalo.me/' + digits : null
-  const tel = digits ? 'tel:+84' + digits.replace(/^0/, '') : null
 
   return (
     <div className="cd" role="complementary" aria-label="Liên hệ nhanh với trung tâm">
@@ -634,13 +643,16 @@ function ContactDock({ info }) {
           <span className="cd-label">Chat Zalo</span>
         </a>
       )}
-      {tel && (
-        <a className="cd-btn cd-call" href={tel} aria-label={`Gọi ${info.phone}`}>
-          <span className="cd-ring" aria-hidden="true" />
-          <IconPhone size={24} style={{ position: 'relative', zIndex: 1 }} />
-          <span className="cd-label">Gọi ngay</span>
-        </a>
-      )}
+      {phones.map(p => {
+        const d = String(p).replace(/\D/g, '')
+        return (
+          <a key={p} className="cd-btn cd-call" href={'tel:+84' + d.replace(/^0/, '')} aria-label={`Gọi ${p}`}>
+            <span className="cd-ring" aria-hidden="true" />
+            <IconPhone size={24} style={{ position: 'relative', zIndex: 1 }} />
+            <span className="cd-label">Gọi {p}</span>
+          </a>
+        )
+      })}
     </div>
   )
 }

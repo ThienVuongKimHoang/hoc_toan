@@ -142,6 +142,12 @@ export default function App() {
     const syncRole = async () => {
       try {
         const r = await fetch('/api/auth/me', { headers: authHeaders() })
+        if (r.status === 401) {
+          // Phiên đăng nhập cũ (trước khi có session token) hoặc đã hết hạn/bị thu hồi
+          // — đăng xuất để người dùng đăng nhập lại thay vì để mọi API bị 401 âm thầm.
+          handleLogout()
+          return
+        }
         if (!r.ok) return
         const fresh = await r.json()
         if (fresh.error) return

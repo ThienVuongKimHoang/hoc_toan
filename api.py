@@ -1207,6 +1207,7 @@ _SITE_CONTENT_DEFAULT = {
     "info": {
         "name": "Trung tâm Ánh Sáng",
         "phone": "098 532 22 77",
+        "phone2": "",
         "fb": "https://www.facebook.com/toan.ly.hoa.thay.duc.di.an",
         "address": "399/1 Trần Hưng Đạo, Đông Hòa, Dĩ An, Bình Dương",
         "heroTitle": "Học chắc kiến thức, sáng con đường thi cử",
