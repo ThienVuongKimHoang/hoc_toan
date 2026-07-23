@@ -1798,9 +1798,10 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
             const dType = fileType(d)
             return (
               <div key={d.id} className="cm-doc-row" onClick={() => setViewingFile(d)} style={{ cursor: 'pointer' }}>
-                <div className="cm-doc-icon">
+                <div className={dType === 'youtube' ? undefined : 'cm-doc-icon'}
+                  style={dType === 'youtube' ? { width: 44, height: 32, borderRadius: 6, overflow: 'hidden', flexShrink: 0 } : undefined}>
                   {dType === 'youtube'
-                    ? <img src={youtubeThumbnail(d.videoId)} alt="" style={{ width: 32, height: 20, objectFit: 'cover', borderRadius: 4 }} />
+                    ? <img src={youtubeThumbnail(d.videoId)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : IC.file(20)}
                 </div>
                 <div className="cm-doc-info">
