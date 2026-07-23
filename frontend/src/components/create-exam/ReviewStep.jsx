@@ -13,6 +13,10 @@ function isUnanswered(q, sec) {
 }
 
 const MATH_SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III', 'TỰ LUẬN']
+
+// Thang điểm đề thi tốt nghiệp THPT môn Lý/Hóa (Bộ GD&ĐT): Phần I 4.5đ, Phần II 4đ, Phần III 1.5đ
+const GRAD_EXAM_TOTALS = { 'PHẦN I': 4.5, 'PHẦN II': 4, 'PHẦN III': 1.5 }
+
 const SECTION_META = {
   'PHẦN I':    { label: 'Trắc nghiệm',   color: '#2563eb', shortLabel: 'Phần I' },
   'PHẦN II':   { label: 'Đúng / Sai',    color: '#7c3aed', shortLabel: 'Phần II' },
@@ -68,6 +72,45 @@ function InsertRow({ onClick, show }) {
   )
 }
 
+/* ── Editable tổng điểm của phần — điểm/câu tự chia lại theo tổng này ── */
+function SectionTotalEditor({ total, ppq, onChange }) {
+  const [editing, setEditing] = useState(false)
+  const [draft,   setDraft]   = useState('')
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (editing && inputRef.current) { inputRef.current.focus(); inputRef.current.select() }
+  }, [editing])
+
+  const open = () => { setDraft(String(total)); setEditing(true) }
+  const save = () => {
+    const num = parseFloat(draft)
+    if (!isNaN(num) && num >= 0) onChange(num)
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="number" step="0.25" min="0"
+        className="rs-section-total-input"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+      />
+    )
+  }
+
+  return (
+    <span className="rs-section-pts rs-section-pts-edit" onClick={open}
+      title="Click để chỉnh tổng điểm phần — điểm mỗi câu sẽ tự chia lại theo tổng này">
+      Tổng {total}đ ({ppq}đ/câu) <span className="rs-pts-pen">✏</span>
+    </span>
+  )
+}
+
 /* ── Checks whether a mousedown is on the card's drag edge / handle ── */
 function isDragTrigger(e, wrapperEl) {
   // Always allow from the explicit drag handle
@@ -92,6 +135,7 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
   const [activeSection, setActiveSection] = useState(sectionList[0] || 'PHẦN I')
   const [grade,         setGrade]         = useState('thpt')
   const [showMix,       setShowMix]       = useState(false)
+  const [gradExam,      setGradExam]      = useState(false)
   const [sections, setSections] = useState(() => {
     const s = {}
     sectionList.forEach(sec => {
@@ -203,6 +247,37 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
 
   const handleReport = ({ questionNum, section, type }) => {
     addToast(`Đã ghi nhận báo cáo: "${type}"`, 'success')
+  }
+
+  /* ── Tổng điểm phần: chỉnh tay → chia lại điểm/câu theo tổng đó ── */
+  const updateSectionTotal = (sec, total) => {
+    setSections(prev => {
+      const count = prev[sec]?.questions?.length || 0
+      if (!prev[sec] || count === 0) return prev
+      const ppq = Math.round((total / count) * 10000) / 10000
+      return { ...prev, [sec]: { ...prev[sec], points_per_q: ppq } }
+    })
+  }
+
+  /* ── Nhãn "Đề thi tốt nghiệp": áp thang điểm chuẩn Phần I 4.5đ / II 4đ / III 1.5đ ── */
+  const applyGradExamScale = () => {
+    setSections(prev => {
+      const next = { ...prev }
+      for (const sec of Object.keys(GRAD_EXAM_TOTALS)) {
+        const count = prev[sec]?.questions?.length || 0
+        if (!prev[sec] || count === 0) continue
+        const ppq = Math.round((GRAD_EXAM_TOTALS[sec] / count) * 10000) / 10000
+        next[sec] = { ...prev[sec], points_per_q: ppq }
+      }
+      return next
+    })
+    addToast('Đã áp dụng thang điểm tốt nghiệp: Phần I 4.5đ · Phần II 4đ · Phần III 1.5đ', 'success')
+  }
+
+  const toggleGradExam = () => {
+    if (gradExam) { setGradExam(false); return }
+    applyGradExamScale()
+    setGradExam(true)
   }
 
   /* ══════════════════════════════════════════
@@ -342,6 +417,16 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
                   onClick={() => setGrade('thcs')} type="button">THCS</button>
               </div>
             )}
+            {(subject === 'ly' || subject === 'hoa') && isMathExam && (
+              <button
+                type="button"
+                className={`rs-grad-toggle-btn ${gradExam ? 'active' : ''}`}
+                onClick={toggleGradExam}
+                title="Áp dụng thang điểm đề thi tốt nghiệp THPT: Phần I 4.5đ · Phần II 4đ · Phần III 1.5đ"
+              >
+                🎓 Đề thi tốt nghiệp
+              </button>
+            )}
             <button className="rs-mix-btn" type="button" onClick={() => setShowMix(true)}
               title="Tạo đề từ ngân hàng câu hỏi theo chủ đề">
               🎲 Phối đề
@@ -393,9 +478,17 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
       <div className="rs-content">
         <div className="rs-section-header">
           <h2 style={{ color: meta.color }}>{meta.shortLabel} — {meta.label}</h2>
-          <span className="rs-section-pts">
-            {sections[activeSection]?.points_per_q ? `${sections[activeSection].points_per_q}đ / câu` : ''}
-          </span>
+          {sections[activeSection]?.points_per_q && questions.length > 0 ? (
+            <SectionTotalEditor
+              total={Math.round(sections[activeSection].points_per_q * questions.length * 100) / 100}
+              ppq={sections[activeSection].points_per_q}
+              onChange={(total) => updateSectionTotal(activeSection, total)}
+            />
+          ) : (
+            <span className="rs-section-pts">
+              {sections[activeSection]?.points_per_q ? `${sections[activeSection].points_per_q}đ / câu` : ''}
+            </span>
+          )}
         </div>
 
         {activeSection === 'READING' ? (

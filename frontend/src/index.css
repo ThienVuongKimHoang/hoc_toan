@@ -2843,6 +2843,29 @@ button { font-family: inherit; }
 }
 .rs-section-header h2 { font-size: 1rem; font-weight: 700; }
 .rs-section-pts { font-size: 0.8rem; color: #94a3b8; }
+.rs-section-pts-edit {
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px; border-radius: 99px;
+  transition: background 0.12s, color 0.12s;
+  user-select: none;
+}
+.rs-section-pts-edit:hover { background: #f1f5f9; color: #475569; }
+.rs-pts-pen { font-size: 0.65rem; opacity: 0.55; margin-left: 1px; }
+.rs-section-pts-edit:hover .rs-pts-pen { opacity: 0.9; }
+.rs-section-total-input {
+  width: 76px; height: 26px;
+  border: 1.5px solid #2563eb;
+  border-radius: 6px;
+  padding: 0 6px;
+  font-size: 0.8rem; font-weight: 700;
+  color: #1e293b;
+  background: #fff;
+  outline: none;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+.rs-section-total-input::-webkit-inner-spin-button { -webkit-appearance: none; }
 
 .rs-question-list { display: flex; flex-direction: column; gap: 0; margin-bottom: 16px; }
 
@@ -8823,6 +8846,23 @@ button { font-family: inherit; }
   transition: all 0.15s;
 }
 .rs-mix-btn:hover { background: #ede9fe; border-color: #7c3aed; }
+.rs-grad-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  border-radius: 8px;
+  border: 1.5px solid #d9770640;
+  background: #fffbeb;
+  color: #b45309;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.rs-grad-toggle-btn:hover { background: #fef3c7; border-color: #d97706; }
+.rs-grad-toggle-btn.active { background: #d97706; border-color: #d97706; color: #fff; }
 
 /* ═══════════════════════════════════════════════════
    MIX EXAM MODAL
