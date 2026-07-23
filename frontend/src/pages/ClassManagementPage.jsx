@@ -26,6 +26,7 @@ import PracticeSettingsModal from '../components/PracticeSettingsModal.jsx'
 import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
 import SaveCaptureModal from '../components/SaveCaptureModal.jsx'
 import { isExerciseDoc } from '../utils/exerciseDocs.js'
+import { extractYoutubeId, youtubeEmbedUrl, youtubeThumbnail, youtubeWatchUrl } from '../utils/youtube.js'
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, GradePicker, SubjectPicker, gradeLabel } from '../components/SubjectBadge.jsx'
 import { ROLES } from '../auth/mockUsers.js'
 
@@ -94,6 +95,7 @@ const IC = {
 
 /* ─── File type helpers ─── */
 function fileType(f) {
+  if (f.type === 'youtube') return 'youtube'
   const name = (f.name || '').toLowerCase()
   const mime = f.mimeType || ''
   if (/^image\//.test(mime) || /\.(png|jpg|jpeg|gif|webp|svg)$/.test(name)) return 'image'
@@ -121,13 +123,22 @@ function FileViewerModal({ file, onClose }) {
         <div className="fv-header">
           <span className="fv-name">{file.name}</span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <a className="mec-btn" href={file.url} target="_blank" rel="noreferrer" download>
-              {IC.download(14)} Tải xuống
-            </a>
+            {type === 'youtube'
+              ? <a className="mec-btn" href={file.url} target="_blank" rel="noreferrer">{IC.link(14)} Mở trên YouTube</a>
+              : <a className="mec-btn" href={file.url} target="_blank" rel="noreferrer" download>{IC.download(14)} Tải xuống</a>}
             <button className="modal-close" onClick={onClose}>✕</button>
           </div>
         </div>
         <div className="fv-body">
+          {type === 'youtube' && (
+            <iframe
+              src={youtubeEmbedUrl(file.videoId)}
+              title={file.name}
+              style={{ width: '100%', height: '75vh', border: 'none', borderRadius: 8 }}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          )}
           {type === 'image' && <img src={file.url} alt={file.name} style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: 8 }} />}
           {type === 'pdf' && <iframe src={file.url} title={file.name} style={{ width: '100%', height: '75vh', border: 'none', borderRadius: 8 }} />}
           {type === 'audio' && <audio controls src={file.url} style={{ width: '100%', marginTop: 16 }} />}
@@ -193,17 +204,17 @@ function FileDropZone({ onUploaded, uploading, setUploading }) {
 /* ─── File chip (thumbnail/info) ─── */
 function FileChip({ file, onRemove, onView }) {
   const type = fileType(file)
-  const icon = { image: IC.img, audio: IC.audio, video: IC.eye, pdf: IC.file, text: IC.file, other: IC.file }[type] || IC.file
+  const icon = { image: IC.img, audio: IC.audio, video: IC.eye, pdf: IC.file, text: IC.file, other: IC.file, youtube: IC.eye }[type] || IC.file
   const formatSize = (b) => !b ? '' : b < 1024 ? `${b}B` : b < 1048576 ? `${(b / 1024).toFixed(0)}KB` : `${(b / 1048576).toFixed(1)}MB`
   return (
     <div className="file-chip">
-      {type === 'image'
-        ? <img src={file.url} alt="" className="file-chip-thumb" onClick={() => onView(file)} />
+      {type === 'image' || type === 'youtube'
+        ? <img src={type === 'youtube' ? youtubeThumbnail(file.videoId) : file.url} alt="" className="file-chip-thumb" onClick={() => onView(file)} />
         : <div className="file-chip-icon" onClick={() => onView(file)}>{icon(18)}</div>
       }
       <div className="file-chip-info" onClick={() => onView(file)}>
         <div className="file-chip-name">{file.name}</div>
-        <div className="file-chip-size">{formatSize(file.size)}</div>
+        <div className="file-chip-size">{type === 'youtube' ? 'YouTube' : formatSize(file.size)}</div>
       </div>
       {onRemove && <button className="file-chip-del" onClick={() => onRemove(file.id)}>{IC.x(12)}</button>}
     </div>
@@ -785,9 +796,24 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
   const [uploading, setUploading] = useState(false)
   const [viewing, setViewing] = useState(null)
   const [err, setErr] = useState('')
+  const [ytUrl, setYtUrl] = useState('')
+  const [ytErr, setYtErr] = useState('')
 
   const handleUploaded = (files) => setAttachments(prev => [...prev, ...files])
   const removeAttach = (id) => setAttachments(prev => prev.filter(f => f.id !== id))
+  const addYoutubeLink = () => {
+    const videoId = extractYoutubeId(ytUrl)
+    if (!videoId) { setYtErr('Link YouTube không hợp lệ.'); return }
+    setAttachments(prev => [...prev, {
+      id: `yt_${videoId}_${Date.now().toString(36)}`,
+      name: `Video YouTube (${videoId})`,
+      type: 'youtube',
+      videoId,
+      url: youtubeWatchUrl(videoId),
+    }])
+    setYtUrl('')
+    setYtErr('')
+  }
 
   const pickExam = (id) => {
     setExamId(id)
@@ -1002,6 +1028,17 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
                   </div>
                 )}
                 <FileDropZone onUploaded={handleUploaded} uploading={uploading} setUploading={setUploading} />
+
+                <label className="cm-label" style={{ marginTop: 14 }}>🎬 Video YouTube (tuỳ chọn)</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="text" className="cm-input" style={{ flex: 1 }}
+                    placeholder="Dán link video YouTube…"
+                    value={ytUrl}
+                    onChange={e => { setYtUrl(e.target.value); setYtErr('') }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addYoutubeLink() } }} />
+                  <button type="button" className="mec-btn" onClick={addYoutubeLink}>{IC.plus(14)} Thêm</button>
+                </div>
+                {ytErr && <div className="cm-error" style={{ marginTop: 4 }}>{ytErr}</div>}
               </>
             )}
 

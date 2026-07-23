@@ -5,6 +5,7 @@ import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, gradeLabel } from '../c
 import { BandChip, IeltsGradeModal, IeltsStatsModal } from '../components/IeltsGrade.jsx'
 import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
 import { isExerciseDoc } from '../utils/exerciseDocs.js'
+import { youtubeEmbedUrl, youtubeThumbnail } from '../utils/youtube.js'
 
 /* Môn "chính" của lớp (fallback dữ liệu cũ chưa gắn môn) */
 const primarySubject = (cls) => cls?.subject || cls?.subjects?.[0] || null
@@ -62,6 +63,7 @@ const IC = {
 
 /* ─── File type helper ─── */
 function fileType(f) {
+  if (f.type === 'youtube') return 'youtube'
   const name = (f.name || '').toLowerCase(); const mime = f.mimeType || ''
   if (/^image\//.test(mime) || /\.(png|jpg|jpeg|gif|webp|svg)$/.test(name)) return 'image'
   if (mime === 'application/pdf' || name.endsWith('.pdf'))                   return 'pdf'
@@ -84,11 +86,22 @@ function FileViewerModal({ file, onClose }) {
         <div className="fv-header">
           <span className="fv-name">{file.name}</span>
           <div style={{display:'flex',gap:8}}>
-            <a className="mec-btn" href={file.url} target="_blank" rel="noreferrer" download>{IC.download(14)} Tải xuống</a>
+            {type === 'youtube'
+              ? <a className="mec-btn" href={file.url} target="_blank" rel="noreferrer">{IC.link(14)} Mở trên YouTube</a>
+              : <a className="mec-btn" href={file.url} target="_blank" rel="noreferrer" download>{IC.download(14)} Tải xuống</a>}
             <button className="modal-close" onClick={onClose}>✕</button>
           </div>
         </div>
         <div className="fv-body">
+          {type === 'youtube' && (
+            <iframe
+              src={youtubeEmbedUrl(file.videoId)}
+              title={file.name}
+              style={{width:'100%',height:'75vh',border:'none',borderRadius:8}}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          )}
           {type === 'image' && <img src={file.url} alt={file.name} style={{maxWidth:'100%',maxHeight:'75vh',borderRadius:8}} />}
           {type === 'pdf'   && <iframe src={file.url} title={file.name} style={{width:'100%',height:'75vh',border:'none',borderRadius:8}} />}
           {type === 'audio' && <audio controls src={file.url} style={{width:'100%',marginTop:16}} />}
@@ -111,13 +124,13 @@ function FileChip({ file, onRemove, onView }) {
   const formatSize = b => !b ? '' : b < 1048576 ? `${(b/1024).toFixed(0)}KB` : `${(b/1048576).toFixed(1)}MB`
   return (
     <div className="file-chip">
-      {type === 'image'
-        ? <img src={file.url} alt="" className="file-chip-thumb" onClick={() => onView?.(file)} />
+      {type === 'image' || type === 'youtube'
+        ? <img src={type === 'youtube' ? youtubeThumbnail(file.videoId) : file.url} alt="" className="file-chip-thumb" onClick={() => onView?.(file)} />
         : <div className="file-chip-icon" onClick={() => onView?.(file)}>{IC.file(18)}</div>
       }
       <div className="file-chip-info" onClick={() => onView?.(file)}>
         <div className="file-chip-name">{file.name}</div>
-        <div className="file-chip-size">{formatSize(file.size)}</div>
+        <div className="file-chip-size">{type === 'youtube' ? 'YouTube' : formatSize(file.size)}</div>
       </div>
       {onRemove && <button className="file-chip-del" onClick={() => onRemove(file.id)}>{IC.x(12)}</button>}
     </div>
