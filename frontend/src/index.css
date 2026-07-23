@@ -7117,6 +7117,14 @@ button { font-family: inherit; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  background: none;
+  border: none;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
 }
 .cm-doc-name:hover { text-decoration: underline; }
 .cm-doc-meta { font-size: 0.76rem; color: #94a3b8; margin-top: 1px; }
