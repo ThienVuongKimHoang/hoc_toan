@@ -578,17 +578,26 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
             const cauCount = new Set(exerciseDocs.map(d => d.cauLabel)).size
             return `${cauCount} câu`
           }
-          const renderDocRow = (d) => (
-            <div key={d.id} className="cm-doc-row">
-              <div className="cm-doc-icon" onClick={() => setViewingFile(d)} style={{cursor:'pointer'}}>{IC.file(20)}</div>
-              <div className="cm-doc-info">
-                <button className="cm-doc-name" onClick={() => setViewingFile(d)}>{d.name}</button>
-                <div className="cm-doc-meta">{fmtSize(d.size)} · {fmtDt(d.uploadedAt)}</div>
+          const renderDocRow = (d) => {
+            const dType = fileType(d)
+            return (
+              <div key={d.id} className="cm-doc-row">
+                <div className="cm-doc-icon" onClick={() => setViewingFile(d)} style={{cursor:'pointer'}}>
+                  {dType === 'youtube'
+                    ? <img src={youtubeThumbnail(d.videoId)} alt="" style={{width:32,height:20,objectFit:'cover',borderRadius:4}} />
+                    : IC.file(20)}
+                </div>
+                <div className="cm-doc-info">
+                  <button className="cm-doc-name" onClick={() => setViewingFile(d)}>{d.name}</button>
+                  <div className="cm-doc-meta">{dType === 'youtube' ? 'YouTube' : fmtSize(d.size)} · {fmtDt(d.uploadedAt)}</div>
+                </div>
+                {dType === 'youtube'
+                  ? <a href={d.url} target="_blank" rel="noreferrer" className="cm-remove-btn" title="Mở trên YouTube">{IC.link(14)}</a>
+                  : <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống">{IC.download(14)}</a>}
+                <button className="cm-remove-btn" onClick={() => setViewingFile(d)} title="Xem">{IC.eye(14)}</button>
               </div>
-              <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống">{IC.download(14)}</a>
-              <button className="cm-remove-btn" onClick={() => setViewingFile(d)} title="Xem">{IC.eye(14)}</button>
-            </div>
-          )
+            )
+          }
           return (
             <div>
               {openFolder && (

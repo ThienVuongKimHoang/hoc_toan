@@ -796,24 +796,9 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
   const [uploading, setUploading] = useState(false)
   const [viewing, setViewing] = useState(null)
   const [err, setErr] = useState('')
-  const [ytUrl, setYtUrl] = useState('')
-  const [ytErr, setYtErr] = useState('')
 
   const handleUploaded = (files) => setAttachments(prev => [...prev, ...files])
   const removeAttach = (id) => setAttachments(prev => prev.filter(f => f.id !== id))
-  const addYoutubeLink = () => {
-    const videoId = extractYoutubeId(ytUrl)
-    if (!videoId) { setYtErr('Link YouTube không hợp lệ.'); return }
-    setAttachments(prev => [...prev, {
-      id: `yt_${videoId}_${Date.now().toString(36)}`,
-      name: `Video YouTube (${videoId})`,
-      type: 'youtube',
-      videoId,
-      url: youtubeWatchUrl(videoId),
-    }])
-    setYtUrl('')
-    setYtErr('')
-  }
 
   const pickExam = (id) => {
     setExamId(id)
@@ -1028,17 +1013,6 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
                   </div>
                 )}
                 <FileDropZone onUploaded={handleUploaded} uploading={uploading} setUploading={setUploading} />
-
-                <label className="cm-label" style={{ marginTop: 14 }}>🎬 Video YouTube (tuỳ chọn)</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input type="text" className="cm-input" style={{ flex: 1 }}
-                    placeholder="Dán link video YouTube…"
-                    value={ytUrl}
-                    onChange={e => { setYtUrl(e.target.value); setYtErr('') }}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addYoutubeLink() } }} />
-                  <button type="button" className="mec-btn" onClick={addYoutubeLink}>{IC.plus(14)} Thêm</button>
-                </div>
-                {ytErr && <div className="cm-error" style={{ marginTop: 4 }}>{ytErr}</div>}
               </>
             )}
 
@@ -1444,6 +1418,9 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
   const [openFolder, setOpenFolder] = useState(null)
   const [pendingUploadFile, setPendingUploadFile] = useState(null)
   const [deletingFolder, setDeletingFolder] = useState(false)
+  const [showYtBox, setShowYtBox] = useState(false)
+  const [ytUrl, setYtUrl] = useState('')
+  const [ytErr, setYtErr] = useState('')
   const fileInputRef = useRef(null)
 
   const refresh = () => onUpdated()
@@ -1523,8 +1500,23 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
   }
   const handleRemoveDoc = async (doc) => {
     if (!confirm(`Xoá tài liệu "${doc.name}"?`)) return
-    await fetch(`/api/class-documents/${encodeURIComponent(doc.filename)}`, { method: 'DELETE' }).catch(() => { })
+    if (doc.filename) await fetch(`/api/class-documents/${encodeURIComponent(doc.filename)}`, { method: 'DELETE' }).catch(() => { })
     await removeDocument(cls.id, doc.id)
+    refresh()
+  }
+  const handleAddYoutubeDoc = async () => {
+    const videoId = extractYoutubeId(ytUrl)
+    if (!videoId) { setYtErr('Link YouTube không hợp lệ.'); return }
+    await addDocument(cls.id, {
+      id: `yt_${videoId}_${Date.now().toString(36)}`,
+      name: `Video YouTube (${videoId})`,
+      type: 'youtube',
+      videoId,
+      url: youtubeWatchUrl(videoId),
+      subject,
+      uploadedAt: new Date().toISOString(),
+    })
+    setYtUrl(''); setYtErr(''); setShowYtBox(false)
     refresh()
   }
   const handleDeleteFolder = async (folderName, docs) => {
@@ -1802,17 +1794,26 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
             const cauCount = new Set(exerciseDocs.map(d => d.cauLabel)).size
             return `${cauCount} câu`
           }
-          const renderDocRow = (d) => (
-            <div key={d.id} className="cm-doc-row">
-              <div className="cm-doc-icon" onClick={() => setViewingFile(d)} style={{ cursor: 'pointer' }}>{IC.file(20)}</div>
-              <div className="cm-doc-info">
-                <button className="cm-doc-name" onClick={() => setViewingFile(d)}>{d.name}</button>
-                <div className="cm-doc-meta">{formatSize(d.size)} · {formatDt(d.uploadedAt)}</div>
+          const renderDocRow = (d) => {
+            const dType = fileType(d)
+            return (
+              <div key={d.id} className="cm-doc-row">
+                <div className="cm-doc-icon" onClick={() => setViewingFile(d)} style={{ cursor: 'pointer' }}>
+                  {dType === 'youtube'
+                    ? <img src={youtubeThumbnail(d.videoId)} alt="" style={{ width: 32, height: 20, objectFit: 'cover', borderRadius: 4 }} />
+                    : IC.file(20)}
+                </div>
+                <div className="cm-doc-info">
+                  <button className="cm-doc-name" onClick={() => setViewingFile(d)}>{d.name}</button>
+                  <div className="cm-doc-meta">{dType === 'youtube' ? 'YouTube' : formatSize(d.size)} · {formatDt(d.uploadedAt)}</div>
+                </div>
+                {dType === 'youtube'
+                  ? <a href={d.url} target="_blank" rel="noreferrer" className="cm-remove-btn" title="Mở trên YouTube">{IC.link(14)}</a>
+                  : <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống">{IC.download(14)}</a>}
+                <button className="cm-remove-btn" onClick={() => handleRemoveDoc(d)}>{IC.trash(14)}</button>
               </div>
-              <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống">{IC.download(14)}</a>
-              <button className="cm-remove-btn" onClick={() => handleRemoveDoc(d)}>{IC.trash(14)}</button>
-            </div>
-          )
+            )
+          }
           return (
             <div>
               <div className="cm-section-toolbar">
@@ -1832,7 +1833,25 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
                   {uploading ? '⏳ Đang upload…' : <>{IC.upload(14)} Upload</>}
                 </button>
                 <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileSelect} />
+                <button className="mec-btn cm-action-btn" onClick={() => setShowYtBox(v => !v)}>
+                  🎬 Video YouTube
+                </button>
               </div>
+
+              {showYtBox && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <input type="text" className="cm-input" style={{ width: '100%' }}
+                      placeholder="Dán link video YouTube…"
+                      value={ytUrl}
+                      onChange={e => { setYtUrl(e.target.value); setYtErr('') }}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddYoutubeDoc() } }} />
+                    {ytErr && <div className="cm-error" style={{ marginTop: 4 }}>{ytErr}</div>}
+                  </div>
+                  <button className="mec-btn" onClick={handleAddYoutubeDoc}>{IC.plus(14)} Thêm</button>
+                  <button className="cm-remove-btn" onClick={() => { setShowYtBox(false); setYtUrl(''); setYtErr('') }}>{IC.x(14)}</button>
+                </div>
+              )}
 
               {!openFolder && folderMap.size > 0 && (
                 <div className="cm-folder-grid">
