@@ -1797,8 +1797,8 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
           const renderDocRow = (d) => {
             const dType = fileType(d)
             return (
-              <div key={d.id} className="cm-doc-row">
-                <div className="cm-doc-icon" onClick={() => setViewingFile(d)} style={{ cursor: 'pointer' }}>
+              <div key={d.id} className="cm-doc-row" onClick={() => setViewingFile(d)} style={{ cursor: 'pointer' }}>
+                <div className="cm-doc-icon">
                   {dType === 'youtube'
                     ? <img src={youtubeThumbnail(d.videoId)} alt="" style={{ width: 32, height: 20, objectFit: 'cover', borderRadius: 4 }} />
                     : IC.file(20)}
@@ -1808,9 +1808,9 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
                   <div className="cm-doc-meta">{dType === 'youtube' ? 'YouTube' : formatSize(d.size)} · {formatDt(d.uploadedAt)}</div>
                 </div>
                 {dType === 'youtube'
-                  ? <a href={d.url} target="_blank" rel="noreferrer" className="cm-remove-btn" title="Mở trên YouTube">{IC.link(14)}</a>
-                  : <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống">{IC.download(14)}</a>}
-                <button className="cm-remove-btn" onClick={() => handleRemoveDoc(d)}>{IC.trash(14)}</button>
+                  ? <a href={d.url} target="_blank" rel="noreferrer" className="cm-remove-btn" title="Mở trên YouTube" onClick={e => e.stopPropagation()}>{IC.link(14)}</a>
+                  : <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống" onClick={e => e.stopPropagation()}>{IC.download(14)}</a>}
+                <button className="cm-remove-btn" onClick={e => { e.stopPropagation(); handleRemoveDoc(d) }}>{IC.trash(14)}</button>
               </div>
             )
           }

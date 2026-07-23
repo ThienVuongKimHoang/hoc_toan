@@ -581,8 +581,8 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
           const renderDocRow = (d) => {
             const dType = fileType(d)
             return (
-              <div key={d.id} className="cm-doc-row">
-                <div className="cm-doc-icon" onClick={() => setViewingFile(d)} style={{cursor:'pointer'}}>
+              <div key={d.id} className="cm-doc-row" onClick={() => setViewingFile(d)} style={{cursor:'pointer'}}>
+                <div className="cm-doc-icon">
                   {dType === 'youtube'
                     ? <img src={youtubeThumbnail(d.videoId)} alt="" style={{width:32,height:20,objectFit:'cover',borderRadius:4}} />
                     : IC.file(20)}
@@ -592,8 +592,8 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
                   <div className="cm-doc-meta">{dType === 'youtube' ? 'YouTube' : fmtSize(d.size)} · {fmtDt(d.uploadedAt)}</div>
                 </div>
                 {dType === 'youtube'
-                  ? <a href={d.url} target="_blank" rel="noreferrer" className="cm-remove-btn" title="Mở trên YouTube">{IC.link(14)}</a>
-                  : <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống">{IC.download(14)}</a>}
+                  ? <a href={d.url} target="_blank" rel="noreferrer" className="cm-remove-btn" title="Mở trên YouTube" onClick={e => e.stopPropagation()}>{IC.link(14)}</a>
+                  : <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống" onClick={e => e.stopPropagation()}>{IC.download(14)}</a>}
                 <button className="cm-remove-btn" onClick={() => setViewingFile(d)} title="Xem">{IC.eye(14)}</button>
               </div>
             )
