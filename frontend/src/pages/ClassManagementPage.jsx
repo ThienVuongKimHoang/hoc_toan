@@ -11,7 +11,7 @@ import {
   deleteAssignmentSubmission,
   deleteClass, getAllClasses, getClassById, getClassesByTeacher, getSubmissions,
   joinUrl, removeAssignment, removeCoTeacher, removeDocument, removeMemberFromClass,
-  searchStudents, searchTeachers, updateClassInfo, uploadFile,
+  searchStudents, searchTeachers, updateClassInfo, updateDocument, uploadFile,
 } from '../store/classStore.js'
 import {
   getAttendanceHistory, getAttendanceSession, getClassProgress, submitAttendance,
@@ -1421,6 +1421,8 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
   const [showYtBox, setShowYtBox] = useState(false)
   const [ytUrl, setYtUrl] = useState('')
   const [ytErr, setYtErr] = useState('')
+  const [editingDocId, setEditingDocId] = useState(null)
+  const [editDocName, setEditDocName] = useState('')
   const fileInputRef = useRef(null)
 
   const refresh = () => onUpdated()
@@ -1517,6 +1519,15 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
       uploadedAt: new Date().toISOString(),
     })
     setYtUrl(''); setYtErr(''); setShowYtBox(false)
+    refresh()
+  }
+  const startEditDoc = (d) => { setEditingDocId(d.id); setEditDocName(d.name) }
+  const cancelEditDoc = () => { setEditingDocId(null); setEditDocName('') }
+  const saveEditDoc = async () => {
+    const name = editDocName.trim()
+    if (!name) { cancelEditDoc(); return }
+    await updateDocument(cls.id, editingDocId, { name })
+    cancelEditDoc()
     refresh()
   }
   const handleDeleteFolder = async (folderName, docs) => {
@@ -1796,8 +1807,9 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
           }
           const renderDocRow = (d) => {
             const dType = fileType(d)
+            const isEditing = editingDocId === d.id
             return (
-              <div key={d.id} className="cm-doc-row" onClick={() => setViewingFile(d)} style={{ cursor: 'pointer' }}>
+              <div key={d.id} className="cm-doc-row" onClick={() => !isEditing && setViewingFile(d)} style={{ cursor: 'pointer' }}>
                 <div className={dType === 'youtube' ? undefined : 'cm-doc-icon'}
                   style={dType === 'youtube' ? { width: 44, height: 32, borderRadius: 6, overflow: 'hidden', flexShrink: 0 } : undefined}>
                   {dType === 'youtube'
@@ -1805,13 +1817,34 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
                     : IC.file(20)}
                 </div>
                 <div className="cm-doc-info">
-                  <button className="cm-doc-name" onClick={() => setViewingFile(d)}>{d.name}</button>
+                  {isEditing ? (
+                    <input type="text" className="cm-input" autoFocus
+                      value={editDocName}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => setEditDocName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { e.preventDefault(); saveEditDoc() }
+                        if (e.key === 'Escape') { e.preventDefault(); cancelEditDoc() }
+                      }} />
+                  ) : (
+                    <button className="cm-doc-name" onClick={() => setViewingFile(d)}>{d.name}</button>
+                  )}
                   <div className="cm-doc-meta">{dType === 'youtube' ? 'YouTube' : formatSize(d.size)} · {formatDt(d.uploadedAt)}</div>
                 </div>
-                {dType === 'youtube'
-                  ? <a href={d.url} target="_blank" rel="noreferrer" className="cm-remove-btn" title="Mở trên YouTube" onClick={e => e.stopPropagation()}>{IC.link(14)}</a>
-                  : <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống" onClick={e => e.stopPropagation()}>{IC.download(14)}</a>}
-                <button className="cm-remove-btn" onClick={e => { e.stopPropagation(); handleRemoveDoc(d) }}>{IC.trash(14)}</button>
+                {isEditing ? (
+                  <>
+                    <button className="cm-remove-btn" title="Lưu" onClick={e => { e.stopPropagation(); saveEditDoc() }}>{IC.check(14)}</button>
+                    <button className="cm-remove-btn" title="Hủy" onClick={e => { e.stopPropagation(); cancelEditDoc() }}>{IC.x(14)}</button>
+                  </>
+                ) : (
+                  <>
+                    <button className="cm-remove-btn" title="Sửa tiêu đề" onClick={e => { e.stopPropagation(); startEditDoc(d) }}>{IC.pencil(14)}</button>
+                    {dType === 'youtube'
+                      ? <a href={d.url} target="_blank" rel="noreferrer" className="cm-remove-btn" title="Mở trên YouTube" onClick={e => e.stopPropagation()}>{IC.link(14)}</a>
+                      : <a href={d.url} target="_blank" rel="noreferrer" download className="cm-remove-btn" title="Tải xuống" onClick={e => e.stopPropagation()}>{IC.download(14)}</a>}
+                    <button className="cm-remove-btn" onClick={e => { e.stopPropagation(); handleRemoveDoc(d) }}>{IC.trash(14)}</button>
+                  </>
+                )}
               </div>
             )
           }
