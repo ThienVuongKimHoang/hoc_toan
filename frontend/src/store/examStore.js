@@ -339,7 +339,7 @@ export function calcScore(exam, answers) {
       let pts = 0
       if (nRight === total)          pts = ppq
       else if (nRight === total - 1) pts = ppq * 0.5
-      else if (nRight === total - 2) pts = ppq * 0.2
+      else if (nRight === total - 2) pts = ppq * 0.25
       else if (nRight === total - 3) pts = ppq * 0.1
       score += pts
     })

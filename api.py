@@ -544,7 +544,7 @@ def _calc_score(exam: dict, answers: dict) -> float:
             if total:
                 if   n_right == total:     pts = ppq
                 elif n_right == total - 1: pts = ppq * 0.5
-                elif n_right == total - 2: pts = ppq * 0.2
+                elif n_right == total - 2: pts = ppq * 0.25
                 elif n_right == total - 3: pts = ppq * 0.1
             score += pts
 
