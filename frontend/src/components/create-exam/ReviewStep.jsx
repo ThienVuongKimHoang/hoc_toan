@@ -14,8 +14,14 @@ function isUnanswered(q, sec) {
 
 const MATH_SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III', 'TỰ LUẬN']
 
-// Thang điểm đề thi tốt nghiệp THPT môn Lý/Hóa (Bộ GD&ĐT): Phần I 4.5đ, Phần II 4đ, Phần III 1.5đ
-const GRAD_EXAM_TOTALS = { 'PHẦN I': 4.5, 'PHẦN II': 4, 'PHẦN III': 1.5 }
+// Thang điểm đề thi tốt nghiệp THPT (Bộ GD&ĐT), theo từng môn:
+// - Toán: Phần I 3đ (12 câu × 0.25đ), Phần II 4đ, Phần III 3đ (6 câu × 0.5đ)
+// - Lý/Hóa: Phần I 4.5đ (18 câu × 0.25đ), Phần II 4đ, Phần III 1.5đ (6 câu × 0.25đ)
+const GRAD_EXAM_TOTALS_BY_SUBJECT = {
+  toan: { 'PHẦN I': 3,   'PHẦN II': 4, 'PHẦN III': 3 },
+  ly:   { 'PHẦN I': 4.5, 'PHẦN II': 4, 'PHẦN III': 1.5 },
+  hoa:  { 'PHẦN I': 4.5, 'PHẦN II': 4, 'PHẦN III': 1.5 },
+}
 
 const SECTION_META = {
   'PHẦN I':    { label: 'Trắc nghiệm',   color: '#2563eb', shortLabel: 'Phần I' },
@@ -259,19 +265,24 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
     })
   }
 
-  /* ── Nhãn "Đề thi tốt nghiệp": áp thang điểm chuẩn Phần I 4.5đ / II 4đ / III 1.5đ ── */
+  /* ── Nhãn "Đề thi tốt nghiệp": áp thang điểm chuẩn theo môn (Toán: 3/4/3, Lý/Hóa: 4.5/4/1.5) ── */
+  const gradExamTotals = GRAD_EXAM_TOTALS_BY_SUBJECT[subject] || GRAD_EXAM_TOTALS_BY_SUBJECT.toan
+  const gradExamLabel = Object.entries(gradExamTotals)
+    .map(([sec, total]) => `${SECTION_META[sec]?.shortLabel || sec} ${total}đ`)
+    .join(' · ')
+
   const applyGradExamScale = () => {
     setSections(prev => {
       const next = { ...prev }
-      for (const sec of Object.keys(GRAD_EXAM_TOTALS)) {
+      for (const sec of Object.keys(gradExamTotals)) {
         const count = prev[sec]?.questions?.length || 0
         if (!prev[sec] || count === 0) continue
-        const ppq = Math.round((GRAD_EXAM_TOTALS[sec] / count) * 10000) / 10000
+        const ppq = Math.round((gradExamTotals[sec] / count) * 10000) / 10000
         next[sec] = { ...prev[sec], points_per_q: ppq }
       }
       return next
     })
-    addToast('Đã áp dụng thang điểm tốt nghiệp: Phần I 4.5đ · Phần II 4đ · Phần III 1.5đ', 'success')
+    addToast(`Đã áp dụng thang điểm tốt nghiệp: ${gradExamLabel}`, 'success')
   }
 
   const toggleGradExam = () => {
@@ -417,12 +428,12 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
                   onClick={() => setGrade('thcs')} type="button">THCS</button>
               </div>
             )}
-            {(subject === 'ly' || subject === 'hoa') && isMathExam && (
+            {(subject === 'toan' || subject === 'ly' || subject === 'hoa') && isMathExam && (
               <button
                 type="button"
                 className={`rs-grad-toggle-btn ${gradExam ? 'active' : ''}`}
                 onClick={toggleGradExam}
-                title="Áp dụng thang điểm đề thi tốt nghiệp THPT: Phần I 4.5đ · Phần II 4đ · Phần III 1.5đ"
+                title={`Áp dụng thang điểm đề thi tốt nghiệp THPT: ${gradExamLabel}`}
               >
                 🎓 Đề thi tốt nghiệp
               </button>
