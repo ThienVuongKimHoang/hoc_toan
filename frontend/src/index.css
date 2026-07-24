@@ -7278,6 +7278,10 @@ button { font-family: inherit; }
   justify-content: center;
   flex-shrink: 0;
 }
+.cm-student-avatar--img {
+  object-fit: cover;
+  background: #e2e8f0;
+}
 .cm-student-info { flex: 1; min-width: 0; }
 .cm-student-name  { font-size: 0.88rem; font-weight: 600; color: #1e293b; }
 .cm-student-email { font-size: 0.76rem; color: #64748b; }

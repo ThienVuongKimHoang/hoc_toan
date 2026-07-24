@@ -47,10 +47,19 @@ const IcUser   = (s) => <Ic size={s}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 
 const IcShield = (s) => <Ic size={s}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></Ic>
 const IcDot    = (s, color) => <svg width={s} height={s} viewBox="0 0 8 8" style={{ flexShrink: 0, verticalAlign: 'middle' }}><circle cx="4" cy="4" r="4" fill={color} /></svg>
 
+/* user.avatarUrl: undefined = chưa từng tuỳ chỉnh (dùng ảnh Google trong user.avatar nếu có),
+   null = đã chọn xoá ảnh để dùng màu nền, string = ảnh tuỳ chỉnh/ảnh Google đã chốt. */
+export function resolveAvatarSrc(user) {
+  const src = user.avatarUrl !== undefined ? user.avatarUrl : user.avatar
+  return typeof src === 'string' && (/^https?:\/\//.test(src) || src.startsWith('data:')) ? src : null
+}
+
 /* ── Avatar display ── */
 export function AvatarDisplay({ user, size = 80, onClick, className = '' }) {
+  const [failed, setFailed] = useState(false)
   const initial  = (user.name || user.email || '?')[0].toUpperCase()
   const bgColor  = user.avatarColor || ROLE_DEFAULT_COLOR[user.role] || '#2563eb'
+  const src      = resolveAvatarSrc(user)
   return (
     <div
       className={`avt-display ${onClick ? 'avt-display--clickable' : ''} ${className}`}
@@ -58,8 +67,8 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '' }) {
       onClick={onClick}
       title={onClick ? 'Đổi ảnh đại diện' : undefined}
     >
-      {user.avatarUrl
-        ? <img src={user.avatarUrl} alt="avatar" className="avt-display-img" />
+      {src && !failed
+        ? <img src={src} alt="avatar" className="avt-display-img" onError={() => setFailed(true)} />
         : <div className="avt-display-initial" style={{ background: bgColor, fontSize: Math.round(size * 0.38) }}>
             {initial}
           </div>
@@ -75,7 +84,7 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '' }) {
 
 /* ── Avatar picker modal ── */
 function AvatarPicker({ user, onSave, onClose }) {
-  const [preview,  setPreview]  = useState(user.avatarUrl || null)
+  const [preview,  setPreview]  = useState(resolveAvatarSrc(user))
   const [selColor, setSelColor] = useState(user.avatarColor || ROLE_DEFAULT_COLOR[user.role] || AVATAR_COLORS[5])
   const fileRef = useRef(null)
   const initial = (user.name || '?')[0].toUpperCase()

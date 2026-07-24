@@ -30,6 +30,21 @@ import { extractYoutubeId, youtubeEmbedUrl, youtubeThumbnail, youtubeWatchUrl } 
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, GradePicker, SubjectPicker, gradeLabel } from '../components/SubjectBadge.jsx'
 import { ROLES } from '../auth/mockUsers.js'
 
+/* Avatar học sinh/giáo viên trong kết quả tìm kiếm: user.avatar có thể là URL ảnh Google
+   (đăng nhập Google) hoặc chữ cái đầu (tài khoản thường) — cần phân biệt để không
+   in nguyên URL ra màn hình. */
+function PersonAvatar({ user }) {
+  const [failed, setFailed] = useState(false)
+  const src   = user.avatar || ''
+  const isImg = /^https?:\/\//.test(src) || src.startsWith('data:')
+  const initial = (user.name || user.email || '?')[0].toUpperCase()
+
+  if (isImg && !failed) {
+    return <img className="cm-student-avatar cm-student-avatar--img" src={src} alt="" onError={() => setFailed(true)} />
+  }
+  return <div className="cm-student-avatar">{initial}</div>
+}
+
 /* Môn "chính" của lớp (fallback cho dữ liệu cũ chưa gắn môn) */
 const primarySubject = (cls) => cls?.subject || cls?.subjects?.[0] || null
 /* Một bài tập / tài liệu / thành viên thuộc môn nào — mục cũ thiếu subject quy về môn chính */
@@ -675,7 +690,7 @@ function AddStudentModal({ classMembers, grade, subject, onClose, onAdd }) {
                 const already = memberIds.has(String(s.id))
                 return (
                   <div key={s.id} className={`cm-student-row ${already ? 'cm-student-row--added' : ''}`}>
-                    <div className="cm-student-avatar">{s.avatar || s.name[0]}</div>
+                    <PersonAvatar user={s} />
                     <div className="cm-student-info">
                       <div className="cm-student-name">{s.name}</div>
                       <div className="cm-student-email">{s.email}</div>
@@ -730,7 +745,7 @@ function AddTeacherModal({ teacherId, coTeachers, onClose, onAdd }) {
                 const already = addedIds.has(String(t.id))
                 return (
                   <div key={t.id} className={`cm-student-row ${already ? 'cm-student-row--added' : ''}`}>
-                    <div className="cm-student-avatar">{t.avatar || t.name[0]}</div>
+                    <PersonAvatar user={t} />
                     <div className="cm-student-info">
                       <div className="cm-student-name">{t.name}</div>
                       <div className="cm-student-email">{t.email}</div>
