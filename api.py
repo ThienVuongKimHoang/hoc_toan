@@ -2681,6 +2681,8 @@ def _scan_overdue_assignments() -> None:
 CLASS_DOCS_DIR = Path(__file__).parent / "class_docs"
 CLASS_DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
+_MAX_CLASS_DOC_BYTES = 50 * 1024 * 1024   # 50 MB / tài liệu
+
 
 @app.post("/api/class-documents/upload")
 async def upload_class_document(file: UploadFile = File(...)):
@@ -2691,6 +2693,8 @@ async def upload_class_document(file: UploadFile = File(...)):
     filename = f"{doc_id}_{safe_name}"
     dest = CLASS_DOCS_DIR / filename
     content = await file.read()
+    if len(content) > _MAX_CLASS_DOC_BYTES:
+        return JSONResponse({"error": "Tài liệu quá lớn (tối đa 50 MB)."}, status_code=413)
     dest.write_bytes(content)
     mime = file.content_type or "application/octet-stream"
     return {

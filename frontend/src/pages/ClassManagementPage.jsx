@@ -168,9 +168,13 @@ function FileDropZone({ onUploaded, uploading, setUploading }) {
 
   const processFiles = useCallback(async (files) => {
     if (!files.length) return
+    const oversized = files.filter(f => f.size > 50 * 1024 * 1024)
+    if (oversized.length) alert(`"${oversized[0].name}" quá lớn (tối đa 50 MB).`)
+    const valid = files.filter(f => f.size <= 50 * 1024 * 1024)
+    if (!valid.length) return
     setUploading(true)
     const results = []
-    for (const f of files) {
+    for (const f of valid) {
       try { results.push(await uploadFile(f)) } catch { /* skip */ }
     }
     setUploading(false)
@@ -1485,6 +1489,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    if (file.size > 50 * 1024 * 1024) { alert(`"${file.name}" quá lớn (tối đa 50 MB).`); return }
     if (openFolder) { setPendingUploadFile(file); return }
     setUploading(true)
     try {
