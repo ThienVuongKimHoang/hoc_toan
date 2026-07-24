@@ -70,13 +70,21 @@ export default function StudentProgressModal({ student, onClose }) {
                         <div key={v} className="sd-gridline" style={{ bottom: `${(v / 10) * 100}%` }} />
                       ))}
                     </div>
+                    <svg className="sd-line-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      <polyline
+                        className="sd-line-path"
+                        points={points
+                          .map((p, i) => `${((i + 0.5) / points.length) * 100},${100 - (p.scaled / 10) * 100}`)
+                          .join(' ')}
+                      />
+                    </svg>
                     {points.map((p, i) => {
                       const h = (p.scaled / 10) * 100
                       const on = hover === i
                       return (
                         <div
                           key={i}
-                          className={`sd-col${on ? ' is-hover' : ''}`}
+                          className={`sd-col sd-col--line${on ? ' is-hover' : ''}`}
                           onMouseEnter={() => setHover(i)}
                           onMouseLeave={() => setHover(cur => (cur === i ? null : cur))}
                         >
@@ -89,8 +97,8 @@ export default function StudentProgressModal({ student, onClose }) {
                                 </div>
                               </div>
                             )}
-                            <span className="sd-count">{p.scaled}</span>
-                            <div className="sd-bar" style={{ height: `${h}%`, minHeight: 3 }} />
+                            <span className="sd-count" style={{ bottom: `calc(${h}% + 14px)` }}>{p.scaled}</span>
+                            <div className="sd-dot" style={{ bottom: `${h}%` }} />
                           </div>
                           <div className="sd-xlabel">{fmtShort(p.date)}</div>
                         </div>

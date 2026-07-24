@@ -4887,6 +4887,30 @@ button { font-family: inherit; }
 .sd-col.is-hover .sd-bar { filter: brightness(1.12); }
 .sd-col.is-hover .sd-count { color: var(--sd-blue); }
 
+/* Biến thể line chart (vd. "Điểm theo thời gian") — dùng chấm + đường nối thay vì cột */
+.sd-line-svg { position: absolute; inset: 0 0 22px 0; overflow: visible; pointer-events: none; }
+.sd-line-path {
+  fill: none;
+  stroke: var(--sd-blue);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.sd-col--line .sd-count { position: absolute; left: 50%; transform: translateX(-50%); margin-bottom: 0; white-space: nowrap; }
+.sd-dot {
+  position: absolute;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--sd-blue);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .25);
+  transform: translate(-50%, 50%);
+  transition: transform .15s, box-shadow .15s;
+}
+.sd-col--line.is-hover .sd-dot { transform: translate(-50%, 50%) scale(1.35); box-shadow: 0 2px 6px rgba(15, 23, 42, .35); }
+.sd-col--line.is-hover .sd-count { color: var(--sd-blue); }
+
 .sd-xlabel {
   position: absolute;
   bottom: 0; left: 0; right: 0;
