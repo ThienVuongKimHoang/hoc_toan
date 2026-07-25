@@ -3,6 +3,7 @@ import { examStatus, fetchExamById, submitResult, scaledScore, verifyLockEscape 
 import { getExamWindow } from '../store/classStore.js'
 import QuestionCard from '../components/QuestionCard.jsx'
 import ReadingTakeView from '../components/ReadingTakeView.jsx'
+import { buildShuffleMap, reorderByQuestionNumber } from '../utils/shuffle.js'
 
 const SECTION_LABELS = {
   'PHẦN I':    { label: 'Phần I – Trắc nghiệm',         color: '#2563eb' },
@@ -384,6 +385,11 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   const savedAttemptRef = useRef(undefined)
   if (savedAttemptRef.current === undefined) savedAttemptRef.current = loadAttempt(attemptKeyStr)
   const savedAttempt = savedAttemptRef.current
+  // Trộn thứ tự câu hỏi/đáp án (nếu đề bật) — tính 1 lần khi vào lượt làm bài,
+  // giữ nguyên (không xáo lại) khi F5; xóa cùng lượt làm bài khi nộp bài.
+  const [shuffleMap] = useState(() =>
+    savedAttempt?.shuffleMap || (exam.settings?.shuffleQuestions ? buildShuffleMap(exam) : null)
+  )
 
   const [activeSection, setActiveSection] = useState(sectionList[0] || 'PHẦN I')
   const [answers,       setAnswers]       = useState(() => savedAttempt?.answers || {})
@@ -423,8 +429,8 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   // quay lại (F5, mất mạng, đóng tab...) không bị tính lại từ đầu.
   useEffect(() => {
     if (submitted || startedAt == null) return
-    saveAttempt(attemptKeyStr, { startedAt, answers })
-  }, [answers, startedAt, submitted, attemptKeyStr])
+    saveAttempt(attemptKeyStr, { startedAt, answers, shuffleMap })
+  }, [answers, startedAt, submitted, attemptKeyStr, shuffleMap])
 
   const handleAnswerChange = (key, val) => {
     setAnswers(prev => ({ ...prev, [key]: val }))
@@ -522,7 +528,8 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
     )
   }
 
-  const questions = exam.sections?.[activeSection]?.questions ?? []
+  const rawQuestions = exam.sections?.[activeSection]?.questions ?? []
+  const questions = reorderByQuestionNumber(rawQuestions, shuffleMap?.sections?.[activeSection])
 
   return (
     <div className="et-exam">
@@ -625,6 +632,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
                 examMode={true}
                 answers={answers}
                 onAnswerChange={handleAnswerChange}
+                choiceOrders={shuffleMap?.choices}
               />
             ))
           )}

@@ -70,6 +70,7 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
   const [showPwd,     setShowPwd]     = useState(false)
   const [hideResults, setHideResults] = useState(false)
   const [lockScreen,  setLockScreen]  = useState(false)
+  const [shuffleQuestions, setShuffleQuestions] = useState(true)
   const [classes,          setClasses]          = useState([])
   const [publishedClasses, setPublishedClasses] = useState([])
   const [link,             setLink]             = useState(null)
@@ -101,6 +102,7 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
     if (exam.settings) {
       setHideResults(exam.settings.hideResults || false)
       setLockScreen(exam.settings.lockScreen || false)
+      setShuffleQuestions(exam.settings.shuffleQuestions ?? true)
     }
   }, [exam])
 
@@ -127,6 +129,7 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
       password:    password.trim() || null,
       hideResults,
       lockScreen,
+      shuffleQuestions,
       classes:     validClasses,
     }, teacherId)
     setPublishedClasses(validClasses)
@@ -251,6 +254,24 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
             {lockScreen && (
               <div className="pm-hide-note">
                 Học sinh phải làm bài ở chế độ toàn màn hình. Rời tab, thoát toàn màn hình hoặc dùng phím tắt sẽ bị ghi nhận vi phạm và báo cho bạn.
+              </div>
+            )}
+
+            {/* Trộn thứ tự câu hỏi & đáp án */}
+            <div className="pm-row pm-row--toggle">
+              <div className="pm-label">
+                🔀 Trộn thứ tự câu hỏi & đáp án
+                <span className="pm-optional"> (mỗi học sinh thấy thứ tự khác nhau — chống nhìn bài)</span>
+              </div>
+              <label className="pm-toggle-switch">
+                <input type="checkbox" checked={shuffleQuestions}
+                  onChange={e => setShuffleQuestions(e.target.checked)} />
+                <span className="pm-toggle-slider" />
+              </label>
+            </div>
+            {shuffleQuestions && (
+              <div className="pm-hide-note">
+                Thứ tự câu hỏi trong từng phần và vị trí các đáp án A/B/C/D sẽ khác nhau giữa các học sinh. Số thứ tự "Câu 1", "Câu 2"… vẫn giữ nguyên như đề gốc.
               </div>
             )}
 

@@ -105,6 +105,7 @@ export async function publishExam(examId, settings, teacherId) {
       password:    settings.password || null,
       hideResults: settings.hideResults || false,
       lockScreen:  settings.lockScreen || false,
+      shuffleQuestions: settings.shuffleQuestions || false,
     },
     classes: settings.classes || exam.classes || [],
   }

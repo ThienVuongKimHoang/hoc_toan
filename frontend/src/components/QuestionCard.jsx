@@ -79,7 +79,7 @@ function PassageBlock({ title, text }) {
 }
 
 /* ── Trắc nghiệm 1 đáp án (PHẦN I Toán + Tiếng Anh) ── */
-function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, saved }) {
+function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, saved, choiceOrder }) {
   // Khởi tạo từ đáp án đã lưu ở component cha — giữ lựa chọn khi học sinh chuyển phần rồi quay lại
   const [selected, setSelected] = useState(saved ?? null)
   const correct = q.answer  // null nếu không có đáp án
@@ -105,20 +105,29 @@ function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, 
     return ''
   }
 
+  // Trộn thứ tự hiển thị + gán lại nhãn A/B/C/D theo VỊ TRÍ trên màn hình khi
+  // đề bật "Trộn thứ tự" — nội dung nào ứng với chữ cái nào là khác nhau giữa
+  // các học sinh, nhưng `key` dùng để chọn/lưu vẫn luôn là chữ cái GỐC của
+  // q.choices nên không ảnh hưởng đến việc lưu/nộp/chấm điểm.
+  const rawEntries = Object.entries(q.choices || {})
+  const useShuffled = examMode && Array.isArray(choiceOrder) && choiceOrder.length === rawEntries.length
+  const entries = useShuffled ? choiceOrder.map(k => [k, q.choices[k]]) : rawEntries
+  const DISPLAY_LABELS = ['A', 'B', 'C', 'D']
+
   return (
     <div className="q-body">
       {!hidePassage && <PassageBlock title={q.passage_title} text={q.passage_text} />}
       <p className="q-text"><QuestionText q={q} /></p>
       <FigureImages path={q.figure_path} />
       <div className="choices">
-        {Object.entries(q.choices || {}).map(([key, val]) => (
+        {entries.map(([key, val], i) => (
           <button
             key={key}
             className={`choice-btn ${getState(key)}`}
             onClick={() => handleSelect(key)}
             disabled={!examMode && correct !== null && selected !== null}
           >
-            <span className="choice-label">{key}.</span>
+            <span className="choice-label">{useShuffled ? (DISPLAY_LABELS[i] || key) : key}.</span>
             <span className="choice-text"><MathText text={val} /></span>
           </button>
         ))}
@@ -362,7 +371,7 @@ const SECTION_CLASS = {
   'TIẾNG ANH': 'phan-english',
   'READING':   'phan-english',
 }
-const SECTION_PREFIX = {
+export const SECTION_PREFIX = {
   'PHẦN I':    'I',
   'PHẦN II':   'II',
   'PHẦN III':  'III',
@@ -375,7 +384,7 @@ function _isMultipleChoice(q) {
   return q.section === 'PHẦN I' || q.section === 'TIẾNG ANH' || q.section === 'READING'
 }
 
-export default function QuestionCard({ q, index, examMode = false, onAnswerChange, hidePassage = false, answers }) {
+export default function QuestionCard({ q, index, examMode = false, onAnswerChange, hidePassage = false, answers, choiceOrders }) {
   const [expanded, setExpanded] = useState(true)
   const points   = q.points ? `${q.points}đ` : ''
   const secClass = SECTION_CLASS[q.section] || 'phan-1'
@@ -384,6 +393,7 @@ export default function QuestionCard({ q, index, examMode = false, onAnswerChang
 
   // Đáp án đã lưu ở cha cho câu này — dùng để khôi phục khi card mount lại (đổi phần)
   const saved        = answers?.[qKey]
+  const choiceOrder  = choiceOrders?.[qKey]
   const handleChange = (ans) => onAnswerChange?.(qKey, ans)
 
   const hasAnswer = q.answer != null
@@ -405,7 +415,7 @@ export default function QuestionCard({ q, index, examMode = false, onAnswerChang
 
       {expanded && (
         _isMultipleChoice(q) ? (
-          <MultipleChoiceCard q={q} examMode={examMode} onAnswerChange={handleChange} hidePassage={hidePassage} saved={saved} />
+          <MultipleChoiceCard q={q} examMode={examMode} onAnswerChange={handleChange} hidePassage={hidePassage} saved={saved} choiceOrder={choiceOrder} />
         ) : q.section === 'PHẦN II' ? (
           <TrueFalseCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} />
         ) : q.section === 'TỰ LUẬN' ? (
