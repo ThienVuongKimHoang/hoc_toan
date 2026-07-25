@@ -810,6 +810,7 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
   const [maxAttempts, setMaxAttempts] = useState('')        // '' = không giới hạn
   const [scoreMode, setScoreMode] = useState('highest') // highest | average | latest
   const [lockScreen, setLockScreen] = useState(false)     // khóa màn hình chống gian lận
+  const [shuffleQuestions, setShuffleQuestions] = useState(true)  // trộn thứ tự câu hỏi/đáp án theo học sinh
   const [writingTask, setWritingTask] = useState('')        // '' | task1 | task2 (IELTS Writing, lớp Anh)
   const [attachments, setAttachments] = useState([])
   const [uploading, setUploading] = useState(false)
@@ -854,6 +855,7 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
         maxAttempts: maxAttempts ? Math.max(1, parseInt(maxAttempts, 10) || 1) : null,
         scoreMode,
         lockScreen,
+        shuffleQuestions,
         attachments: [],
       })
       return
@@ -966,6 +968,17 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
                     <div className="cm-lock-title">🔒 Khóa màn hình khi làm bài</div>
                     <div className="cm-lock-sub">
                       Bắt buộc toàn màn hình, chặn rời tab / copy / phím tắt. Mỗi lần vi phạm được ghi lại cho bạn xem.
+                    </div>
+                  </div>
+                </label>
+
+                <label className="cm-lock-toggle" style={{ marginTop: 10 }}>
+                  <input type="checkbox" checked={shuffleQuestions}
+                    onChange={e => setShuffleQuestions(e.target.checked)} />
+                  <div>
+                    <div className="cm-lock-title">🔀 Trộn thứ tự câu hỏi & đáp án</div>
+                    <div className="cm-lock-sub">
+                      Mỗi học sinh thấy thứ tự câu hỏi (và vị trí đáp án A/B/C/D) khác nhau — chống nhìn bài. Số thứ tự "Câu 1", "Câu 2"… vẫn giữ nguyên như đề gốc.
                     </div>
                   </div>
                 </label>

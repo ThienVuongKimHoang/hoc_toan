@@ -2084,6 +2084,7 @@ async def add_assignment_endpoint(cls_id: str, request: Request, caller: dict = 
         "maxAttempts": max_attempts,     # số lần làm tối đa (None = không giới hạn)
         "scoreMode": score_mode,         # highest | average | latest
         "lockScreen": bool(body.get("lockScreen", False)),   # khóa màn hình chống gian lận
+        "shuffleQuestions": bool(body.get("shuffleQuestions", False)),  # trộn thứ tự câu hỏi/đáp án theo học sinh
         # IELTS Writing (lớp Tiếng Anh): part 1 ↔ task1, part 2 ↔ task2, None = không chấm AI
         "writingTask": body.get("writingTask") if body.get("writingTask") in ("task1", "task2") else None,
         "attachments": body.get("attachments", []),
@@ -2194,6 +2195,7 @@ async def get_class_exam_window(cls_id: str, exam_id: str, studentId: str = None
         "maxAttempts": asgn.get("maxAttempts"),
         "scoreMode":   asgn.get("scoreMode") or "highest",
         "lockScreen":  bool(asgn.get("lockScreen", False)),
+        "shuffleQuestions": bool(asgn.get("shuffleQuestions", False)),
         "attemptsUsed": attempts_used,
     }
 

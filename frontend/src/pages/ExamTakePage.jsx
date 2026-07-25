@@ -689,6 +689,7 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
               duration:  win.duration  ?? e.settings?.duration,
               password:  null,   // lớp học là cổng vào — không cần mật khẩu công khai
               lockScreen: win.lockScreen ?? e.settings?.lockScreen ?? false,
+              shuffleQuestions: win.shuffleQuestions ?? e.settings?.shuffleQuestions ?? false,
             },
             _classGated:   true,
             _className:    win.className,
