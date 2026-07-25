@@ -20,6 +20,21 @@ function getSectionList(exam) {
   )
 }
 
+/* ── Lưu trạng thái đang làm bài (giờ bắt đầu + câu trả lời) vào localStorage,
+   để thoát trang rồi quay lại (F5, mất mạng, đóng tab...) không bị tính lại từ đầu ── */
+function attemptKey(examId, classId, assignmentId, studentId) {
+  return `hoctoan_attempt_${examId}_${classId || 'x'}_${assignmentId || 'x'}_${studentId}`
+}
+function loadAttempt(key) {
+  try { return JSON.parse(localStorage.getItem(key)) } catch { return null }
+}
+function saveAttempt(key, data) {
+  try { localStorage.setItem(key, JSON.stringify(data)) } catch { /* vd: quota đầy — bỏ qua */ }
+}
+function clearAttempt(key) {
+  try { localStorage.removeItem(key) } catch { /* ignore */ }
+}
+
 /* ── Countdown hook ── */
 function useCountdown(targetIso) {
   const calc = () => Math.max(0, new Date(targetIso).getTime() - Date.now())
@@ -364,8 +379,14 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   const essayMax       = (exam.sections?.['TỰ LUẬN']?.questions || [])
                            .reduce((s, q) => s + (Number(q.points) || 0), 0)
   const hasEssay       = sectionList.includes('TỰ LUẬN')
+  // Lượt làm bài đang dở (nếu có) — đọc 1 lần lúc mount để khôi phục giờ bắt đầu + đáp án đã chọn
+  const attemptKeyStr  = attemptKey(exam.id, classId, assignmentId, studentId)
+  const savedAttemptRef = useRef(undefined)
+  if (savedAttemptRef.current === undefined) savedAttemptRef.current = loadAttempt(attemptKeyStr)
+  const savedAttempt = savedAttemptRef.current
+
   const [activeSection, setActiveSection] = useState(sectionList[0] || 'PHẦN I')
-  const [answers,       setAnswers]       = useState({})
+  const [answers,       setAnswers]       = useState(() => savedAttempt?.answers || {})
   const [submitted,     setSubmitted]     = useState(false)
   const [submitting,    setSubmitting]    = useState(false)
   const [submitErr,     setSubmitErr]     = useState('')
@@ -375,14 +396,14 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   // Khóa màn hình (chống gian lận) — bật theo cài đặt của giáo viên
   const lockOn = !!exam.settings?.lockScreen
   const [lockStarted, setLockStarted] = useState(!lockOn)
-  const [startedAt,   setStartedAt]   = useState(() => (lockOn ? null : Date.now()))
+  const [startedAt,   setStartedAt]   = useState(() => savedAttempt?.startedAt ?? (lockOn ? null : Date.now()))
   const { violations, warning, blocked, resume, unlocked,
           askUnlock, closeUnlock, tryUnlock, dismissWarning } = useExamLock(lockOn && lockStarted && !submitted)
   const lockActive = lockOn && !unlocked
 
   const beginLocked = async () => {
     await enterFsLock()
-    setStartedAt(Date.now())
+    setStartedAt(prev => prev ?? Date.now())   // đã có giờ bắt đầu từ lượt cũ thì giữ nguyên, không reset
     setLockStarted(true)
   }
 
@@ -393,10 +414,17 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   const endIso     = new Date(endTime).toISOString()
   const msLeft     = useCountdown(endIso)
 
-  // Auto-submit on time up
+  // Hết giờ → tự động nộp bài
   useEffect(() => {
     if (msLeft === 0 && !submitted) handleSubmit(true)
   }, [msLeft])
+
+  // Lưu lại lượt làm bài (giờ bắt đầu + đáp án) sau mỗi thay đổi, để thoát ra rồi
+  // quay lại (F5, mất mạng, đóng tab...) không bị tính lại từ đầu.
+  useEffect(() => {
+    if (submitted || startedAt == null) return
+    saveAttempt(attemptKeyStr, { startedAt, answers })
+  }, [answers, startedAt, submitted, attemptKeyStr])
 
   const handleAnswerChange = (key, val) => {
     setAnswers(prev => ({ ...prev, [key]: val }))
@@ -415,6 +443,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
       setFinalScore(result.score)
       setFinalMax(result.maxScore)
       setSubmitted(true)
+      clearAttempt(attemptKeyStr)
     } catch (e) {
       setSubmitErr(e?.message || 'Nộp bài thất bại. Vui lòng thử lại.')
     } finally {

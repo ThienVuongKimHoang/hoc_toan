@@ -80,13 +80,18 @@ app.add_middleware(
 
 
 def _client_ip(request: Request) -> str:
-    """Lấy IP thật của client, ưu tiên header do Nginx set (X-Forwarded-For / X-Real-IP)."""
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
+    """Lấy IP thật của client.
+    X-Real-IP được Nginx ghi đè bằng $remote_addr (client không thể giả mạo) nên ưu
+    tiên dùng header này. X-Forwarded-For thì Nginx chỉ NỐI THÊM IP thật vào cuối
+    ($proxy_add_x_forwarded_for) — phần tử đầu tiên do client tự gửi lên vẫn có thể
+    bị giả mạo tuỳ ý, nên KHÔNG được dùng để định danh IP (từng bị lợi dụng để bypass
+    khoá đăng nhập sai nhiều lần và chặn IP cấm)."""
     real_ip = request.headers.get("x-real-ip")
     if real_ip:
         return real_ip.strip()
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
 
 

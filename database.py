@@ -539,15 +539,17 @@ def _ensure_super_admin() -> None:
                 return
         try:
             uid = int(datetime.now(timezone.utc).timestamp() * 1000)
+            temp_password = secrets.token_urlsafe(12)
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO users(id,email,password,name,role,avatar,is_registered,created_at)
                     VALUES(%s,%s,%s,%s,%s,%s,%s,NOW())
                     ON CONFLICT(email) DO NOTHING
-                """, (uid, 'admin@gmail.com', hash_password('123456'),
+                """, (uid, 'admin@gmail.com', hash_password(temp_password),
                       'Super Admin', 'super_admin', 'S', True))
             conn.commit()
-            print("[DB] Created default super_admin: admin@gmail.com / 123456")
+            print(f"[DB] Created default super_admin: admin@gmail.com / {temp_password} "
+                  f"— hãy đăng nhập và đổi mật khẩu này ngay.")
         except Exception as e:
             conn.rollback()
             print(f"[DB] _ensure_super_admin error: {e}")
@@ -1000,6 +1002,8 @@ def update_exam_field(exam_id: str, camel_field: str, value) -> bool:
         "classes":          "classes_data",
     }
     col = _map.get(camel_field, camel_field)
+    if col not in _map.values():
+        raise ValueError(f"update_exam_field: cột không được phép: {camel_field!r}")
     if col in ("practice_settings", "settings", "classes_data"):
         value = json.dumps(value, ensure_ascii=False)
     with _C() as conn:
