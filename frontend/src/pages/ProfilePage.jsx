@@ -85,11 +85,18 @@ const WING_FEATHERS = [
 ]
 
 /* ── Cánh thiên thần cho khung huyền thoại — 2 cánh vàng vẫy nhẹ liên tục 2 bên
-   avatar. Gốc cánh (điểm (0,0) trong viewBox) được canh vào đúng mép khung tròn
-   qua vị trí % (đã đo bằng mockup); size = kích thước avatar (khớp AvatarFrame). ── */
-function AngelWings({ size }) {
-  const dim = Math.round(size * 1.15)
-  const marginTop = -Math.round(dim * 0.4615)
+   avatar. Gốc cánh (điểm (0,0) trong viewBox, ứng với dim/9 tính từ mép trái SVG vì
+   viewBox rộng 90 bắt đầu từ x=-10) được canh bằng pixel vào đúng mép trái/phải của
+   khung tròn (ringSize) — không phụ thuộc vào việc container to hay nhỏ, khác với
+   cách canh theo % trước đây vốn chỉ đúng khi avatar và khung có cùng kích thước.
+   avatarSize = kích thước ảnh đại diện (quyết định độ lớn của cánh); ringSize = kích
+   thước hộp khung viền (quyết định điểm gắn cánh). ── */
+function AngelWings({ avatarSize, ringSize }) {
+  const dim          = Math.round(avatarSize * 0.65)
+  const marginTop     = -Math.round(dim * 0.4615)
+  const originOffset  = dim / 9
+  const leftWingLeft  = -Math.round(dim - originOffset)
+  const rightWingLeft = Math.round(ringSize - originOffset)
 
   const feathers = (
     <>
@@ -106,12 +113,12 @@ function AngelWings({ size }) {
 
   return (
     <>
-      <div className="avt-wing-wrap avt-wing-wrap--left" style={{ width: dim, height: dim, right: '88%', marginTop }}>
+      <div className="avt-wing-wrap avt-wing-wrap--left" style={{ width: dim, height: dim, left: leftWingLeft, marginTop }}>
         <div className="avt-wing-flap avt-wing-flap--left">
           <svg viewBox="-10 -60 90 130" width={dim} height={dim} style={{ transform: 'scaleX(-1)' }}>{feathers}</svg>
         </div>
       </div>
-      <div className="avt-wing-wrap avt-wing-wrap--right" style={{ width: dim, height: dim, left: '88%', marginTop }}>
+      <div className="avt-wing-wrap avt-wing-wrap--right" style={{ width: dim, height: dim, left: rightWingLeft, marginTop }}>
         <div className="avt-wing-flap avt-wing-flap--right">
           <svg viewBox="-10 -60 90 130" width={dim} height={dim}>{feathers}</svg>
         </div>
@@ -166,7 +173,7 @@ export function AvatarFrame({ frameStyle, size, children }) {
 }
 
 /* ── Avatar display ── */
-export function AvatarDisplay({ user, size = 80, onClick, className = '', frameStyle = null, locked = false, showWings = true }) {
+export function AvatarDisplay({ user, size = 80, onClick, className = '', frameStyle = null, locked = false }) {
   const [failed, setFailed] = useState(false)
   const initial  = (user.name || user.email || '?')[0].toUpperCase()
   const bgColor  = user.avatarColor || ROLE_DEFAULT_COLOR[user.role] || '#2563eb'
@@ -208,7 +215,7 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '', frameS
       >
         {circle}
         <img src={frameStyle.image} alt="" className="avt-frame-image-ring" draggable={false} />
-        {frameStyle.wings && showWings && <AngelWings size={outerSize} />}
+        {frameStyle.wings && <AngelWings avatarSize={size} ringSize={outerSize} />}
       </div>
     )
   }
@@ -554,7 +561,6 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
                 onClick={() => (avatarLocked ? setShowUnlockModal(true) : setShowAvatarPicker(true))}
                 frameStyle={FRAME_STYLES[user.equippedFrame]}
                 locked={avatarLocked}
-                showWings={false}
               />
               <div className="prof-avatar-meta">
                 <span className="prof-avatar-name">{user.name}</span>
