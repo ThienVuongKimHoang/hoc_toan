@@ -2448,6 +2448,43 @@ button { font-family: inherit; }
 
 .et-exam { min-height: 100vh; background: #f8fafc; }
 
+/* ── Xem lại bài đã làm (lịch sử làm bài) ── */
+.review-status-screen {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 60vh; color: #64748b; font-size: 0.95rem;
+}
+.review-status-desc { color: #64748b; font-size: 0.92rem; margin-top: 4px; }
+.review-submitted-at { font-size: 0.82rem; color: #64748b; white-space: nowrap; }
+
+.review-score-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px 24px;
+  margin-bottom: 18px;
+  text-align: center;
+}
+.review-score-num {
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+.review-score-num span { font-size: 1.1rem; font-weight: 600; color: #94a3b8; }
+.review-score-meta {
+  display: flex; justify-content: center; flex-wrap: wrap; gap: 16px;
+  font-size: 0.85rem; color: #64748b; margin-top: 8px;
+}
+.review-essay-pending {
+  margin: 12px 0 0;
+  font-size: 0.85rem;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 8px 14px;
+}
+
 .btn-submit-exam {
   padding: 10px 20px;
   background: #059669;
@@ -5641,7 +5678,13 @@ button { font-family: inherit; }
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .1s;
 }
+.prof-history-item:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.prof-history-item:active { transform: scale(0.995); }
 .phi-left     { flex: 1; min-width: 0; }
 .phi-title    { font-size: 0.9rem; font-weight: 600; color: #1e293b; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .phi-meta     { display: flex; gap: 12px; font-size: 0.78rem; color: #94a3b8; margin-bottom: 6px; }
@@ -5652,6 +5695,11 @@ button { font-family: inherit; }
 .phi-score    { text-align: right; flex-shrink: 0; }
 .phi-score-num   { font-size: 1.4rem; font-weight: 800; color: #0f172a; }
 .phi-score-total { font-size: 0.85rem; color: #94a3b8; }
+.phi-score-pending {
+  font-size: 0.78rem; font-weight: 600; color: #d97706;
+  background: #fffbeb; border: 1px solid #fde68a;
+  border-radius: 99px; padding: 4px 10px; white-space: nowrap;
+}
 
 /* ─── Admin chips ─── */
 .prof-admin-chips { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -7146,9 +7194,31 @@ button { font-family: inherit; }
   border: 1px solid var(--cm-border);
   border-radius: 14px;
   box-shadow: 0 1px 2px rgba(15,23,42,0.03);
+  cursor: pointer;
   transition: transform 0.18s cubic-bezier(.22,1,.36,1), box-shadow 0.18s, border-color 0.18s;
 }
 .cm-doc-row:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -12px rgba(37,99,235,0.28); border-color: #C7D8F3; }
+.cm-doc-drag-handle {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: none; padding: 0; margin: 0;
+  color: #94a3b8;
+  cursor: grab;
+  touch-action: none;
+  border-radius: 8px;
+}
+.cm-doc-drag-handle:hover { background: #F1F5F9; color: var(--cm-royal-2); }
+.cm-doc-drag-handle:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+/* thu nhỏ (scale < 1) khi đang kéo — ngược với .exfv-thumb--step.is-dragging (phóng to),
+   vì đây là danh sách file rời, không phải ảnh bài tập */
+.cm-doc-row.is-dragging {
+  transition: none;
+  box-shadow: 0 10px 28px rgba(15,23,42,0.28);
+  z-index: 5;
+  cursor: grabbing;
+  opacity: 0.97;
+}
 .cm-doc-icon {
   color: var(--cm-royal-2); flex-shrink: 0;
   width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;

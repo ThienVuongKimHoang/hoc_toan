@@ -51,3 +51,19 @@ export function nextDapAnOrder(docs, folder, cauLabel) {
 export function flattenCau(cauGroup) {
   return [...cauGroup.de, ...cauGroup.dapAn]
 }
+
+/** Sắp xếp tài liệu rời/thường theo trường order (do kéo-thả gán) — doc chưa có order thì
+   giữ nguyên vị trí gốc, doc có order luôn lên trước doc chưa có order (upload mới sau khi
+   đã sắp xếp sẽ rơi xuống cuối, không chen ngang). Không mutate mảng gốc. */
+export function sortDocsByOrder(docs) {
+  return docs
+    .map((d, i) => ({ d, i }))
+    .sort((a, b) => {
+      const oa = a.d.order, ob = b.d.order
+      if (oa != null && ob != null) return oa - ob || a.i - b.i
+      if (oa != null) return -1
+      if (ob != null) return 1
+      return a.i - b.i
+    })
+    .map(({ d }) => d)
+}

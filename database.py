@@ -646,6 +646,33 @@ def get_submissions(exam_id: str) -> list:
     return [_sub_from_row(dict(r)) for r in rows]
 
 
+def get_submissions_by_student(student_id: str) -> list:
+    """Toàn bộ bài nộp của một học sinh (mọi đề đã làm), kèm tiêu đề/môn của đề —
+    dùng cho trang "Lịch sử làm bài" trong hồ sơ cá nhân."""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT s.*, e.title AS exam_title, e.subject AS exam_subject,
+                       e.results_revealed AS exam_results_revealed, e.settings AS exam_settings
+                FROM submissions s
+                JOIN exams e ON e.id = s.exam_id
+                WHERE s.student_id = %s
+                ORDER BY s.submitted_at DESC NULLS LAST, s.id DESC
+            """, (str(student_id),))
+            rows = cur.fetchall()
+    out = []
+    for row in rows:
+        rd = dict(row)
+        sub = _sub_from_row(rd)
+        sub["examId"]          = rd["exam_id"]
+        sub["examTitle"]       = rd.get("exam_title") or ""
+        sub["examSubject"]     = rd.get("exam_subject")
+        sub["resultsRevealed"] = bool(rd.get("exam_results_revealed"))
+        sub["hideResults"]     = bool((rd.get("exam_settings") or {}).get("hideResults", False))
+        out.append(sub)
+    return out
+
+
 def load_exams() -> dict:
     """Load all exams + their submissions (for stats/public listing)."""
     with _C() as conn:

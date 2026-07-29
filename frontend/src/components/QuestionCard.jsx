@@ -79,12 +79,13 @@ function PassageBlock({ title, text }) {
 }
 
 /* ── Trắc nghiệm 1 đáp án (PHẦN I Toán + Tiếng Anh) ── */
-function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, saved, choiceOrder }) {
+function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, saved, choiceOrder, readOnly = false }) {
   // Khởi tạo từ đáp án đã lưu ở component cha — giữ lựa chọn khi học sinh chuyển phần rồi quay lại
   const [selected, setSelected] = useState(saved ?? null)
   const correct = q.answer  // null nếu không có đáp án
 
   const handleSelect = (key) => {
+    if (readOnly) return
     if (examMode) {
       setSelected(key)
       onAnswerChange?.(key)
@@ -98,6 +99,12 @@ function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, 
 
   const getState = (key) => {
     if (examMode) return selected === key ? 'selected' : ''
+    if (readOnly) {
+      if (correct === null) return selected === key ? 'selected' : ''
+      if (key === correct) return 'correct'
+      if (key === selected) return 'wrong'
+      return ''
+    }
     if (selected === null) return ''
     if (correct === null) return selected === key ? 'selected' : ''  // chưa có đáp án
     if (key === correct) return 'correct'
@@ -125,7 +132,7 @@ function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, 
             key={key}
             className={`choice-btn ${getState(key)}`}
             onClick={() => handleSelect(key)}
-            disabled={!examMode && correct !== null && selected !== null}
+            disabled={readOnly || (!examMode && correct !== null && selected !== null)}
           >
             <span className="choice-label">{useShuffled ? (DISPLAY_LABELS[i] || key) : key}.</span>
             <span className="choice-text"><MathText text={val} /></span>
@@ -139,6 +146,9 @@ function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, 
             : `✗ Sai! Đáp án đúng là: ${correct}`}
         </p>
       )}
+      {!examMode && readOnly && selected === null && correct !== null && (
+        <p className="answer-feedback wrong">Chưa chọn đáp án. Đáp án đúng: {correct}</p>
+      )}
       {!examMode && selected !== null && correct === null && (
         <p className="answer-feedback neutral">Chưa có đáp án chính thức cho câu này.</p>
       )}
@@ -147,12 +157,13 @@ function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, 
 }
 
 /* ── PHẦN II: Đúng/Sai ── */
-function TrueFalseCard({ q, examMode, onAnswerChange, saved }) {
+function TrueFalseCard({ q, examMode, onAnswerChange, saved, readOnly = false }) {
   // Khởi tạo từ đáp án đã lưu — nếu không, quay lại phần này rồi tick tiếp sẽ ghi đè mất các ý đã chọn
   const [answers, setAnswers] = useState(saved ?? {})
   const subs = q.sub_questions || []
 
   const toggle = (label, val) => {
+    if (readOnly) return
     const next = { ...answers, [label]: answers[label] === val ? undefined : val }
     setAnswers(next)
     onAnswerChange?.(next)
@@ -160,8 +171,9 @@ function TrueFalseCard({ q, examMode, onAnswerChange, saved }) {
 
   const getResult = (sub) => {
     if (examMode) return null
+    if (sub.correct_answer === null) return null
     const userAns = answers[sub.label]
-    if (userAns === undefined || sub.correct_answer === null) return null
+    if (userAns === undefined) return readOnly ? 'missing' : null
     return userAns === sub.correct_answer ? 'correct' : 'wrong'
   }
 
@@ -172,23 +184,28 @@ function TrueFalseCard({ q, examMode, onAnswerChange, saved }) {
       <div className="sub-questions">
         {subs.map((sub) => {
           const result = getResult(sub)
+          const rowClass = result === 'missing' ? 'wrong' : (result || '')
           return (
-            <div key={sub.label} className={`sub-row ${result || ''}`}>
+            <div key={sub.label} className={`sub-row ${rowClass}`}>
               <span className="sub-label">{sub.label})</span>
               <span className="sub-text"><MathText text={sub.text} /></span>
               <div className="tf-buttons">
                 <button
                   className={`tf-btn true-btn ${answers[sub.label] === true ? 'active' : ''}`}
                   onClick={() => toggle(sub.label, true)}
+                  disabled={readOnly}
                 >Đúng</button>
                 <button
                   className={`tf-btn false-btn ${answers[sub.label] === false ? 'active' : ''}`}
                   onClick={() => toggle(sub.label, false)}
+                  disabled={readOnly}
                 >Sai</button>
               </div>
               {!examMode && result && (
-                <span className={`sub-result ${result}`}>
-                  {result === 'correct' ? '✓' : `✗ (${sub.correct_answer ? 'Đúng' : 'Sai'})`}
+                <span className={`sub-result ${rowClass}`}>
+                  {result === 'correct' ? '✓' : result === 'missing'
+                    ? `— chưa chọn (Đúng: ${sub.correct_answer ? 'Đúng' : 'Sai'})`
+                    : `✗ (${sub.correct_answer ? 'Đúng' : 'Sai'})`}
                 </span>
               )}
             </div>
@@ -200,9 +217,9 @@ function TrueFalseCard({ q, examMode, onAnswerChange, saved }) {
 }
 
 /* ── PHẦN III: trả lời ngắn ── */
-function ShortAnswerCard({ q, examMode, onAnswerChange, saved }) {
+function ShortAnswerCard({ q, examMode, onAnswerChange, saved, readOnly = false }) {
   const [value, setValue]       = useState(saved ?? '')
-  const [submitted, setSubmitted] = useState(false)
+  const [submitted, setSubmitted] = useState(readOnly)
   const correct = q.answer
 
   const check = () => { if (value.trim()) setSubmitted(true) }
@@ -239,15 +256,19 @@ function ShortAnswerCard({ q, examMode, onAnswerChange, saved }) {
           value={value}
           onChange={(e) => { setValue(e.target.value); setSubmitted(false); onAnswerChange?.(e.target.value) }}
           onKeyDown={(e) => e.key === 'Enter' && check()}
-          disabled={submitted && isCorrect}
+          disabled={readOnly || (submitted && isCorrect)}
         />
-        <button className="check-btn" onClick={check} disabled={!value.trim()}>
-          Kiểm tra
-        </button>
+        {!readOnly && (
+          <button className="check-btn" onClick={check} disabled={!value.trim()}>
+            Kiểm tra
+          </button>
+        )}
       </div>
       {submitted && correct && (
         <p className={`answer-feedback ${isCorrect ? 'correct' : 'wrong'}`}>
-          {isCorrect ? `✓ Chính xác!` : `✗ Chưa đúng. Đáp án: ${correct}`}
+          {isCorrect ? `✓ Chính xác!`
+            : !value.trim() ? `— Chưa trả lời. Đáp án: ${correct}`
+            : `✗ Chưa đúng. Đáp án: ${correct}`}
         </p>
       )}
       {submitted && !correct && (
@@ -269,7 +290,7 @@ async function uploadImage(file) {
   return res.json()   // { url, name, size }
 }
 
-function EssayUploadCard({ q, examMode, onAnswerChange, saved }) {
+function EssayUploadCard({ q, examMode, onAnswerChange, saved, readOnly = false }) {
   const [images, setImages]     = useState(Array.isArray(saved) ? saved : [])
   const [uploading, setUploading] = useState(false)
   const [error, setError]       = useState('')
@@ -278,6 +299,27 @@ function EssayUploadCard({ q, examMode, onAnswerChange, saved }) {
   const libraryRef = useRef(null)
 
   const commit = (next) => { setImages(next); onAnswerChange?.(next) }
+
+  if (readOnly) {
+    return (
+      <div className="q-body">
+        <p className="q-text"><QuestionText q={q} /></p>
+        <FigureImages path={q.figure_path} />
+        {images.length > 0 ? (
+          <div className="essay-thumbs">
+            {images.map((img, i) => (
+              <div key={img.url || i} className="essay-thumb">
+                <img src={img.url} alt={img.name || `Ảnh ${i + 1}`} loading="lazy"
+                  onClick={() => window.open(img.url, '_blank')} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="answer-feedback neutral">Chưa nộp ảnh bài làm cho câu này.</p>
+        )}
+      </div>
+    )
+  }
 
   const addFiles = async (files) => {
     const imgs = Array.from(files || []).filter(f => f.type.startsWith('image/'))
@@ -384,7 +426,7 @@ function _isMultipleChoice(q) {
   return q.section === 'PHẦN I' || q.section === 'TIẾNG ANH' || q.section === 'READING'
 }
 
-export default function QuestionCard({ q, index, examMode = false, onAnswerChange, hidePassage = false, answers, choiceOrders }) {
+export default function QuestionCard({ q, index, examMode = false, onAnswerChange, hidePassage = false, answers, choiceOrders, readOnly = false }) {
   const [expanded, setExpanded] = useState(true)
   const points   = q.points ? `${q.points}đ` : ''
   const secClass = SECTION_CLASS[q.section] || 'phan-1'
@@ -415,13 +457,13 @@ export default function QuestionCard({ q, index, examMode = false, onAnswerChang
 
       {expanded && (
         _isMultipleChoice(q) ? (
-          <MultipleChoiceCard q={q} examMode={examMode} onAnswerChange={handleChange} hidePassage={hidePassage} saved={saved} choiceOrder={choiceOrder} />
+          <MultipleChoiceCard q={q} examMode={examMode} onAnswerChange={handleChange} hidePassage={hidePassage} saved={saved} choiceOrder={choiceOrder} readOnly={readOnly} />
         ) : q.section === 'PHẦN II' ? (
-          <TrueFalseCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} />
+          <TrueFalseCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} readOnly={readOnly} />
         ) : q.section === 'TỰ LUẬN' ? (
-          <EssayUploadCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} />
+          <EssayUploadCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} readOnly={readOnly} />
         ) : (
-          <ShortAnswerCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} />
+          <ShortAnswerCard q={q} examMode={examMode} onAnswerChange={handleChange} saved={saved} readOnly={readOnly} />
         )
       )}
     </div>

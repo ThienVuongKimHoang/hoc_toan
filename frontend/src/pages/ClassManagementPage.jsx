@@ -24,8 +24,9 @@ import MixExamModal from '../components/MixExamModal.jsx'
 import PublishModal from '../components/PublishModal.jsx'
 import PracticeSettingsModal from '../components/PracticeSettingsModal.jsx'
 import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
+import SortableDocList from '../components/SortableDocList.jsx'
 import SaveCaptureModal from '../components/SaveCaptureModal.jsx'
-import { isExerciseDoc } from '../utils/exerciseDocs.js'
+import { isExerciseDoc, sortDocsByOrder } from '../utils/exerciseDocs.js'
 import { extractYoutubeId, youtubeEmbedUrl, youtubeThumbnail, youtubeWatchUrl } from '../utils/youtube.js'
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, GradePicker, SubjectPicker, gradeLabel } from '../components/SubjectBadge.jsx'
 import { ROLES } from '../auth/mockUsers.js'
@@ -106,6 +107,13 @@ const IC = {
   audio: (s = 16) => <Svg size={s}><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></Svg>,
   download: (s = 16) => <Svg size={s}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></Svg>,
   folder: (s = 16) => <Svg size={s}><path d="M4 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.5L11 4H4z" /></Svg>,
+  grip: (s = 16) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0, verticalAlign: 'middle' }}>
+      <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" />
+      <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
+      <circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
+    </svg>
+  ),
 }
 
 /* ─── File type helpers ─── */
@@ -1830,7 +1838,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
             if (!folderMap.has(d.folder)) folderMap.set(d.folder, [])
             folderMap.get(d.folder).push(d)
           })
-          const docsInView = openFolder ? (folderMap.get(openFolder) || []) : looseDocs
+          const docsInView = sortDocsByOrder(openFolder ? (folderMap.get(openFolder) || []) : looseDocs)
           const folderHasExercise = openFolder && docsInView.some(isExerciseDoc)
           const folderTileLabel = (docs) => {
             const exerciseDocs = docs.filter(isExerciseDoc)
@@ -1842,7 +1850,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
             const dType = fileType(d)
             const isEditing = editingDocId === d.id
             return (
-              <div key={d.id} className="cm-doc-row" onClick={() => !isEditing && setViewingFile(d)} style={{ cursor: 'pointer' }}>
+              <>
                 <div className={dType === 'youtube' ? undefined : 'cm-doc-icon'}
                   style={dType === 'youtube' ? { width: 44, height: 32, borderRadius: 6, overflow: 'hidden', flexShrink: 0 } : undefined}>
                   {dType === 'youtube'
@@ -1878,7 +1886,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
                     <button className="cm-remove-btn" onClick={e => { e.stopPropagation(); handleRemoveDoc(d) }}>{IC.trash(14)}</button>
                   </>
                 )}
-              </div>
+              </>
             )
           }
           return (
@@ -1943,9 +1951,16 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
               ) : folderHasExercise ? (
                 <ExerciseFolderView docs={docsInView} editable classId={cls.id} onChanged={refresh} />
               ) : (
-                <div className="cm-doc-list">
-                  {docsInView.map(renderDocRow)}
-                </div>
+                <SortableDocList
+                  docs={docsInView}
+                  classId={cls.id}
+                  editable
+                  dragDisabled={!!editingDocId || uploading || deletingFolder}
+                  onChanged={refresh}
+                  onRowClick={(d) => { if (editingDocId !== d.id) setViewingFile(d) }}
+                  renderRow={renderDocRow}
+                  handleIcon={IC.grip(14)}
+                />
               )}
             </div>
           )

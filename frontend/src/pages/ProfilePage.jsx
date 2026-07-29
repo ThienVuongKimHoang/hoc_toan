@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import RoleBadge from '../components/RoleBadge.jsx'
 import { ROLE_META, ROLES, hasTeacherAccess } from '../auth/mockUsers.js'
-import { getExamsByTeacher, getAllExams } from '../store/examStore.js'
+import { getExamsByTeacher, getAllExams, fetchMySubmissions, scaledScore } from '../store/examStore.js'
 
 const USER_KEY = 'hoctoan_user'
 
@@ -160,12 +160,15 @@ function AvatarPicker({ user, onSave, onClose }) {
   )
 }
 
-/* ── Mock student history ── */
-const MOCK_HISTORY = [
-  { id: 1, title: 'Đề thi thử THPT – Sở Đồng Nai 2026',  score: 8.25, total: 10, date: '2026-06-20', time: '87 phút' },
-  { id: 2, title: 'Đề thi thử THPT Quốc gia 2025',        score: 7.50, total: 10, date: '2026-06-15', time: '90 phút' },
-  { id: 3, title: 'Đề tham khảo Bộ GD&ĐT 2025',           score: 9.00, total: 10, date: '2026-06-10', time: '75 phút' },
-]
+const formatDt = iso => iso
+  ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  : '—'
+
+const formatDuration = (sec) => {
+  if (sec == null) return null
+  const m = Math.round(sec / 60)
+  return m > 0 ? `${m} phút` : `${sec} giây`
+}
 
 function ScoreBar({ score, total }) {
   const pct   = (score / total) * 100
@@ -187,14 +190,20 @@ function StatCard({ icon, value, label, color }) {
   )
 }
 
-function StudentStats() {
-  const avg = (MOCK_HISTORY.reduce((s, h) => s + h.score, 0) / MOCK_HISTORY.length).toFixed(2)
+function StudentStats({ submissions }) {
+  // Chỉ tính trên các bài đã có điểm (bỏ qua bài đang chờ GV công bố kết quả)
+  const graded = submissions.filter(s => s.score != null && s.maxScore != null)
+  const scaled = graded.map(s => scaledScore(s.score, s.maxScore))
+  const avg    = scaled.length ? (scaled.reduce((a, b) => a + b, 0) / scaled.length).toFixed(2) : '—'
+  const best   = scaled.length ? Math.max(...scaled).toFixed(2) : '—'
+  const times  = graded.map(s => s.timeSpent).filter(t => t != null)
+  const avgTimeMin = times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length / 60) : null
   return (
     <div className="prof-stats-row">
-      <StatCard icon={IcBook(22)}  value={MOCK_HISTORY.length} label="Bài đã làm"      color="#2563eb" />
-      <StatCard icon={IcStar(22)}  value={`${avg}/10`}         label="Điểm trung bình" color="#f59e0b" />
-      <StatCard icon={IcAward(22)} value="9.00"                label="Điểm cao nhất"   color="#059669" />
-      <StatCard icon={IcClock(22)} value="84 phút"             label="Thời gian TB"    color="#7c3aed" />
+      <StatCard icon={IcBook(22)}  value={submissions.length} label="Bài đã làm"      color="#2563eb" />
+      <StatCard icon={IcStar(22)}  value={scaled.length ? `${avg}/10` : '—'}  label="Điểm trung bình" color="#f59e0b" />
+      <StatCard icon={IcAward(22)} value={scaled.length ? `${best}/10` : '—'} label="Điểm cao nhất"   color="#059669" />
+      <StatCard icon={IcClock(22)} value={avgTimeMin != null ? `${avgTimeMin} phút` : '—'} label="Thời gian TB" color="#7c3aed" />
     </div>
   )
 }
@@ -223,32 +232,52 @@ function AdminStats() {
   )
 }
 
-function HistorySection() {
+function HistorySection({ submissions, loading }) {
   return (
     <div className="prof-section">
       <h3 className="prof-section-title">{IcClock(16)} Lịch sử làm bài</h3>
-      <div className="prof-history-list">
-        {MOCK_HISTORY.map(h => (
-          <div key={h.id} className="prof-history-item">
-            <div className="phi-left">
-              <div className="phi-title">{h.title}</div>
-              <div className="phi-meta">
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  {IcClock(12)} {h.date}
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  {IcClock(12)} {h.time}
-                </span>
-              </div>
-              <ScoreBar score={h.score} total={h.total} />
-            </div>
-            <div className="phi-score">
-              <span className="phi-score-num">{h.score}</span>
-              <span className="phi-score-total">/{h.total}</span>
-            </div>
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <p className="prof-section-desc">Đang tải…</p>
+      ) : submissions.length === 0 ? (
+        <p className="prof-section-desc">Chưa có bài làm nào. Hãy vào một đề thi để bắt đầu!</p>
+      ) : (
+        <div className="prof-history-list">
+          {submissions.map(s => {
+            const pending = s.score == null
+            const scaled  = pending ? null : scaledScore(s.score, s.maxScore)
+            const dur     = formatDuration(s.timeSpent)
+            return (
+              <a key={s.id} className="prof-history-item" href={`#results/${s.examId}/${s.id}`}
+                 title="Xem lại bài làm">
+                <div className="phi-left">
+                  <div className="phi-title">{s.examTitle || 'Đề thi'}</div>
+                  <div className="phi-meta">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {IcClock(12)} {formatDt(s.submittedAt)}
+                    </span>
+                    {dur && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {IcClock(12)} {dur}
+                      </span>
+                    )}
+                  </div>
+                  {!pending && <ScoreBar score={scaled} total={10} />}
+                </div>
+                <div className="phi-score">
+                  {pending ? (
+                    <span className="phi-score-pending">Chờ công bố</span>
+                  ) : (
+                    <>
+                      <span className="phi-score-num">{scaled}</span>
+                      <span className="phi-score-total">/10</span>
+                    </>
+                  )}
+                </div>
+              </a>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -260,6 +289,19 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome }) {
   const [nameVal,          setNameVal]          = useState(user.name)
   const [saved,            setSaved]            = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+  const [submissions,      setSubmissions]      = useState([])
+  const [subsLoading,      setSubsLoading]      = useState(user.role === ROLES.STUDENT)
+
+  useEffect(() => {
+    if (user.role !== ROLES.STUDENT) return
+    let alive = true
+    setSubsLoading(true)
+    fetchMySubmissions(user.id)
+      .then(res => { if (alive) setSubmissions(res.submissions || []) })
+      .catch(() => { if (alive) setSubmissions([]) })
+      .finally(() => { if (alive) setSubsLoading(false) })
+    return () => { alive = false }
+  }, [user.id, user.role])
 
   const handleSaveName = () => {
     if (!nameVal.trim()) return
@@ -333,7 +375,7 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome }) {
         </div>
 
         {/* ── Stats ── */}
-        {user.role === ROLES.STUDENT && <StudentStats />}
+        {user.role === ROLES.STUDENT && <StudentStats submissions={submissions} />}
         {hasTeacherAccess(user.role)  && <TeacherStats userId={user.id} />}
         {(user.role === ROLES.ADMIN || user.role === ROLES.SUPERADMIN) && <AdminStats />}
 
@@ -361,7 +403,7 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome }) {
         </div>
 
         {/* ── Role-specific sections ── */}
-        {user.role === ROLES.STUDENT && <HistorySection />}
+        {user.role === ROLES.STUDENT && <HistorySection submissions={submissions} loading={subsLoading} />}
 
         {(user.role === ROLES.ADMIN || user.role === ROLES.SUPERADMIN) && (
           <div className="prof-section">

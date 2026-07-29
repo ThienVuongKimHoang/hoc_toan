@@ -205,6 +205,23 @@ export async function getSubmissions(examId, teacherId) {
   return res.json()
 }
 
+/** Học sinh lấy lịch sử làm bài của chính mình (mọi đề đã nộp) */
+export async function fetchMySubmissions(studentId) {
+  const res = await fetch(`/api/students/${studentId}/submissions`, { headers: authHeaders() })
+  if (!res.ok) throw new Error('Không thể lấy lịch sử làm bài')
+  return res.json()
+}
+
+/** Xem lại chi tiết một bài đã làm: đề + đáp án đã chọn + đáp án đúng + điểm */
+export async function fetchSubmissionReview(examId, subId) {
+  const res = await fetch(`/api/exams/${examId}/submissions/${subId}/review`, { headers: authHeaders() })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || 'Không thể xem lại bài làm')
+  }
+  return res.json()
+}
+
 /** Giáo viên chấm tay câu tự luận cho một bài nộp. manualScores = { TL_1: 1.5, ... } */
 export async function gradeSubmission(examId, subId, manualScores, teacherId) {
   const res = await fetch(`/api/exams/${examId}/submissions/${subId}/grade`, {

@@ -863,6 +863,47 @@ async def get_submissions(exam_id: str, caller: dict = Depends(require_auth)):
     }
 
 
+@app.get("/api/students/{student_id}/submissions")
+async def get_student_submissions(student_id: str, caller: dict = Depends(require_auth)):
+    """Học sinh xem lịch sử làm bài của chính mình (mọi đề đã nộp). Đề nào đang
+    bật ẩn kết quả và GV chưa công bố thì ẩn điểm/đáp án của lần làm đó —
+    tránh lộ điểm/đáp án trước khi GV công bố cho cả lớp."""
+    if str(caller["id"]) != str(student_id):
+        return JSONResponse({"error": "Không có quyền xem lịch sử làm bài của người khác"}, status_code=403)
+    subs = db.get_submissions_by_student(student_id)
+    for s in subs:
+        if s.get("hideResults") and not s.get("resultsRevealed"):
+            s["score"] = None
+            s["maxScore"] = None
+            s["answers"] = {}
+    return {"submissions": subs}
+
+
+@app.get("/api/exams/{exam_id}/submissions/{sub_id}/review")
+async def review_submission(exam_id: str, sub_id: int, caller: dict = Depends(require_auth)):
+    """Xem lại chi tiết một bài đã làm: đề thi (kèm đáp án đúng), đáp án học sinh
+    đã chọn và điểm — cho chính học sinh đã nộp bài đó, hoặc giáo viên sở hữu đề.
+    Nếu đề bật "ẩn kết quả" và giáo viên chưa công bố, học sinh (không phải GV)
+    chỉ nhận được cờ revealed=False, chưa thấy đáp án đúng/điểm."""
+    exam = db.get_exam(exam_id)
+    if not exam:
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    sub = next((s for s in db.get_submissions(exam_id) if str(s["id"]) == str(sub_id)), None)
+    if not sub:
+        return JSONResponse({"error": "Không tìm thấy bài nộp"}, status_code=404)
+
+    is_manager = _can_manage_exam(exam, caller["id"])
+    is_owner   = str(sub.get("studentId") or "") == str(caller["id"])
+    if not is_manager and not is_owner:
+        return JSONResponse({"error": "Không có quyền xem bài nộp này"}, status_code=403)
+
+    hidden = (exam.get("settings") or {}).get("hideResults", False) and not exam.get("resultsRevealed", False)
+    if hidden and not is_manager:
+        return {"revealed": False, "submission": {"score": None, "maxScore": None}}
+
+    return {"revealed": True, "exam": exam, "submission": sub}
+
+
 @app.post("/api/exams/{exam_id}/submissions/{sub_id}/grade")
 async def grade_essay_submission(exam_id: str, sub_id: str, request: Request, caller: dict = Depends(require_auth)):
     """Giáo viên chấm tay câu tự luận (TỰ LUẬN) cho một bài nộp.

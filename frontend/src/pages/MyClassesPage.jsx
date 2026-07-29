@@ -4,7 +4,7 @@ import { getPracticeInfo } from '../store/examStore.js'
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, gradeLabel } from '../components/SubjectBadge.jsx'
 import { BandChip, IeltsGradeModal, IeltsStatsModal } from '../components/IeltsGrade.jsx'
 import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
-import { isExerciseDoc } from '../utils/exerciseDocs.js'
+import { isExerciseDoc, sortDocsByOrder } from '../utils/exerciseDocs.js'
 import { youtubeEmbedUrl, youtubeThumbnail } from '../utils/youtube.js'
 
 /* Môn "chính" của lớp (fallback dữ liệu cũ chưa gắn môn) */
@@ -570,7 +570,7 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
             if (!folderMap.has(d.folder)) folderMap.set(d.folder, [])
             folderMap.get(d.folder).push(d)
           })
-          const docsInView = openFolder ? (folderMap.get(openFolder) || []) : looseDocs
+          const docsInView = sortDocsByOrder(openFolder ? (folderMap.get(openFolder) || []) : looseDocs)
           const folderHasExercise = openFolder && docsInView.some(isExerciseDoc)
           const folderTileLabel = (docs) => {
             const exerciseDocs = docs.filter(isExerciseDoc)

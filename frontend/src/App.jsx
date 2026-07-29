@@ -11,6 +11,7 @@ import SuperAdminPage from './pages/SuperAdminPage.jsx'
 import StudyPage from './pages/StudyPage.jsx'
 import ClassManagementPage from './pages/ClassManagementPage.jsx'
 import MyClassesPage from './pages/MyClassesPage.jsx'
+import ExamReviewPage from './pages/ExamReviewPage.jsx'
 import AssignmentPopup from './components/AssignmentPopup.jsx'
 import UploadZone from './components/UploadZone.jsx'
 import ProgressPanel from './components/ProgressPanel.jsx'
@@ -48,6 +49,11 @@ function parseHash() {
   if (hash.startsWith('lobby/')) return { view: 'exam-lobby', examId: hash.slice(6) || null, classId: null }
   if (hash === 'lobby') return { view: 'exam-lobby', examId: null, classId: null }
   if (hash.startsWith('practice/')) return { view: 'practice-exam', examId: hash.slice(9), classId: null }
+  if (hash.startsWith('results/')) {
+    // results/<examId>/<subId> — xem lại một bài đã làm (lịch sử làm bài của học sinh)
+    const [examId, subId] = hash.slice(8).split('/')
+    return { view: 'exam-review', examId, subId: subId || null, classId: null }
+  }
   if (hash === 'admin') return { view: 'super-admin', examId: null, classId: null, adminTab: null }
   if (hash.startsWith('admin/')) return { view: 'super-admin', examId: null, classId: null, adminTab: hash.slice(6) || null }
   if (hash === 'study') return { view: 'study', examId: null, classId: null }
@@ -209,6 +215,7 @@ export default function App() {
   const [examId, setExamId] = useState(() => parseHash().examId)
   const [classId, setClassId] = useState(() => parseHash().classId ?? null)
   const [assignmentId, setAssignmentId] = useState(() => parseHash().assignmentId ?? null)
+  const [subId, setSubId] = useState(() => parseHash().subId ?? null)
   const [openClassId, setOpenClassId] = useState(() => parseHash().openClassId ?? null)
   const [whiteboardSubject, setWhiteboardSubject] = useState(() => parseHash().whiteboardSubject ?? null)
   const [whiteboardReturnHash, setWhiteboardReturnHash] = useState(() => parseHash().whiteboardReturnHash ?? null)
@@ -218,8 +225,8 @@ export default function App() {
 
   useEffect(() => {
     const onHash = () => {
-      const { view: v, examId: id, classId: cid, assignmentId: aid, openClassId: ocid, whiteboardSubject: wbs, whiteboardReturnHash: wbr, adminTab: at } = parseHash()
-      setView(v); setExamId(id); setClassId(cid ?? null); setAssignmentId(aid ?? null); setOpenClassId(ocid ?? null)
+      const { view: v, examId: id, classId: cid, assignmentId: aid, subId: sid, openClassId: ocid, whiteboardSubject: wbs, whiteboardReturnHash: wbr, adminTab: at } = parseHash()
+      setView(v); setExamId(id); setClassId(cid ?? null); setAssignmentId(aid ?? null); setSubId(sid ?? null); setOpenClassId(ocid ?? null)
       setWhiteboardSubject(wbs ?? null); setWhiteboardReturnHash(wbr ?? null)
       setAdminTab(at ?? null); setAdminNavNonce(n => n + 1)
     }
@@ -493,6 +500,19 @@ export default function App() {
   if (view === 'practice-exam') return (
     <PracticeExamPage examId={examId} onGoHome={goHome} />
   )
+
+  if (view === 'exam-review') {
+    if (!user) return (
+      <>{header}<AccessDenied message="Bạn cần đăng nhập để xem lại bài làm." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
+    )
+    return (
+      <>
+        {header}
+        <ExamReviewPage examId={examId} subId={subId} onGoHome={goHome} />
+        {teacherToolOverlays}
+      </>
+    )
+  }
 
   if (view === 'solver-page') {
     if (!user || !hasTeacherAccess(user.role)) return (
