@@ -5654,11 +5654,6 @@ button { font-family: inherit; }
   padding-bottom: 12px;
   border-bottom: 1px solid #f1f5f9;
 }
-.prof-section--focus { animation: prof-section-glow 1.6s ease-out; }
-@keyframes prof-section-glow {
-  0%   { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); }
-  100% { border-color: #e2e8f0; box-shadow: none; }
-}
 .prof-section-desc { color: #64748b; font-size: 0.9rem; margin-bottom: 16px; }
 
 /* ─── Info grid ─── */
@@ -5672,6 +5667,27 @@ button { font-family: inherit; }
 .prof-info-row:last-child { border-bottom: none; }
 .pir-label { display: inline-flex; align-items: center; gap: 5px; width: 130px; font-size: 0.85rem; color: #94a3b8; flex-shrink: 0; }
 .pir-value { font-size: 0.9rem; color: #1e293b; font-weight: 500; }
+
+/* ─── Link tới trang lịch sử làm bài (từ trang hồ sơ) ─── */
+.prof-history-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 18px 24px;
+  margin-bottom: 20px;
+  cursor: pointer;
+  font: inherit;
+  color: #1e293b;
+  text-align: left;
+  transition: border-color .15s, background .15s;
+}
+.prof-history-link:hover { background: #f8fafc; border-color: #cbd5e1; }
+.phl-left  { display: inline-flex; align-items: center; gap: 8px; font-size: 1rem; font-weight: 700; }
+.phl-right { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; color: #64748b; }
 
 /* ─── History list ─── */
 .prof-history-list { display: flex; flex-direction: column; gap: 12px; }

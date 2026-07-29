@@ -45,6 +45,7 @@ const IcClose  = (s) => <Ic size={s}><line x1="18" y1="6" x2="6" y2="18"/><line 
 const IcMail   = (s) => <Ic size={s}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></Ic>
 const IcUser   = (s) => <Ic size={s}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Ic>
 const IcShield = (s) => <Ic size={s}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></Ic>
+const IcChevronRight = (s) => <Ic size={s}><polyline points="9 18 15 12 9 6"/></Ic>
 const IcDot    = (s, color) => <svg width={s} height={s} viewBox="0 0 8 8" style={{ flexShrink: 0, verticalAlign: 'middle' }}><circle cx="4" cy="4" r="4" fill={color} /></svg>
 
 /* user.avatarUrl: undefined = chưa từng tuỳ chỉnh (dùng ảnh Google trong user.avatar nếu có),
@@ -160,26 +161,6 @@ function AvatarPicker({ user, onSave, onClose }) {
   )
 }
 
-const formatDt = iso => iso
-  ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-  : '—'
-
-const formatDuration = (sec) => {
-  if (sec == null) return null
-  const m = Math.round(sec / 60)
-  return m > 0 ? `${m} phút` : `${sec} giây`
-}
-
-function ScoreBar({ score, total }) {
-  const pct   = (score / total) * 100
-  const color = pct >= 80 ? '#059669' : pct >= 60 ? '#f59e0b' : '#ef4444'
-  return (
-    <div className="prof-score-bar">
-      <div className="psb-fill" style={{ width: `${pct}%`, background: color }} />
-    </div>
-  )
-}
-
 function StatCard({ icon, value, label, color }) {
   return (
     <div className="prof-stat-card" style={{ '--sc-color': color }}>
@@ -232,83 +213,23 @@ function AdminStats() {
   )
 }
 
-function HistorySection({ submissions, loading, highlight }) {
-  return (
-    <div className={`prof-section ${highlight ? 'prof-section--focus' : ''}`} id="prof-history-section">
-      <h3 className="prof-section-title">{IcClock(16)} Lịch sử làm bài</h3>
-      {loading ? (
-        <p className="prof-section-desc">Đang tải…</p>
-      ) : submissions.length === 0 ? (
-        <p className="prof-section-desc">Chưa có bài làm nào. Hãy vào một đề thi để bắt đầu!</p>
-      ) : (
-        <div className="prof-history-list">
-          {submissions.map(s => {
-            const pending = s.score == null
-            const scaled  = pending ? null : scaledScore(s.score, s.maxScore)
-            const dur     = formatDuration(s.timeSpent)
-            return (
-              <a key={s.id} className="prof-history-item" href={`#results/${s.examId}/${s.id}`}
-                 title="Xem lại bài làm">
-                <div className="phi-left">
-                  <div className="phi-title">{s.examTitle || 'Đề thi'}</div>
-                  <div className="phi-meta">
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      {IcClock(12)} {formatDt(s.submittedAt)}
-                    </span>
-                    {dur && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        {IcClock(12)} {dur}
-                      </span>
-                    )}
-                  </div>
-                  {!pending && <ScoreBar score={scaled} total={10} />}
-                </div>
-                <div className="phi-score">
-                  {pending ? (
-                    <span className="phi-score-pending">Chờ công bố</span>
-                  ) : (
-                    <>
-                      <span className="phi-score-num">{scaled}</span>
-                      <span className="phi-score-total">/10</span>
-                    </>
-                  )}
-                </div>
-              </a>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
 /* ── Main page ── */
-export default function ProfilePage({ user, onUpdateUser, onGoHome, focusSection }) {
+export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory }) {
   const meta = ROLE_META[user.role]
   const [editing,          setEditing]          = useState(false)
   const [nameVal,          setNameVal]          = useState(user.name)
   const [saved,            setSaved]            = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
   const [submissions,      setSubmissions]      = useState([])
-  const [subsLoading,      setSubsLoading]      = useState(user.role === ROLES.STUDENT)
 
   useEffect(() => {
     if (user.role !== ROLES.STUDENT) return
     let alive = true
-    setSubsLoading(true)
     fetchMySubmissions(user.id)
       .then(res => { if (alive) setSubmissions(res.submissions || []) })
       .catch(() => { if (alive) setSubmissions([]) })
-      .finally(() => { if (alive) setSubsLoading(false) })
     return () => { alive = false }
   }, [user.id, user.role])
-
-  // Đến từ menu tài khoản → "Lịch sử làm bài": cuộn thẳng tới danh sách đề đã làm
-  useEffect(() => {
-    if (focusSection !== 'history') return
-    const el = document.getElementById('prof-history-section')
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [focusSection])
 
   const handleSaveName = () => {
     if (!nameVal.trim()) return
@@ -411,7 +332,10 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, focusSection
 
         {/* ── Role-specific sections ── */}
         {user.role === ROLES.STUDENT && (
-          <HistorySection submissions={submissions} loading={subsLoading} highlight={focusSection === 'history'} />
+          <button className="prof-history-link" onClick={onGoHistory}>
+            <span className="phl-left">{IcClock(18)} Lịch sử làm bài</span>
+            <span className="phl-right">{submissions.length} đề đã làm {IcChevronRight(15)}</span>
+          </button>
         )}
 
         {(user.role === ROLES.ADMIN || user.role === ROLES.SUPERADMIN) && (
