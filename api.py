@@ -1624,6 +1624,24 @@ async def api_update_profile(request: Request, user: dict = Depends(require_auth
     return updated
 
 
+@app.put("/api/auth/change-password")
+async def api_change_password(request: Request, user: dict = Depends(require_auth)):
+    """Người dùng tự đổi mật khẩu — yêu cầu xác nhận đúng mật khẩu hiện tại.
+    Tài khoản chỉ đăng nhập bằng Google (chưa từng đặt mật khẩu) không đổi được theo đường này."""
+    body             = await request.json()
+    current_password = body.get("currentPassword") or ""
+    new_password      = body.get("newPassword") or ""
+    if len(new_password) < 6:
+        return JSONResponse({"error": "Mật khẩu mới phải có ít nhất 6 ký tự."}, status_code=400)
+    full = db.get_user_by_id(str(user["id"]), pwd=True)
+    if not full or not full.get("password"):
+        return JSONResponse({"error": "Tài khoản này đăng nhập bằng Google, không thể đổi mật khẩu."}, status_code=400)
+    if not db.verify_password(current_password, full["password"]):
+        return JSONResponse({"error": "Mật khẩu hiện tại không đúng."}, status_code=401)
+    db.update_user_password(str(user["id"]), db.hash_password(new_password))
+    return {"ok": True}
+
+
 @app.get("/api/admin/users")
 async def admin_list_users(caller: dict = Depends(require_admin)):
     """Admin xem toàn bộ người dùng (không trả password)."""
