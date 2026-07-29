@@ -232,9 +232,9 @@ function AdminStats() {
   )
 }
 
-function HistorySection({ submissions, loading }) {
+function HistorySection({ submissions, loading, highlight }) {
   return (
-    <div className="prof-section">
+    <div className={`prof-section ${highlight ? 'prof-section--focus' : ''}`} id="prof-history-section">
       <h3 className="prof-section-title">{IcClock(16)} Lịch sử làm bài</h3>
       {loading ? (
         <p className="prof-section-desc">Đang tải…</p>
@@ -283,7 +283,7 @@ function HistorySection({ submissions, loading }) {
 }
 
 /* ── Main page ── */
-export default function ProfilePage({ user, onUpdateUser, onGoHome }) {
+export default function ProfilePage({ user, onUpdateUser, onGoHome, focusSection }) {
   const meta = ROLE_META[user.role]
   const [editing,          setEditing]          = useState(false)
   const [nameVal,          setNameVal]          = useState(user.name)
@@ -302,6 +302,13 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome }) {
       .finally(() => { if (alive) setSubsLoading(false) })
     return () => { alive = false }
   }, [user.id, user.role])
+
+  // Đến từ menu tài khoản → "Lịch sử làm bài": cuộn thẳng tới danh sách đề đã làm
+  useEffect(() => {
+    if (focusSection !== 'history') return
+    const el = document.getElementById('prof-history-section')
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [focusSection])
 
   const handleSaveName = () => {
     if (!nameVal.trim()) return
@@ -403,7 +410,9 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome }) {
         </div>
 
         {/* ── Role-specific sections ── */}
-        {user.role === ROLES.STUDENT && <HistorySection submissions={submissions} loading={subsLoading} />}
+        {user.role === ROLES.STUDENT && (
+          <HistorySection submissions={submissions} loading={subsLoading} highlight={focusSection === 'history'} />
+        )}
 
         {(user.role === ROLES.ADMIN || user.role === ROLES.SUPERADMIN) && (
           <div className="prof-section">

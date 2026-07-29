@@ -59,7 +59,7 @@ function buildMenu(role, actions) {
   if (role === ROLES.STUDENT) {
     items.push({ icon: IC.stats,   label: 'Học tập',          action: actions.onGoStudy })
     items.push({ icon: IC.users,   label: 'Lớp của tôi',      action: actions.onGoMyClasses })
-    items.push({ icon: IC.history, label: 'Lịch sử làm bài',  action: null })
+    items.push({ icon: IC.history, label: 'Lịch sử làm bài',  action: actions.onGoHistory })
   }
 
   if (hasTeacherAccess(role)) {
@@ -74,7 +74,7 @@ function buildMenu(role, actions) {
   return items
 }
 
-export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onGoTools }) {
+export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onGoTools, onGoHistory }) {
   const [open, setOpen] = useState(false)
   const ref  = useRef(null)
   const meta = ROLE_META[user.role]
@@ -86,7 +86,7 @@ export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, on
   }, [])
 
   const close = () => setOpen(false)
-  const menuItems = buildMenu(user.role, { onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onGoTools })
+  const menuItems = buildMenu(user.role, { onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onGoTools, onGoHistory })
 
   return (
     <div className="acct-wrap" ref={ref}>

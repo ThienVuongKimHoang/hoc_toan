@@ -57,6 +57,8 @@ function parseHash() {
   if (hash === 'admin') return { view: 'super-admin', examId: null, classId: null, adminTab: null }
   if (hash.startsWith('admin/')) return { view: 'super-admin', examId: null, classId: null, adminTab: hash.slice(6) || null }
   if (hash === 'study') return { view: 'study', examId: null, classId: null }
+  // history — mở "Hồ sơ cá nhân" và cuộn thẳng tới danh sách đề đã làm (menu "Lịch sử làm bài")
+  if (hash === 'history') return { view: 'profile', examId: null, classId: null, profileFocus: 'history' }
   // classes | classes/<khối> | classes/<khối>/<classId> — điều hướng khối→lớp→chi tiết
   // do ClassManagementPage tự đọc từ hash; ở đây chỉ cần giữ view class-mgmt.
   if (hash === 'classes' || hash.startsWith('classes/')) return { view: 'class-mgmt', examId: null, classId: null }
@@ -221,14 +223,16 @@ export default function App() {
   const [whiteboardReturnHash, setWhiteboardReturnHash] = useState(() => parseHash().whiteboardReturnHash ?? null)
   const [adminTab, setAdminTab] = useState(() => parseHash().adminTab ?? null)
   const [adminNavNonce, setAdminNavNonce] = useState(0)
+  const [profileFocus, setProfileFocus] = useState(() => parseHash().profileFocus ?? null)
   const [showTeacherTools, setShowTeacherTools] = useState(false)
 
   useEffect(() => {
     const onHash = () => {
-      const { view: v, examId: id, classId: cid, assignmentId: aid, subId: sid, openClassId: ocid, whiteboardSubject: wbs, whiteboardReturnHash: wbr, adminTab: at } = parseHash()
+      const { view: v, examId: id, classId: cid, assignmentId: aid, subId: sid, openClassId: ocid, whiteboardSubject: wbs, whiteboardReturnHash: wbr, adminTab: at, profileFocus: pf } = parseHash()
       setView(v); setExamId(id); setClassId(cid ?? null); setAssignmentId(aid ?? null); setSubId(sid ?? null); setOpenClassId(ocid ?? null)
       setWhiteboardSubject(wbs ?? null); setWhiteboardReturnHash(wbr ?? null)
       setAdminTab(at ?? null); setAdminNavNonce(n => n + 1)
+      setProfileFocus(pf ?? null)
     }
     window.addEventListener('popstate', onHash)
     window.addEventListener('hashchange', onHash)
@@ -250,7 +254,8 @@ export default function App() {
   }, [view, user, classId])
 
   const goHome = () => { setHash(''); setView('home') }
-  const goProfile = () => user ? (setHash(''), setView('profile')) : goLogin()
+  const goProfile = () => user ? (setHash(''), setView('profile'), setProfileFocus(null)) : goLogin()
+  const goHistory = () => user ? (setHash('history'), setView('profile'), setProfileFocus('history')) : goLogin()
   const goLogin = () => { setHash(''); setView('login') }
   const goExam = () => user ? (setHash(''), setView('exam')) : goLogin()
   const goAdmin = () => {
@@ -372,6 +377,7 @@ export default function App() {
       onOpenClass={openClass}
       onOpenReports={() => goAdminTab('reports')}
       onGoTools={goTools}
+      onGoHistory={goHistory}
     />
   )
 
@@ -472,6 +478,7 @@ export default function App() {
           user={user}
           onUpdateUser={handleUpdateUser}
           onGoHome={goHome}
+          focusSection={profileFocus}
         />
         {teacherToolOverlays}
       </>
