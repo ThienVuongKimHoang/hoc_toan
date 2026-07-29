@@ -51,7 +51,7 @@ const IcShield = (s) => <Ic size={s}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8
 const IcChevronRight = (s) => <Ic size={s}><polyline points="9 18 15 12 9 6"/></Ic>
 const IcLock   = (s) => <Ic size={s}><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></Ic>
 const IcCoin   = (s) => <Ic size={s}><circle cx="12" cy="12" r="9"/><path d="M9.5 15.5c.5 1 1.5 1.5 2.5 1.5 1.7 0 3-1 3-2.3 0-3-5.5-1.5-5.5-4.5 0-1.3 1.3-2.2 3-2.2 1 0 2 .4 2.5 1.3"/><line x1="12" y1="6.5" x2="12" y2="17.5"/></Ic>
-const IcBag    = (s) => <Ic size={s}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></Ic>
+const IcShop   = (s) => <Ic size={s}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></Ic>
 
 /* user.avatarUrl: undefined = chưa từng tuỳ chỉnh (dùng ảnh Google trong user.avatar nếu có),
    null = đã chọn xoá ảnh để dùng màu nền, string = ảnh tuỳ chỉnh/ảnh Google đã chốt. */
@@ -71,7 +71,53 @@ export const FRAME_STYLES = {
   kim_cuong: { background: 'linear-gradient(135deg,#bae6fd,#38bdf8,#f0f9ff)', glow: '0 0 14px rgba(56,189,248,.55)' },
   hoang_gia: { background: 'linear-gradient(135deg,#ddd6fe,#6d28d9,#FBBF24)', glow: '0 0 14px rgba(109,40,217,.4)' },
   cau_vong:  { background: 'conic-gradient(from 0deg,#f87171,#fbbf24,#34d399,#38bdf8,#818cf8,#f472b6,#f87171)', glow: '0 0 16px rgba(244,114,182,.45)' },
-  huyen_thoai: { image: '/img/frames/vien-huyen-thoai.svg', innerRatio: 0.6, glow: '0 0 16px rgba(139,47,217,.4)' },
+  huyen_thoai: { image: '/img/frames/vien-huyen-thoai.svg', innerRatio: 0.6, glow: '0 0 16px rgba(139,47,217,.4)', wings: true },
+}
+
+/* Hình 1 lông cánh (quạt xoè từ gốc (0,0), toả theo góc dần thấp xuống ngang) —
+   dùng chung cho cả 5 lông của khung huyền thoại. */
+const WING_FEATHERS = [
+  { deg: -62, len: 34, fill: '#f2c14e' },
+  { deg: -46, len: 43, fill: '#fff3c4' },
+  { deg: -30, len: 52, fill: '#f2c14e' },
+  { deg: -15, len: 61, fill: '#fff3c4' },
+  { deg: 2,   len: 70, fill: '#f2c14e' },
+]
+
+/* ── Cánh thiên thần cho khung huyền thoại — 2 cánh vàng vẫy nhẹ liên tục 2 bên
+   avatar. Gốc cánh (điểm (0,0) trong viewBox) được canh vào đúng mép khung tròn
+   qua vị trí % (đã đo bằng mockup); size = kích thước avatar (khớp AvatarFrame). ── */
+function AngelWings({ size }) {
+  const dim = Math.round(size * 1.15)
+  const marginTop = -Math.round(dim * 0.4615)
+
+  const feathers = (
+    <>
+      {WING_FEATHERS.map(({ deg, len, fill }) => (
+        <g key={deg} transform={`rotate(${deg})`}>
+          <path
+            d={`M0,0 Q${(len * 0.55).toFixed(1)},${-(len * 0.176).toFixed(1)} ${len},0 Q${(len * 0.55).toFixed(1)},${(len * 0.176).toFixed(1)} 0,0 Z`}
+            fill={fill}
+          />
+        </g>
+      ))}
+    </>
+  )
+
+  return (
+    <>
+      <div className="avt-wing-wrap avt-wing-wrap--left" style={{ width: dim, height: dim, right: '88%', marginTop }}>
+        <div className="avt-wing-flap avt-wing-flap--left">
+          <svg viewBox="-10 -60 90 130" width={dim} height={dim} style={{ transform: 'scaleX(-1)' }}>{feathers}</svg>
+        </div>
+      </div>
+      <div className="avt-wing-wrap avt-wing-wrap--right" style={{ width: dim, height: dim, left: '88%', marginTop }}>
+        <div className="avt-wing-flap avt-wing-flap--right">
+          <svg viewBox="-10 -60 90 130" width={dim} height={dim}>{feathers}</svg>
+        </div>
+      </div>
+    </>
+  )
 }
 
 /* ── Khung viền wrapper — bọc quanh MỘT avatar tròn có sẵn (bất kỳ kích thước/markup
@@ -94,6 +140,7 @@ export function AvatarFrame({ frameStyle, size, children }) {
           {children}
         </div>
         <img src={frameStyle.image} alt="" className="avt-frame-image-ring" draggable={false} />
+        {frameStyle.wings && <AngelWings size={size} />}
       </div>
     )
   }
@@ -159,6 +206,7 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '', frameS
       >
         {circle}
         <img src={frameStyle.image} alt="" className="avt-frame-image-ring" draggable={false} />
+        {frameStyle.wings && <AngelWings size={size} />}
       </div>
     )
   }
@@ -380,133 +428,8 @@ function AdminStats() {
   )
 }
 
-/* ── Cửa hàng khung viền (học sinh mua bằng xu; super admin mở khoá sẵn hết) ── */
-const RARITY_LABEL = { common: 'Phổ thông', rare: 'Hiếm', epic: 'Sử thi', legendary: 'Huyền thoại' }
-const RARITY_COLOR = { common: '#64748b', rare: '#2563eb', epic: '#7c3aed', legendary: '#d97706' }
-
-function FrameShopSection({ user, onUpdateUser }) {
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [busy,    setBusy]    = useState(false)
-  const [error,   setError]   = useState('')
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/shop/frames', { headers: authHeaders() })
-      if (res.ok) setData(await res.json())
-    } catch {}
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
-
-  const applyUser = (updated) => {
-    const merged = { ...user, ...updated }
-    localStorage.setItem(USER_KEY, JSON.stringify(merged))
-    onUpdateUser(merged)
-  }
-
-  const handleBuy = async (frame) => {
-    setError(''); setBusy(true)
-    try {
-      const res  = await fetch('/api/shop/buy', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body:    JSON.stringify({ frameId: frame.id }),
-      })
-      const body = await res.json()
-      if (!res.ok) { setError(body.error || 'Mua khung viền thất bại.'); return }
-      applyUser(body)
-      await load()
-    } catch {
-      setError('Không thể kết nối server.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const handleEquip = async (frameId) => {
-    setError(''); setBusy(true)
-    try {
-      const res  = await fetch('/api/shop/equip', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body:    JSON.stringify({ frameId }),
-      })
-      const body = await res.json()
-      if (!res.ok) { setError(body.error || 'Trang bị khung viền thất bại.'); return }
-      applyUser(body)
-      await load()
-    } catch {
-      setError('Không thể kết nối server.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="prof-section">
-      <h3 className="prof-section-title">
-        {IcBag(16)} Cửa hàng khung viền
-        <span className="prof-coin-badge">{IcCoin(14)} {loading ? '…' : (data?.coins ?? 0)} xu</span>
-      </h3>
-      <p className="prof-section-desc">
-        {user.role === ROLES.SUPERADMIN
-          ? 'Tài khoản super admin được mở khoá toàn bộ khung viền — chọn một khung để trang bị.'
-          : 'Dùng xu để mở khoá khung viền cho ảnh đại diện. Xu hiện được super admin cấp thủ công.'}
-      </p>
-
-      {error && <div className="form-error">{error}</div>}
-
-      {loading ? (
-        <p className="prof-section-desc">Đang tải…</p>
-      ) : !data ? (
-        <div className="form-error">Không thể tải cửa hàng.</div>
-      ) : (
-        <div className="prof-shop-grid">
-          <button
-            type="button"
-            className={`prof-shop-card ${!data.equippedFrame ? 'prof-shop-card--equipped' : ''}`}
-            onClick={() => handleEquip(null)}
-            disabled={busy}
-          >
-            <AvatarDisplay user={user} size={64} />
-            <span className="prof-shop-name">Không dùng khung</span>
-            {!data.equippedFrame && <span className="prof-shop-tag prof-shop-tag--equipped">{IcCheck(11)} Đang dùng</span>}
-          </button>
-
-          {data.frames.map(f => {
-            const isEquipped = data.equippedFrame === f.id
-            return (
-              <button
-                type="button"
-                key={f.id}
-                className={`prof-shop-card ${isEquipped ? 'prof-shop-card--equipped' : ''}`}
-                onClick={() => f.owned ? handleEquip(f.id) : handleBuy(f)}
-                disabled={busy}
-              >
-                <AvatarDisplay user={user} size={64} frameStyle={FRAME_STYLES[f.id]} />
-                <span className="prof-shop-name">{f.name}</span>
-                <span className="prof-shop-rarity" style={{ color: RARITY_COLOR[f.rarity] }}>{RARITY_LABEL[f.rarity] || f.rarity}</span>
-                {isEquipped ? (
-                  <span className="prof-shop-tag prof-shop-tag--equipped">{IcCheck(11)} Đang dùng</span>
-                ) : f.owned ? (
-                  <span className="prof-shop-tag prof-shop-tag--owned">Đã sở hữu — bấm để dùng</span>
-                ) : (
-                  <span className="prof-shop-tag prof-shop-tag--price">{IcCoin(11)} {f.price} xu</span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
 /* ── Main page ── */
-export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory }) {
+export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory, onGoShop }) {
   const [nameVal,          setNameVal]          = useState(user.name)
   const [savingName,       setSavingName]       = useState(false)
   const [nameError,        setNameError]        = useState('')
@@ -718,9 +641,21 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
           </div>
         </div>
 
-        {/* ── Cửa hàng khung viền ── */}
+        {/* ── Cửa hàng ── */}
         {(user.role === ROLES.STUDENT || user.role === ROLES.SUPERADMIN) && (
-          <FrameShopSection user={user} onUpdateUser={onUpdateUser} />
+          <button className="prof-history-link" onClick={onGoShop}>
+            <div className="phl-left-wrap">
+              <div className="phl-icon">{IcShop(20)}</div>
+              <div className="phl-info">
+                <span className="phl-title">Cửa hàng</span>
+                <span className="phl-desc">Dùng xu để mở khoá khung viền cho ảnh đại diện</span>
+              </div>
+            </div>
+            <div className="phl-right">
+              <span className="phl-count">{IcCoin(13)} {user.coins ?? 0} xu</span>
+              {IcChevronRight(16)}
+            </div>
+          </button>
         )}
 
         {/* ── Thống kê theo vai trò ── */}

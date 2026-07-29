@@ -5509,6 +5509,35 @@ button { font-family: inherit; }
   pointer-events: none;
   user-select: none;
 }
+
+/* ─── Cánh thiên thần (khung huyền thoại) — 2 cánh vàng 2 bên, vẫy nhẹ liên tục ─── */
+.avt-wing-wrap {
+  position: absolute;
+  top: 50%;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 0 5px rgba(250, 204, 21, .6));
+}
+.avt-wing-wrap--left  { transform-origin: 100% 46%; }
+.avt-wing-wrap--right { transform-origin: 0% 46%; }
+.avt-wing-flap {
+  transform-origin: inherit;
+  display: inline-flex;
+}
+.avt-wing-flap--left  { animation: avt-wing-flap-left 2.6s ease-in-out infinite; }
+.avt-wing-flap--right { animation: avt-wing-flap-right 2.6s ease-in-out infinite; }
+@keyframes avt-wing-flap-left {
+  0%, 100% { transform: rotate(6deg); }
+  50%      { transform: rotate(-10deg); }
+}
+@keyframes avt-wing-flap-right {
+  0%, 100% { transform: rotate(-6deg); }
+  50%      { transform: rotate(10deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avt-wing-flap--left, .avt-wing-flap--right { animation: none; }
+}
 .avt-display-overlay {
   position: absolute; inset: 0;
   border-radius: 50%;
