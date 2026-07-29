@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import RoleBadge from '../components/RoleBadge.jsx'
 import { ROLES, hasTeacherAccess, authHeaders } from '../auth/mockUsers.js'
 import { getExamsByTeacher, getAllExams, fetchMySubmissions, scaledScore } from '../store/examStore.js'
+import { FrameShopSection } from './ShopPage.jsx'
 
 const USER_KEY = 'hoctoan_user'
 
@@ -51,7 +52,6 @@ const IcShield = (s) => <Ic size={s}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8
 const IcChevronRight = (s) => <Ic size={s}><polyline points="9 18 15 12 9 6"/></Ic>
 const IcLock   = (s) => <Ic size={s}><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></Ic>
 const IcCoin   = (s) => <Ic size={s}><circle cx="12" cy="12" r="9"/><path d="M9.5 15.5c.5 1 1.5 1.5 2.5 1.5 1.7 0 3-1 3-2.3 0-3-5.5-1.5-5.5-4.5 0-1.3 1.3-2.2 3-2.2 1 0 2 .4 2.5 1.3"/><line x1="12" y1="6.5" x2="12" y2="17.5"/></Ic>
-const IcShop   = (s) => <Ic size={s}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></Ic>
 
 /* user.avatarUrl: undefined = chưa từng tuỳ chỉnh (dùng ảnh Google trong user.avatar nếu có),
    null = đã chọn xoá ảnh để dùng màu nền, string = ảnh tuỳ chỉnh/ảnh Google đã chốt. */
@@ -128,19 +128,22 @@ export function AvatarFrame({ frameStyle, size, children }) {
   if (!frameStyle) return children
 
   if (frameStyle.image) {
-    /* ảnh PNG có viền trang trí quanh rìa + vùng trong suốt ở giữa, nên avatar gốc
-       phải co lại theo innerRatio để lọt đúng vào vùng trống thay vì bị vòng che mất. */
+    /* ảnh PNG có viền trang trí quanh rìa + vùng trong suốt ở giữa. Avatar gốc giữ
+       nguyên size (khớp các khung dạng vòng khác) — phần ảnh khung phóng to hơn size
+       để avatar vẫn lọt đúng vào vùng trống, thay vì co nhỏ avatar lại như trước.
+       Không hiện cánh (wings) ở đây — component này dùng cho danh sách/bảng chật hẹp
+       (quản lý lớp, quản trị), cánh xoè ra sẽ đè lên nội dung bên cạnh. */
     const innerRatio = frameStyle.innerRatio ?? 0.62
+    const outerSize  = Math.round(size / innerRatio)
     return (
       <div
         className="avt-frame-image"
-        style={{ width: size, height: size, filter: frameStyle.glow ? `drop-shadow(${frameStyle.glow})` : undefined }}
+        style={{ width: outerSize, height: outerSize, filter: frameStyle.glow ? `drop-shadow(${frameStyle.glow})` : undefined }}
       >
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: `translate(-50%,-50%) scale(${innerRatio})` }}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
           {children}
         </div>
         <img src={frameStyle.image} alt="" className="avt-frame-image-ring" draggable={false} />
-        {frameStyle.wings && <AngelWings size={size} />}
       </div>
     )
   }
@@ -163,50 +166,49 @@ export function AvatarFrame({ frameStyle, size, children }) {
 }
 
 /* ── Avatar display ── */
-export function AvatarDisplay({ user, size = 80, onClick, className = '', frameStyle = null, locked = false }) {
+export function AvatarDisplay({ user, size = 80, onClick, className = '', frameStyle = null, locked = false, showWings = true }) {
   const [failed, setFailed] = useState(false)
   const initial  = (user.name || user.email || '?')[0].toUpperCase()
   const bgColor  = user.avatarColor || ROLE_DEFAULT_COLOR[user.role] || '#2563eb'
   const src      = resolveAvatarSrc(user)
 
-  /* khung dạng ảnh (frameStyle.image): ảnh PNG có viền trang trí quanh rìa và
-     một vùng trong suốt ở giữa, nên avatar phải co lại theo innerRatio để lọt
-     đúng vào vùng trống đó thay vì bị vòng che mất. */
-  const innerSize = frameStyle?.image ? Math.round(size * (frameStyle.innerRatio ?? 0.62)) : size
-
   const circle = (
     <div
       className={`avt-display ${onClick ? 'avt-display--clickable' : ''} ${className}`}
-      style={{ width: innerSize, height: innerSize }}
+      style={{ width: size, height: size }}
       onClick={onClick}
       title={onClick ? (locked ? 'Mở khoá đổi ảnh đại diện' : 'Đổi ảnh đại diện') : undefined}
     >
       {src && !failed
         ? <img src={src} alt="avatar" className="avt-display-img" onError={() => setFailed(true)} />
-        : <div className="avt-display-initial" style={{ background: bgColor, fontSize: Math.round(innerSize * 0.38) }}>
+        : <div className="avt-display-initial" style={{ background: bgColor, fontSize: Math.round(size * 0.38) }}>
             {initial}
           </div>
       }
       {onClick && (
         <div className="avt-display-overlay">
-          {locked ? IcLock(Math.round(innerSize * 0.3)) : IcCamera(Math.round(innerSize * 0.3))}
+          {locked ? IcLock(Math.round(size * 0.3)) : IcCamera(Math.round(size * 0.3))}
         </div>
       )}
-      {locked && <div className="avt-lock-badge">{IcLock(Math.round(innerSize * 0.16))}</div>}
+      {locked && <div className="avt-lock-badge">{IcLock(Math.round(size * 0.16))}</div>}
     </div>
   )
 
   if (!frameStyle) return circle
 
   if (frameStyle.image) {
+    /* Avatar giữ nguyên size (khớp các khung dạng vòng khác) — phần ảnh khung phóng to
+       hơn size theo innerRatio để avatar vẫn lọt đúng vào vùng trống của khung. */
+    const innerRatio = frameStyle.innerRatio ?? 0.62
+    const outerSize  = Math.round(size / innerRatio)
     return (
       <div
         className="avt-frame-image"
-        style={{ width: size, height: size, filter: frameStyle.glow ? `drop-shadow(${frameStyle.glow})` : undefined }}
+        style={{ width: outerSize, height: outerSize, filter: frameStyle.glow ? `drop-shadow(${frameStyle.glow})` : undefined }}
       >
         {circle}
         <img src={frameStyle.image} alt="" className="avt-frame-image-ring" draggable={false} />
-        {frameStyle.wings && <AngelWings size={size} />}
+        {frameStyle.wings && showWings && <AngelWings size={outerSize} />}
       </div>
     )
   }
@@ -429,7 +431,7 @@ function AdminStats() {
 }
 
 /* ── Main page ── */
-export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory, onGoShop }) {
+export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory }) {
   const [nameVal,          setNameVal]          = useState(user.name)
   const [savingName,       setSavingName]       = useState(false)
   const [nameError,        setNameError]        = useState('')
@@ -552,6 +554,7 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory,
                 onClick={() => (avatarLocked ? setShowUnlockModal(true) : setShowAvatarPicker(true))}
                 frameStyle={FRAME_STYLES[user.equippedFrame]}
                 locked={avatarLocked}
+                showWings={false}
               />
               <div className="prof-avatar-meta">
                 <span className="prof-avatar-name">{user.name}</span>
@@ -641,21 +644,10 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory,
           </div>
         </div>
 
-        {/* ── Cửa hàng ── */}
+        {/* ── Cửa hàng khung viền — nhúng thẳng tại đây để chọn khung ngay, không cần
+             chuyển trang ── */}
         {(user.role === ROLES.STUDENT || user.role === ROLES.SUPERADMIN) && (
-          <button className="prof-history-link" onClick={onGoShop}>
-            <div className="phl-left-wrap">
-              <div className="phl-icon">{IcShop(20)}</div>
-              <div className="phl-info">
-                <span className="phl-title">Cửa hàng</span>
-                <span className="phl-desc">Dùng xu để mở khoá khung viền cho ảnh đại diện</span>
-              </div>
-            </div>
-            <div className="phl-right">
-              <span className="phl-count">{IcCoin(13)} {user.coins ?? 0} xu</span>
-              {IcChevronRight(16)}
-            </div>
-          </button>
+          <FrameShopSection user={user} onUpdateUser={onUpdateUser} />
         )}
 
         {/* ── Thống kê theo vai trò ── */}

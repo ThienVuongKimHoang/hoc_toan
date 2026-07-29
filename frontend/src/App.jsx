@@ -118,6 +118,14 @@ export default function App() {
     return () => window.removeEventListener('hoctoan_user_updated', handler)
   }, [])
 
+  // Bất kỳ API nào (không riêng /auth/me) báo phiên hết hạn/không hợp lệ
+  // (vd: tài khoản vừa bị admin xóa) → đăng xuất ngay, không chờ polling.
+  useEffect(() => {
+    const handler = () => handleLogout()
+    window.addEventListener('hoctoan_session_expired', handler)
+    return () => window.removeEventListener('hoctoan_session_expired', handler)
+  }, [])
+
   // Sync trạng thái đăng nhập giữa các tab
   useEffect(() => {
     const onStorage = (e) => {
@@ -482,7 +490,6 @@ export default function App() {
           onUpdateUser={handleUpdateUser}
           onGoHome={goHome}
           onGoHistory={goHistory}
-          onGoShop={goShop}
         />
         {teacherToolOverlays}
       </>

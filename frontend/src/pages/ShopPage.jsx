@@ -21,8 +21,10 @@ const IcBag   = (s) => <Ic size={s}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 
 const RARITY_LABEL = { common: 'Phổ thông', rare: 'Hiếm', epic: 'Sử thi', legendary: 'Huyền thoại' }
 const RARITY_COLOR = { common: '#64748b', rare: '#2563eb', epic: '#7c3aed', legendary: '#d97706' }
 
-/* ── Cửa hàng khung viền (học sinh mua bằng xu; super admin mở khoá sẵn hết) ── */
-export default function ShopPage({ user, onUpdateUser, onGoHome }) {
+/* ── Cửa hàng khung viền (học sinh mua bằng xu; super admin mở khoá sẵn hết) ──
+   Tách riêng để dùng chung: nhúng thẳng trong ProfilePage (xem/đổi khung ngay tại
+   trang cá nhân) và trong ShopPage (trang riêng, vào từ menu tài khoản của học sinh). ── */
+export function FrameShopSection({ user, onUpdateUser }) {
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [busy,    setBusy]    = useState(false)
@@ -84,66 +86,75 @@ export default function ShopPage({ user, onUpdateUser, onGoHome }) {
   }
 
   return (
+    <div className="prof-section">
+      <h3 className="prof-section-title">
+        {IcBag(16)} Cửa hàng khung viền
+        <span className="prof-coin-badge">{IcCoin(14)} {loading ? '…' : (data?.coins ?? 0)} xu</span>
+      </h3>
+      <p className="prof-section-desc">
+        {user.role === ROLES.SUPERADMIN
+          ? 'Tài khoản super admin được mở khoá toàn bộ khung viền — chọn một khung để trang bị.'
+          : 'Dùng xu để mở khoá khung viền cho ảnh đại diện. Xu hiện được super admin cấp thủ công.'}
+      </p>
+
+      {error && <div className="form-error">{error}</div>}
+
+      {loading ? (
+        <p className="prof-section-desc">Đang tải…</p>
+      ) : !data ? (
+        <div className="form-error">Không thể tải cửa hàng.</div>
+      ) : (
+        <div className="prof-shop-grid">
+          <button
+            type="button"
+            className={`prof-shop-card ${!data.equippedFrame ? 'prof-shop-card--equipped' : ''}`}
+            onClick={() => handleEquip(null)}
+            disabled={busy}
+          >
+            <AvatarDisplay user={user} size={64} />
+            <span className="prof-shop-name">Không dùng khung</span>
+            {!data.equippedFrame && <span className="prof-shop-tag prof-shop-tag--equipped">{IcCheck(11)} Đang dùng</span>}
+          </button>
+
+          {data.frames.map(f => {
+            const isEquipped = data.equippedFrame === f.id
+            return (
+              <button
+                type="button"
+                key={f.id}
+                className={`prof-shop-card ${isEquipped ? 'prof-shop-card--equipped' : ''}`}
+                onClick={() => f.owned ? handleEquip(f.id) : handleBuy(f)}
+                disabled={busy}
+              >
+                <AvatarDisplay user={user} size={64} frameStyle={FRAME_STYLES[f.id]} />
+                <span className="prof-shop-name">{f.name}</span>
+                <span className="prof-shop-rarity" style={{ color: RARITY_COLOR[f.rarity] }}>{RARITY_LABEL[f.rarity] || f.rarity}</span>
+                {isEquipped ? (
+                  <span className="prof-shop-tag prof-shop-tag--equipped">{IcCheck(11)} Đang dùng</span>
+                ) : f.owned ? (
+                  <span className="prof-shop-tag prof-shop-tag--owned">Đã sở hữu — bấm để dùng</span>
+                ) : (
+                  <span className="prof-shop-tag prof-shop-tag--price">{IcCoin(11)} {f.price} xu</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Trang Cửa hàng riêng — vào từ menu tài khoản (học sinh). Super admin xem/đổi
+   khung ngay tại trang cá nhân (ProfilePage nhúng thẳng FrameShopSection ở trên),
+   không cần trang riêng này. ── */
+export default function ShopPage({ user, onUpdateUser, onGoHome }) {
+  return (
     <div className="prof-page">
       <div className="container prof-container">
         <h1 className="prof-page-title">Cửa hàng</h1>
 
-        <div className="prof-section">
-          <h3 className="prof-section-title">
-            {IcBag(16)} Cửa hàng khung viền
-            <span className="prof-coin-badge">{IcCoin(14)} {loading ? '…' : (data?.coins ?? 0)} xu</span>
-          </h3>
-          <p className="prof-section-desc">
-            {user.role === ROLES.SUPERADMIN
-              ? 'Tài khoản super admin được mở khoá toàn bộ khung viền — chọn một khung để trang bị.'
-              : 'Dùng xu để mở khoá khung viền cho ảnh đại diện. Xu hiện được super admin cấp thủ công.'}
-          </p>
-
-          {error && <div className="form-error">{error}</div>}
-
-          {loading ? (
-            <p className="prof-section-desc">Đang tải…</p>
-          ) : !data ? (
-            <div className="form-error">Không thể tải cửa hàng.</div>
-          ) : (
-            <div className="prof-shop-grid">
-              <button
-                type="button"
-                className={`prof-shop-card ${!data.equippedFrame ? 'prof-shop-card--equipped' : ''}`}
-                onClick={() => handleEquip(null)}
-                disabled={busy}
-              >
-                <AvatarDisplay user={user} size={64} />
-                <span className="prof-shop-name">Không dùng khung</span>
-                {!data.equippedFrame && <span className="prof-shop-tag prof-shop-tag--equipped">{IcCheck(11)} Đang dùng</span>}
-              </button>
-
-              {data.frames.map(f => {
-                const isEquipped = data.equippedFrame === f.id
-                return (
-                  <button
-                    type="button"
-                    key={f.id}
-                    className={`prof-shop-card ${isEquipped ? 'prof-shop-card--equipped' : ''}`}
-                    onClick={() => f.owned ? handleEquip(f.id) : handleBuy(f)}
-                    disabled={busy}
-                  >
-                    <AvatarDisplay user={user} size={64} frameStyle={FRAME_STYLES[f.id]} />
-                    <span className="prof-shop-name">{f.name}</span>
-                    <span className="prof-shop-rarity" style={{ color: RARITY_COLOR[f.rarity] }}>{RARITY_LABEL[f.rarity] || f.rarity}</span>
-                    {isEquipped ? (
-                      <span className="prof-shop-tag prof-shop-tag--equipped">{IcCheck(11)} Đang dùng</span>
-                    ) : f.owned ? (
-                      <span className="prof-shop-tag prof-shop-tag--owned">Đã sở hữu — bấm để dùng</span>
-                    ) : (
-                      <span className="prof-shop-tag prof-shop-tag--price">{IcCoin(11)} {f.price} xu</span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        <FrameShopSection user={user} onUpdateUser={onUpdateUser} />
 
         <div className="prof-back-row">
           <button className="prof-btn prof-btn--ghost" onClick={onGoHome}>

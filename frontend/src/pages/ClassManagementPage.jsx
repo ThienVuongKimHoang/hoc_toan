@@ -1491,8 +1491,10 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
   }
   const handleRemoveMember = async (userId) => {
     if (!confirm(`Xoá học sinh khỏi môn ${SUBJECTS[subject]?.label || 'này'}?`)) return
-    await removeMemberFromClass(cls.id, userId, subject)
-    refresh()
+    try {
+      await removeMemberFromClass(cls.id, userId, subject)
+      refresh()
+    } catch (err) { alert(err.message) }
   }
 
   /* Giáo viên phụ trách (co-teacher) — chỉ super_admin thao tác */
@@ -1505,8 +1507,10 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
   }
   const handleRemoveCoTeacher = async (userId) => {
     if (!confirm('Gỡ giáo viên này khỏi lớp?')) return
-    await removeCoTeacher(cls.id, userId)
-    refresh()
+    try {
+      await removeCoTeacher(cls.id, userId)
+      refresh()
+    } catch (err) { alert(err.message) }
   }
 
   /* Assignments — gắn subject của môn đang xem */

@@ -1379,12 +1379,31 @@ def adjust_user_coins(uid: str, delta: int) -> Optional[dict]:
     return _user_from_row(dict(row)) if row else None
 
 
+def _remove_user_from_all_classes(uid: str) -> None:
+    """Xóa user khỏi members/coTeachers của mọi lớp — gọi khi xóa tài khoản để
+    lớp học cập nhật ngay, không còn hiển thị user đã bị xóa."""
+    suid = str(uid)
+    for cls in list_all_classes():
+        has_member = any(str(m.get("userId")) == suid for m in cls.get("members") or [])
+        has_co     = any(str(ct.get("userId")) == suid for ct in cls.get("coTeachers") or [])
+        if not has_member and not has_co:
+            continue
+
+        def mutate(c, suid=suid):
+            c["members"]    = [m for m in c.get("members") or []    if str(m.get("userId")) != suid]
+            c["coTeachers"] = [ct for ct in c.get("coTeachers") or [] if str(ct.get("userId")) != suid]
+
+        update_class_atomic(cls["id"], mutate)
+
+
 def delete_user(uid: str) -> bool:
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM users WHERE id=%s RETURNING id", (int(uid),))
             found = cur.fetchone() is not None
         conn.commit()
+    if found:
+        _remove_user_from_all_classes(uid)
     return found
 
 
