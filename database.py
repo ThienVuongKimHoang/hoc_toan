@@ -101,6 +101,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS coins INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS owned_frames JSONB DEFAULT '[]';
 -- Khung viền đang trang bị (hiển thị quanh avatar ở trang cá nhân). NULL = không dùng khung.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_frame VARCHAR(50);
+-- Học sinh phải mở khoá một lần bằng xu mới được đổi ảnh đại diện. GV/Admin không bị giới hạn.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_unlocked BOOLEAN NOT NULL DEFAULT FALSE;
 
 
 CREATE TABLE IF NOT EXISTS exams (
@@ -1212,6 +1214,7 @@ def _user_from_row(row: dict, pwd: bool = False) -> dict:
         "coins":         r.get("coins") or 0,
         "ownedFrames":   r.get("owned_frames") or [],
         "equippedFrame": r.get("equipped_frame"),
+        "avatarUnlocked": bool(r.get("avatar_unlocked")),
         "isRegistered": bool(r["is_registered"]),
         "createdAt":    r["created_at"].isoformat() if r.get("created_at") else None,
     }
@@ -1322,6 +1325,32 @@ def purchase_frame(uid: str, frame_id: str, price: int) -> tuple:
             cur.execute(
                 "UPDATE users SET coins = coins - %s, owned_frames = %s WHERE id=%s RETURNING *",
                 (price, json.dumps(owned + [frame_id], ensure_ascii=False), int(uid)),
+            )
+            updated = cur.fetchone()
+        conn.commit()
+    return _user_from_row(dict(updated)), None
+
+
+def unlock_avatar(uid: str, price: int) -> tuple:
+    """Mở khoá đổi ảnh đại diện cho học sinh: trừ xu + đánh dấu avatar_unlocked (atomic,
+    khoá dòng user). Trả (user, None) khi thành công hoặc đã mở khoá sẵn; (None, "insufficient")
+    nếu thiếu xu; (None, "not_found") nếu không có user."""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM users WHERE id=%s FOR UPDATE", (int(uid),))
+            row = cur.fetchone()
+            if not row:
+                conn.commit()
+                return None, "not_found"
+            if row["avatar_unlocked"]:
+                conn.commit()
+                return _user_from_row(dict(row)), None
+            if (row["coins"] or 0) < price:
+                conn.commit()
+                return None, "insufficient"
+            cur.execute(
+                "UPDATE users SET coins = coins - %s, avatar_unlocked = TRUE WHERE id=%s RETURNING *",
+                (price, int(uid)),
             )
             updated = cur.fetchone()
         conn.commit()

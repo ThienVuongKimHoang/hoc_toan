@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import RoleBadge from './RoleBadge.jsx'
 import { ROLE_META, ROLES, hasTeacherAccess } from '../auth/mockUsers.js'
-import { AvatarDisplay } from '../pages/ProfilePage.jsx'
+import { AvatarDisplay, FRAME_STYLES } from '../pages/ProfilePage.jsx'
 
 const IC = {
   profile: (
@@ -95,7 +95,7 @@ export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, on
         onClick={() => setOpen(v => !v)}
         aria-label="Tài khoản"
       >
-        <AvatarDisplay user={user} size={34} className={`acct-avatar-wrap acct-avatar-wrap--${user.role}`} />
+        <AvatarDisplay user={user} size={34} className={`acct-avatar-wrap acct-avatar-wrap--${user.role}`} frameStyle={FRAME_STYLES[user.equippedFrame]} />
         <span className="acct-trigger-name">{user.name}</span>
       </button>
 
@@ -103,7 +103,7 @@ export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, on
         <div className="acct-dropdown">
           {/* User info */}
           <div className="acct-header">
-            <AvatarDisplay user={user} size={44} className={`acct-av-lg-wrap acct-av-lg-wrap--${user.role}`} />
+            <AvatarDisplay user={user} size={44} className={`acct-av-lg-wrap acct-av-lg-wrap--${user.role}`} frameStyle={FRAME_STYLES[user.equippedFrame]} />
             <div className="acct-info">
               <div className="acct-name">{user.name}</div>
               <div className="acct-email">{user.email}</div>

@@ -18,6 +18,10 @@ const ROLE_DEFAULT_COLOR = {
   super_admin: '#d97706',
 }
 
+/* Học sinh phải mở khoá một lần bằng xu mới đổi được ảnh đại diện; giá phải khớp
+   AVATAR_UNLOCK_PRICE trong api.py. GV/Admin/Super admin không bị giới hạn. */
+const AVATAR_UNLOCK_PRICE = 300
+
 /* ── SVG helper ── */
 function Ic({ size = 16, children, style }) {
   return (
@@ -70,8 +74,49 @@ export const FRAME_STYLES = {
   huyen_thoai: { image: '/img/frames/vien-huyen-thoai.svg', innerRatio: 0.6, glow: '0 0 16px rgba(139,47,217,.4)' },
 }
 
+/* ── Khung viền wrapper — bọc quanh MỘT avatar tròn có sẵn (bất kỳ kích thước/markup
+   nào: AvatarDisplay, hoặc avatar tự vẽ riêng ở trang khác) để hiện khung đã trang bị.
+   Dùng chung ở AccountMenu, trang quản lý lớp, quản trị… nơi nào có avatar + user đầy
+   đủ field equippedFrame thì bọc thêm khung, không có thì bỏ qua (trả về nguyên avatar). ── */
+export function AvatarFrame({ frameStyle, size, children }) {
+  if (!frameStyle) return children
+
+  if (frameStyle.image) {
+    /* ảnh PNG có viền trang trí quanh rìa + vùng trong suốt ở giữa, nên avatar gốc
+       phải co lại theo innerRatio để lọt đúng vào vùng trống thay vì bị vòng che mất. */
+    const innerRatio = frameStyle.innerRatio ?? 0.62
+    return (
+      <div
+        className="avt-frame-image"
+        style={{ width: size, height: size, filter: frameStyle.glow ? `drop-shadow(${frameStyle.glow})` : undefined }}
+      >
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: `translate(-50%,-50%) scale(${innerRatio})` }}>
+          {children}
+        </div>
+        <img src={frameStyle.image} alt="" className="avt-frame-image-ring" draggable={false} />
+      </div>
+    )
+  }
+
+  const ringPad = Math.max(4, Math.round(size * 0.08))
+  return (
+    <div
+      className={`avt-frame-ring${frameStyle.glow ? ' avt-frame-ring--glow' : ''}`}
+      style={{
+        width: size + ringPad * 2,
+        height: size + ringPad * 2,
+        padding: ringPad,
+        background: frameStyle.background,
+        boxShadow: frameStyle.glow || undefined,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
 /* ── Avatar display ── */
-export function AvatarDisplay({ user, size = 80, onClick, className = '', frameStyle = null }) {
+export function AvatarDisplay({ user, size = 80, onClick, className = '', frameStyle = null, locked = false }) {
   const [failed, setFailed] = useState(false)
   const initial  = (user.name || user.email || '?')[0].toUpperCase()
   const bgColor  = user.avatarColor || ROLE_DEFAULT_COLOR[user.role] || '#2563eb'
@@ -87,7 +132,7 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '', frameS
       className={`avt-display ${onClick ? 'avt-display--clickable' : ''} ${className}`}
       style={{ width: innerSize, height: innerSize }}
       onClick={onClick}
-      title={onClick ? 'Đổi ảnh đại diện' : undefined}
+      title={onClick ? (locked ? 'Mở khoá đổi ảnh đại diện' : 'Đổi ảnh đại diện') : undefined}
     >
       {src && !failed
         ? <img src={src} alt="avatar" className="avt-display-img" onError={() => setFailed(true)} />
@@ -97,9 +142,10 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '', frameS
       }
       {onClick && (
         <div className="avt-display-overlay">
-          {IcCamera(Math.round(innerSize * 0.3))}
+          {locked ? IcLock(Math.round(innerSize * 0.3)) : IcCamera(Math.round(innerSize * 0.3))}
         </div>
       )}
+      {locked && <div className="avt-lock-badge">{IcLock(Math.round(innerSize * 0.16))}</div>}
     </div>
   )
 
@@ -205,6 +251,43 @@ function AvatarPicker({ user, onSave, onClose }) {
           <button className="pm-cancel" onClick={onClose}>Huỷ</button>
           <button className="pm-submit" onClick={() => onSave({ avatarUrl: preview || null, avatarColor: selColor })}>
             {IcCheck(14)} Lưu thay đổi
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Mở khoá đổi ảnh đại diện (học sinh, 1 lần, bằng xu) ── */
+function AvatarUnlockModal({ coins, busy, error, onConfirm, onClose }) {
+  const canAfford = coins >= AVATAR_UNLOCK_PRICE
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box avt-unlock-modal">
+        <div className="modal-header">
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {IcLock(20)} Mở khoá đổi ảnh đại diện
+          </h2>
+          <button className="modal-close" onClick={onClose}>{IcClose(18)}</button>
+        </div>
+
+        <p className="prof-section-desc">
+          Học sinh cần mở khoá một lần bằng xu để đổi ảnh đại diện. Sau khi mở khoá,
+          bạn có thể đổi ảnh đại diện không giới hạn số lần.
+        </p>
+
+        <div className="avt-unlock-price-row">
+          <span className="prof-coin-badge">{IcCoin(14)} Số dư: {coins} xu</span>
+          <span className="prof-shop-tag prof-shop-tag--price">{IcCoin(11)} {AVATAR_UNLOCK_PRICE} xu</span>
+        </div>
+
+        {error && <div className="form-error">{error}</div>}
+
+        <div className="pm-footer">
+          <button className="pm-cancel" onClick={onClose}>Huỷ</button>
+          <button className="pm-submit" onClick={onConfirm} disabled={busy || !canAfford}>
+            {IcLock(14)} {busy ? 'Đang xử lý…' : canAfford ? 'Mở khoá ngay' : 'Không đủ xu'}
           </button>
         </div>
       </div>
@@ -429,7 +512,12 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
   const [nameError,        setNameError]        = useState('')
   const [saved,            setSaved]            = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+  const [showUnlockModal,  setShowUnlockModal]  = useState(false)
+  const [unlockBusy,       setUnlockBusy]       = useState(false)
+  const [unlockError,      setUnlockError]      = useState('')
   const [submissions,      setSubmissions]      = useState([])
+
+  const avatarLocked = user.role === ROLES.STUDENT && !user.avatarUnlocked
 
   const [curPwd,      setCurPwd]      = useState('')
   const [newPwd,      setNewPwd]      = useState('')
@@ -503,6 +591,27 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
     setShowAvatarPicker(false)
   }
 
+  const handleUnlockAvatar = async () => {
+    setUnlockError(''); setUnlockBusy(true)
+    try {
+      const res = await fetch('/api/shop/unlock-avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      })
+      const data = await res.json()
+      if (!res.ok) { setUnlockError(data.error || 'Mở khoá thất bại.'); return }
+      const updated = { ...user, ...data }
+      localStorage.setItem(USER_KEY, JSON.stringify(updated))
+      onUpdateUser(updated)
+      setShowUnlockModal(false)
+      setShowAvatarPicker(true)
+    } catch {
+      setUnlockError('Không thể kết nối server.')
+    } finally {
+      setUnlockBusy(false)
+    }
+  }
+
   return (
     <div className="prof-page">
       <div className="container prof-container">
@@ -514,10 +623,21 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
             <h3 className="prof-section-title">{IcUser(16)} Thông tin cá nhân</h3>
 
             <div className="prof-avatar-row">
-              <AvatarDisplay user={user} size={60} onClick={() => setShowAvatarPicker(true)} frameStyle={FRAME_STYLES[user.equippedFrame]} />
+              <AvatarDisplay
+                user={user}
+                size={60}
+                onClick={() => (avatarLocked ? setShowUnlockModal(true) : setShowAvatarPicker(true))}
+                frameStyle={FRAME_STYLES[user.equippedFrame]}
+                locked={avatarLocked}
+              />
               <div className="prof-avatar-meta">
                 <span className="prof-avatar-name">{user.name}</span>
                 <RoleBadge role={user.role} size="sm" />
+                {avatarLocked && (
+                  <span className="prof-avatar-lock-hint">
+                    {IcLock(11)} Cần {AVATAR_UNLOCK_PRICE} xu để mở khoá đổi ảnh đại diện
+                  </span>
+                )}
               </div>
             </div>
 
@@ -651,6 +771,16 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
           user={user}
           onSave={handleSaveAvatar}
           onClose={() => setShowAvatarPicker(false)}
+        />
+      )}
+
+      {showUnlockModal && (
+        <AvatarUnlockModal
+          coins={user.coins ?? 0}
+          busy={unlockBusy}
+          error={unlockError}
+          onConfirm={handleUnlockAvatar}
+          onClose={() => setShowUnlockModal(false)}
         />
       )}
     </div>

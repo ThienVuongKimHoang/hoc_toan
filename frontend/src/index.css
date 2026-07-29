@@ -5472,11 +5472,14 @@ button { font-family: inherit; }
   animation: avt-ring-shine 3.4s linear infinite;
   pointer-events: none;
 }
-.avt-frame-ring .avt-display {
+.avt-frame-ring .avt-display,
+.avt-frame-ring > *:not(.avt-display) {
   position: relative;
   z-index: 1;
   box-shadow: 0 0 0 3px rgba(255,255,255,.95), inset 0 0 6px rgba(0,0,0,.18);
 }
+/* avatar tự vẽ ở nơi khác (không phải AvatarDisplay) bọc bởi AvatarFrame — đảm bảo tròn đều bên trong vòng khung */
+.avt-frame-ring > *:not(.avt-display) { border-radius: 50%; overflow: hidden; }
 /* khung hiếm (kim cương/hoàng gia/cầu vồng) có glow riêng — thêm nhịp mờ-sáng */
 .avt-frame-ring--glow { animation: avt-ring-glow-pulse 2.6s ease-in-out infinite; }
 
@@ -5519,11 +5522,33 @@ button { font-family: inherit; }
 .avt-display--clickable:hover .avt-display-overlay { opacity: 1; }
 .avt-display--clickable:hover .avt-display-img { transform: scale(1.05); }
 
+/* huy hiệu ổ khoá — hiện thường trực ở góc avatar khi học sinh chưa mở khoá đổi ảnh.
+   Nằm bên trong rìa (không lồi ra ngoài) vì .avt-display có overflow: hidden. */
+.avt-lock-badge {
+  position: absolute; right: 2px; bottom: 2px;
+  width: 40%; height: 40%;
+  min-width: 16px; min-height: 16px;
+  border-radius: 50%;
+  background: #92400e;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
 /* ─── Avatar picker modal ─── */
 .avt-picker-modal {
   width: 380px !important;
   max-width: 95vw;
 }
+.avt-unlock-modal {
+  width: 380px !important;
+  max-width: 95vw;
+}
+.avt-unlock-price-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.avt-unlock-price-row .prof-coin-badge { margin-left: 0; }
 .avt-picker-preview {
   display: flex; justify-content: center;
   margin: 24px 0;
@@ -5624,6 +5649,10 @@ button { font-family: inherit; }
 }
 .prof-avatar-meta { display: flex; flex-direction: column; gap: 6px; }
 .prof-avatar-name { font-size: 1rem; font-weight: 700; color: #0f172a; }
+.prof-avatar-lock-hint {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.78rem; font-weight: 600; color: #92400e;
+}
 
 .prof-saved-toast {
   font-size: 0.85rem; color: #047857; background: #ecfdf5;

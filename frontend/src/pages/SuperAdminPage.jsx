@@ -4,6 +4,7 @@ import { getAllExams } from '../store/examStore.js'
 import { GRADES, gradeLabel } from '../components/SubjectBadge.jsx'
 import SiteContentTab from './SiteContentTab.jsx'
 import ReportsTab from './ReportsTab.jsx'
+import { AvatarFrame, FRAME_STYLES } from './ProfilePage.jsx'
 
 /* ── SVG primitives ── */
 function Ic({ size = 16, children, style }) {
@@ -522,26 +523,28 @@ function CoinsModal({ user, onSave, onClose }) {
 }
 
 /* Avatar người dùng: hiển thị ảnh nếu là URL/data-URI (vd. đăng nhập Google),
-   nếu không (hoặc ảnh lỗi) thì hiển thị chữ cái đầu. */
+   nếu không (hoặc ảnh lỗi) thì hiển thị chữ cái đầu. Kèm khung viền nếu user đã
+   trang bị (cửa hàng khung viền). */
 function UserAvatar({ user, meta }) {
   const [failed, setFailed] = useState(false)
   const src     = user.avatarUrl || user.avatar
   const isImg   = typeof src === 'string' && (/^https?:\/\//.test(src) || src.startsWith('data:'))
   const initial = (user.name || user.email || '?')[0].toUpperCase()
 
-  if (isImg && !failed) {
-    return (
+  const avatar = (isImg && !failed)
+    ? (
       <div className="sa-user-avatar sa-user-avatar--img">
         <img src={src} alt="" onError={() => setFailed(true)} />
       </div>
     )
-  }
-  return (
-    <div className="sa-user-avatar" style={{ background: (meta?.color || '#888') + '22', color: meta?.color || '#888' }}>
-      {/* tránh đổ nguyên URL dài ra màn hình nếu avatar là URL lỗi */}
-      {isImg ? initial : (user.avatar || initial)}
-    </div>
-  )
+    : (
+      <div className="sa-user-avatar" style={{ background: (meta?.color || '#888') + '22', color: meta?.color || '#888' }}>
+        {/* tránh đổ nguyên URL dài ra màn hình nếu avatar là URL lỗi */}
+        {isImg ? initial : (user.avatar || initial)}
+      </div>
+    )
+
+  return <AvatarFrame frameStyle={FRAME_STYLES[user.equippedFrame]} size={30}>{avatar}</AvatarFrame>
 }
 
 function UsersTab() {

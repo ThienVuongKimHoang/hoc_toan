@@ -1734,6 +1734,10 @@ FRAME_CATALOG = [
 ]
 _FRAME_BY_ID = {f["id"]: f for f in FRAME_CATALOG}
 
+# Học sinh phải mở khoá một lần bằng xu mới được đổi ảnh đại diện; GV/Admin/Super admin
+# dùng tự do nên bỏ qua kiểm tra này.
+AVATAR_UNLOCK_PRICE = 300
+
 
 @app.get("/api/shop/frames")
 async def get_shop_frames(user: dict = Depends(require_auth)):
@@ -1773,6 +1777,18 @@ async def equip_frame_endpoint(request: Request, user: dict = Depends(require_au
             return JSONResponse({"error": "Bạn chưa sở hữu khung viền này."}, status_code=403)
     updated = db.set_equipped_frame(user["id"], frame_id)
     if not updated:
+        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
+    return updated
+
+@app.post("/api/shop/unlock-avatar")
+async def unlock_avatar_endpoint(user: dict = Depends(require_auth)):
+    """Học sinh trả 300 xu để mở khoá tính năng đổi ảnh đại diện (một lần, vĩnh viễn)."""
+    if user.get("role") != "hoc_sinh":
+        return user
+    updated, err = db.unlock_avatar(user["id"], AVATAR_UNLOCK_PRICE)
+    if err == "insufficient":
+        return JSONResponse({"error": f"Không đủ xu, cần {AVATAR_UNLOCK_PRICE} xu để mở khoá đổi ảnh đại diện."}, status_code=402)
+    if err == "not_found" or not updated:
         return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
     return updated
 

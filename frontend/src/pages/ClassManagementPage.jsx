@@ -30,20 +30,22 @@ import { isExerciseDoc, sortDocsByOrder } from '../utils/exerciseDocs.js'
 import { extractYoutubeId, youtubeEmbedUrl, youtubeThumbnail, youtubeWatchUrl } from '../utils/youtube.js'
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, GradePicker, SubjectPicker, gradeLabel } from '../components/SubjectBadge.jsx'
 import { ROLES } from '../auth/mockUsers.js'
+import { AvatarFrame, FRAME_STYLES } from './ProfilePage.jsx'
 
 /* Avatar học sinh/giáo viên trong kết quả tìm kiếm: user.avatar có thể là URL ảnh Google
    (đăng nhập Google) hoặc chữ cái đầu (tài khoản thường) — cần phân biệt để không
-   in nguyên URL ra màn hình. */
+   in nguyên URL ra màn hình. Kèm khung viền nếu user đã trang bị (cửa hàng khung viền). */
 function PersonAvatar({ user }) {
   const [failed, setFailed] = useState(false)
   const src   = user.avatar || ''
   const isImg = /^https?:\/\//.test(src) || src.startsWith('data:')
   const initial = (user.name || user.email || '?')[0].toUpperCase()
 
-  if (isImg && !failed) {
-    return <img className="cm-student-avatar cm-student-avatar--img" src={src} alt="" onError={() => setFailed(true)} />
-  }
-  return <div className="cm-student-avatar">{initial}</div>
+  const avatar = (isImg && !failed)
+    ? <img className="cm-student-avatar cm-student-avatar--img" src={src} alt="" onError={() => setFailed(true)} />
+    : <div className="cm-student-avatar">{initial}</div>
+
+  return <AvatarFrame frameStyle={FRAME_STYLES[user.equippedFrame]} size={34}>{avatar}</AvatarFrame>
 }
 
 /* Môn "chính" của lớp (fallback cho dữ liệu cũ chưa gắn môn) */
