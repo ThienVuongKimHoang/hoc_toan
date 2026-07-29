@@ -1728,8 +1728,9 @@ FRAME_CATALOG = [
     {"id": "vang",      "name": "Vòng Vàng",     "price": 350,  "rarity": "rare"},
     {"id": "navy_gold", "name": "Ánh Sáng Navy", "price": 500,  "rarity": "epic"},
     {"id": "kim_cuong", "name": "Kim Cương",     "price": 700,  "rarity": "epic"},
-    {"id": "hoang_gia", "name": "Hoàng Gia",     "price": 900,  "rarity": "legendary"},
-    {"id": "cau_vong",  "name": "Cầu Vồng",      "price": 1200, "rarity": "legendary"},
+    {"id": "hoang_gia",   "name": "Hoàng Gia",   "price": 900,  "rarity": "legendary"},
+    {"id": "cau_vong",    "name": "Cầu Vồng",    "price": 1200, "rarity": "legendary"},
+    {"id": "huyen_thoai", "name": "Huyền Thoại", "price": 1500, "rarity": "legendary"},
 ]
 _FRAME_BY_ID = {f["id"]: f for f in FRAME_CATALOG}
 

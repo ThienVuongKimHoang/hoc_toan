@@ -67,6 +67,7 @@ export const FRAME_STYLES = {
   kim_cuong: { background: 'linear-gradient(135deg,#bae6fd,#38bdf8,#f0f9ff)', glow: '0 0 14px rgba(56,189,248,.55)' },
   hoang_gia: { background: 'linear-gradient(135deg,#ddd6fe,#6d28d9,#FBBF24)', glow: '0 0 14px rgba(109,40,217,.4)' },
   cau_vong:  { background: 'conic-gradient(from 0deg,#f87171,#fbbf24,#34d399,#38bdf8,#818cf8,#f472b6,#f87171)', glow: '0 0 16px rgba(244,114,182,.45)' },
+  huyen_thoai: { image: '/img/frames/vien-huyen-thoai.svg', innerRatio: 0.6, glow: '0 0 16px rgba(139,47,217,.4)' },
 }
 
 /* ── Avatar display ── */
@@ -76,22 +77,27 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '', frameS
   const bgColor  = user.avatarColor || ROLE_DEFAULT_COLOR[user.role] || '#2563eb'
   const src      = resolveAvatarSrc(user)
 
+  /* khung dạng ảnh (frameStyle.image): ảnh PNG có viền trang trí quanh rìa và
+     một vùng trong suốt ở giữa, nên avatar phải co lại theo innerRatio để lọt
+     đúng vào vùng trống đó thay vì bị vòng che mất. */
+  const innerSize = frameStyle?.image ? Math.round(size * (frameStyle.innerRatio ?? 0.62)) : size
+
   const circle = (
     <div
       className={`avt-display ${onClick ? 'avt-display--clickable' : ''} ${className}`}
-      style={{ width: size, height: size }}
+      style={{ width: innerSize, height: innerSize }}
       onClick={onClick}
       title={onClick ? 'Đổi ảnh đại diện' : undefined}
     >
       {src && !failed
         ? <img src={src} alt="avatar" className="avt-display-img" onError={() => setFailed(true)} />
-        : <div className="avt-display-initial" style={{ background: bgColor, fontSize: Math.round(size * 0.38) }}>
+        : <div className="avt-display-initial" style={{ background: bgColor, fontSize: Math.round(innerSize * 0.38) }}>
             {initial}
           </div>
       }
       {onClick && (
         <div className="avt-display-overlay">
-          {IcCamera(Math.round(size * 0.3))}
+          {IcCamera(Math.round(innerSize * 0.3))}
         </div>
       )}
     </div>
@@ -99,10 +105,22 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '', frameS
 
   if (!frameStyle) return circle
 
+  if (frameStyle.image) {
+    return (
+      <div
+        className="avt-frame-image"
+        style={{ width: size, height: size, filter: frameStyle.glow ? `drop-shadow(${frameStyle.glow})` : undefined }}
+      >
+        {circle}
+        <img src={frameStyle.image} alt="" className="avt-frame-image-ring" draggable={false} />
+      </div>
+    )
+  }
+
   const ringPad = Math.max(4, Math.round(size * 0.08))
   return (
     <div
-      className="avt-frame-ring"
+      className={`avt-frame-ring${frameStyle.glow ? ' avt-frame-ring--glow' : ''}`}
       style={{
         width: size + ringPad * 2,
         height: size + ringPad * 2,
