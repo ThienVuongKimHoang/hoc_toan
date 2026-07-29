@@ -5450,6 +5450,15 @@ button { font-family: inherit; }
   user-select: none;
 }
 .avt-display--clickable { cursor: pointer; }
+/* ─── Khung viền (cửa hàng) — vòng ngoài avatar, màu/gradient theo FRAME_STYLES ─── */
+.avt-frame-ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.avt-frame-ring .avt-display { box-shadow: 0 0 0 3px #fff; }
 .avt-display-overlay {
   position: absolute; inset: 0;
   border-radius: 50%;
@@ -5697,6 +5706,51 @@ button { font-family: inherit; }
   color: var(--tint);
   border-color: color-mix(in srgb, var(--tint) 40%, #e2e8f0);
 }
+
+/* ─── Cửa hàng khung viền ─── */
+.prof-coin-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-left: auto;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #92400e;
+  font-size: 0.82rem; font-weight: 700;
+  border: 1px solid #fcd34d;
+}
+.prof-shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 14px;
+}
+.prof-shop-card {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 16px 10px;
+  background: #f8fafc;
+  border: 1.5px solid #f1f5f9;
+  border-radius: 16px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+.prof-shop-card:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+.prof-shop-card:disabled { cursor: not-allowed; opacity: 0.7; }
+.prof-shop-card--equipped { border-color: #2563eb; background: #eff6ff; }
+.prof-shop-name { font-size: 0.82rem; font-weight: 700; color: #0f172a; text-align: center; }
+.prof-shop-rarity { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.prof-shop-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.72rem; font-weight: 600;
+  padding: 2px 9px; border-radius: 20px;
+}
+.prof-shop-tag--equipped { background: #dbeafe; color: #1d4ed8; }
+.prof-shop-tag--owned    { background: #dcfce7; color: #15803d; }
+.prof-shop-tag--price    { background: #fef3c7; color: #92400e; }
 .pic-content {
   display: flex;
   flex-direction: column;
@@ -5877,6 +5931,9 @@ button { font-family: inherit; }
   .phl-desc { display: none; }
   .prof-history-item { flex-direction: column; align-items: flex-start; }
   .phi-score { align-self: flex-end; }
+  .prof-shop-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .prof-section-title { flex-wrap: wrap; }
+  .prof-coin-badge { margin-left: 0; }
 }
 
 /* ═══════════════════════════════════════════
@@ -6417,6 +6474,12 @@ button { font-family: inherit; }
   white-space: nowrap;
 }
 .sa-grade-empty { color: #cbd5e1; }
+.sa-coin-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 700;
+  background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; border: 1px solid #fcd34d;
+  white-space: nowrap;
+}
 
 /* ── User edit modal: field labels + grade select ── */
 .sa-field-label { font-size: 0.8rem; font-weight: 700; color: #475569; margin: 14px 0 6px; }

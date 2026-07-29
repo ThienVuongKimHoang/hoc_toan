@@ -46,6 +46,8 @@ const IcUser   = (s) => <Ic size={s}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 
 const IcShield = (s) => <Ic size={s}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></Ic>
 const IcChevronRight = (s) => <Ic size={s}><polyline points="9 18 15 12 9 6"/></Ic>
 const IcLock   = (s) => <Ic size={s}><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></Ic>
+const IcCoin   = (s) => <Ic size={s}><circle cx="12" cy="12" r="9"/><path d="M9.5 15.5c.5 1 1.5 1.5 2.5 1.5 1.7 0 3-1 3-2.3 0-3-5.5-1.5-5.5-4.5 0-1.3 1.3-2.2 3-2.2 1 0 2 .4 2.5 1.3"/><line x1="12" y1="6.5" x2="12" y2="17.5"/></Ic>
+const IcBag    = (s) => <Ic size={s}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></Ic>
 
 /* user.avatarUrl: undefined = chưa từng tuỳ chỉnh (dùng ảnh Google trong user.avatar nếu có),
    null = đã chọn xoá ảnh để dùng màu nền, string = ảnh tuỳ chỉnh/ảnh Google đã chốt. */
@@ -54,13 +56,27 @@ export function resolveAvatarSrc(user) {
   return typeof src === 'string' && (/^https?:\/\//.test(src) || src.startsWith('data:')) ? src : null
 }
 
+/* ── Khung viền (cửa hàng) — id → hình vẽ (gradient/glow). Giá & tên là dữ liệu
+   server (FRAME_CATALOG trong api.py); id ở đây phải khớp id bên đó. ── */
+export const FRAME_STYLES = {
+  dong:      { background: 'linear-gradient(135deg,#c58f4f,#7c4a1e)' },
+  bac:       { background: 'linear-gradient(135deg,#e6ebf2,#94a3b8)' },
+  ngoc_bich: { background: 'linear-gradient(135deg,#5eead4,#047857)' },
+  vang:      { background: 'linear-gradient(135deg,#fde68a,#d97706)' },
+  navy_gold: { background: 'linear-gradient(135deg,#FBBF24,#0F172A 55%,#FBBF24)' },
+  kim_cuong: { background: 'linear-gradient(135deg,#bae6fd,#38bdf8,#f0f9ff)', glow: '0 0 14px rgba(56,189,248,.55)' },
+  hoang_gia: { background: 'linear-gradient(135deg,#ddd6fe,#6d28d9,#FBBF24)', glow: '0 0 14px rgba(109,40,217,.4)' },
+  cau_vong:  { background: 'conic-gradient(from 0deg,#f87171,#fbbf24,#34d399,#38bdf8,#818cf8,#f472b6,#f87171)', glow: '0 0 16px rgba(244,114,182,.45)' },
+}
+
 /* ── Avatar display ── */
-export function AvatarDisplay({ user, size = 80, onClick, className = '' }) {
+export function AvatarDisplay({ user, size = 80, onClick, className = '', frameStyle = null }) {
   const [failed, setFailed] = useState(false)
   const initial  = (user.name || user.email || '?')[0].toUpperCase()
   const bgColor  = user.avatarColor || ROLE_DEFAULT_COLOR[user.role] || '#2563eb'
   const src      = resolveAvatarSrc(user)
-  return (
+
+  const circle = (
     <div
       className={`avt-display ${onClick ? 'avt-display--clickable' : ''} ${className}`}
       style={{ width: size, height: size }}
@@ -78,6 +94,24 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '' }) {
           {IcCamera(Math.round(size * 0.3))}
         </div>
       )}
+    </div>
+  )
+
+  if (!frameStyle) return circle
+
+  const ringPad = Math.max(4, Math.round(size * 0.08))
+  return (
+    <div
+      className="avt-frame-ring"
+      style={{
+        width: size + ringPad * 2,
+        height: size + ringPad * 2,
+        padding: ringPad,
+        background: frameStyle.background,
+        boxShadow: frameStyle.glow || undefined,
+      }}
+    >
+      {circle}
     </div>
   )
 }
@@ -245,6 +279,131 @@ function AdminStats() {
   )
 }
 
+/* ── Cửa hàng khung viền (học sinh mua bằng xu; super admin mở khoá sẵn hết) ── */
+const RARITY_LABEL = { common: 'Phổ thông', rare: 'Hiếm', epic: 'Sử thi', legendary: 'Huyền thoại' }
+const RARITY_COLOR = { common: '#64748b', rare: '#2563eb', epic: '#7c3aed', legendary: '#d97706' }
+
+function FrameShopSection({ user, onUpdateUser }) {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [busy,    setBusy]    = useState(false)
+  const [error,   setError]   = useState('')
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/shop/frames', { headers: authHeaders() })
+      if (res.ok) setData(await res.json())
+    } catch {}
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
+
+  const applyUser = (updated) => {
+    const merged = { ...user, ...updated }
+    localStorage.setItem(USER_KEY, JSON.stringify(merged))
+    onUpdateUser(merged)
+  }
+
+  const handleBuy = async (frame) => {
+    setError(''); setBusy(true)
+    try {
+      const res  = await fetch('/api/shop/buy', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body:    JSON.stringify({ frameId: frame.id }),
+      })
+      const body = await res.json()
+      if (!res.ok) { setError(body.error || 'Mua khung viền thất bại.'); return }
+      applyUser(body)
+      await load()
+    } catch {
+      setError('Không thể kết nối server.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleEquip = async (frameId) => {
+    setError(''); setBusy(true)
+    try {
+      const res  = await fetch('/api/shop/equip', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body:    JSON.stringify({ frameId }),
+      })
+      const body = await res.json()
+      if (!res.ok) { setError(body.error || 'Trang bị khung viền thất bại.'); return }
+      applyUser(body)
+      await load()
+    } catch {
+      setError('Không thể kết nối server.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="prof-section">
+      <h3 className="prof-section-title">
+        {IcBag(16)} Cửa hàng khung viền
+        <span className="prof-coin-badge">{IcCoin(14)} {loading ? '…' : (data?.coins ?? 0)} xu</span>
+      </h3>
+      <p className="prof-section-desc">
+        {user.role === ROLES.SUPERADMIN
+          ? 'Tài khoản super admin được mở khoá toàn bộ khung viền — chọn một khung để trang bị.'
+          : 'Dùng xu để mở khoá khung viền cho ảnh đại diện. Xu hiện được super admin cấp thủ công.'}
+      </p>
+
+      {error && <div className="form-error">{error}</div>}
+
+      {loading ? (
+        <p className="prof-section-desc">Đang tải…</p>
+      ) : !data ? (
+        <div className="form-error">Không thể tải cửa hàng.</div>
+      ) : (
+        <div className="prof-shop-grid">
+          <button
+            type="button"
+            className={`prof-shop-card ${!data.equippedFrame ? 'prof-shop-card--equipped' : ''}`}
+            onClick={() => handleEquip(null)}
+            disabled={busy}
+          >
+            <AvatarDisplay user={user} size={64} />
+            <span className="prof-shop-name">Không dùng khung</span>
+            {!data.equippedFrame && <span className="prof-shop-tag prof-shop-tag--equipped">{IcCheck(11)} Đang dùng</span>}
+          </button>
+
+          {data.frames.map(f => {
+            const isEquipped = data.equippedFrame === f.id
+            return (
+              <button
+                type="button"
+                key={f.id}
+                className={`prof-shop-card ${isEquipped ? 'prof-shop-card--equipped' : ''}`}
+                onClick={() => f.owned ? handleEquip(f.id) : handleBuy(f)}
+                disabled={busy}
+              >
+                <AvatarDisplay user={user} size={64} frameStyle={FRAME_STYLES[f.id]} />
+                <span className="prof-shop-name">{f.name}</span>
+                <span className="prof-shop-rarity" style={{ color: RARITY_COLOR[f.rarity] }}>{RARITY_LABEL[f.rarity] || f.rarity}</span>
+                {isEquipped ? (
+                  <span className="prof-shop-tag prof-shop-tag--equipped">{IcCheck(11)} Đang dùng</span>
+                ) : f.owned ? (
+                  <span className="prof-shop-tag prof-shop-tag--owned">Đã sở hữu — bấm để dùng</span>
+                ) : (
+                  <span className="prof-shop-tag prof-shop-tag--price">{IcCoin(11)} {f.price} xu</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── Main page ── */
 export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory }) {
   const [nameVal,          setNameVal]          = useState(user.name)
@@ -337,7 +496,7 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
             <h3 className="prof-section-title">{IcUser(16)} Thông tin cá nhân</h3>
 
             <div className="prof-avatar-row">
-              <AvatarDisplay user={user} size={60} onClick={() => setShowAvatarPicker(true)} />
+              <AvatarDisplay user={user} size={60} onClick={() => setShowAvatarPicker(true)} frameStyle={FRAME_STYLES[user.equippedFrame]} />
               <div className="prof-avatar-meta">
                 <span className="prof-avatar-name">{user.name}</span>
                 <RoleBadge role={user.role} size="sm" />
@@ -420,6 +579,11 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
             </form>
           </div>
         </div>
+
+        {/* ── Cửa hàng khung viền ── */}
+        {(user.role === ROLES.STUDENT || user.role === ROLES.SUPERADMIN) && (
+          <FrameShopSection user={user} onUpdateUser={onUpdateUser} />
+        )}
 
         {/* ── Thống kê theo vai trò ── */}
         {user.role === ROLES.STUDENT && <StudentStats submissions={submissions} />}

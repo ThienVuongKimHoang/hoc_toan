@@ -217,13 +217,13 @@ def _question_richness(q: dict) -> int:
 
 
 def _section_answer_type(sec_data: dict) -> str:
-    """Loại đáp án của một phần: 'multiple_choice' | 'true_false' | 'short_answer'.
+    """Loại đáp án của một phần: 'multiple_choice' | 'true_false' | 'short_answer' | 'essay'.
 
     Ưu tiên field 'type'; nếu không rõ (đề không theo tên PHẦN I/II/III) thì suy ra từ
     HÌNH DẠNG câu hỏi: có sub_questions → Đúng/Sai; có choices → trắc nghiệm; còn lại → trả lời ngắn.
     """
     stype = sec_data.get("type")
-    if stype in ("multiple_choice", "true_false", "short_answer"):
+    if stype in ("multiple_choice", "true_false", "short_answer", "essay"):
         return stype
     qs = sec_data.get("questions") or []
     if any(q.get("sub_questions") for q in qs):
@@ -240,7 +240,10 @@ def _all_questions_answered(result: dict, answers: dict) -> bool:
     Phần rỗng (không có câu) tự thỏa mãn.
     """
     for sec_data in result.get("sections", {}).values():
-        amap = answers.get(_section_answer_type(sec_data)) or {}
+        atype = _section_answer_type(sec_data)
+        if atype == "essay":
+            continue  # tự luận chấm tay, không có đáp án tự động
+        amap = answers.get(atype) or {}
         for q in sec_data.get("questions", []):
             if q.get("question_number") not in amap:
                 return False
@@ -256,6 +259,8 @@ def _apply_math_answer_key(result: dict, answers: dict) -> int:
     filled = 0
     for sec_data in result.get("sections", {}).values():
         atype = _section_answer_type(sec_data)
+        if atype == "essay":
+            continue  # tự luận chấm tay, không ghi đè đáp án tự động
         amap = answers.get(atype)
         if not amap:
             continue
@@ -1696,7 +1701,81 @@ async def admin_reset_user_password(user_id: str, request: Request, caller: dict
         return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
     return {"ok": True}
 
+
+@app.put("/api/admin/users/{user_id}/coins")
+async def admin_adjust_user_coins(user_id: str, request: Request, caller: dict = Depends(require_super_admin)):
+    """Super admin cấp/thu hồi xu thủ công cho học sinh dùng ở cửa hàng khung viền."""
+    body  = await request.json()
+    delta = body.get("delta")
+    if not isinstance(delta, (int, float)) or int(delta) == 0:
+        return JSONResponse({"error": "Số xu cộng/trừ không hợp lệ."}, status_code=400)
+    updated = db.adjust_user_coins(user_id, int(delta))
+    if not updated:
+        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
+    return updated
+
 # ─── End User management ──────────────────────────────────────────────────────
+
+
+# ─── Cửa hàng khung viền ───────────────────────────────────────────────────────
+# Danh mục khung viền tĩnh — giá/tên là nguồn xác thực server-side, hình dáng (màu/gradient)
+# do frontend tự vẽ theo id (xem FRAME_STYLES trong ProfilePage.jsx). Super admin coi như
+# đã mở khoá toàn bộ, không cần mua.
+FRAME_CATALOG = [
+    {"id": "dong",      "name": "Vòng Đồng",     "price": 50,   "rarity": "common"},
+    {"id": "bac",       "name": "Vòng Bạc",      "price": 120,  "rarity": "common"},
+    {"id": "ngoc_bich", "name": "Ngọc Bích",     "price": 300,  "rarity": "rare"},
+    {"id": "vang",      "name": "Vòng Vàng",     "price": 350,  "rarity": "rare"},
+    {"id": "navy_gold", "name": "Ánh Sáng Navy", "price": 500,  "rarity": "epic"},
+    {"id": "kim_cuong", "name": "Kim Cương",     "price": 700,  "rarity": "epic"},
+    {"id": "hoang_gia", "name": "Hoàng Gia",     "price": 900,  "rarity": "legendary"},
+    {"id": "cau_vong",  "name": "Cầu Vồng",      "price": 1200, "rarity": "legendary"},
+]
+_FRAME_BY_ID = {f["id"]: f for f in FRAME_CATALOG}
+
+
+@app.get("/api/shop/frames")
+async def get_shop_frames(user: dict = Depends(require_auth)):
+    is_super = user.get("role") == "super_admin"
+    owned    = set(user.get("ownedFrames") or [])
+    frames = [{**f, "owned": is_super or f["id"] in owned} for f in FRAME_CATALOG]
+    return {"coins": user.get("coins", 0), "equippedFrame": user.get("equippedFrame"), "frames": frames}
+
+
+@app.post("/api/shop/buy")
+async def buy_frame_endpoint(request: Request, user: dict = Depends(require_auth)):
+    body     = await request.json()
+    frame_id = body.get("frameId")
+    frame    = _FRAME_BY_ID.get(frame_id)
+    if not frame:
+        return JSONResponse({"error": "Khung viền không tồn tại."}, status_code=404)
+    if user.get("role") == "super_admin":
+        return user
+    updated, err = db.purchase_frame(user["id"], frame_id, frame["price"])
+    if err == "insufficient":
+        return JSONResponse({"error": "Không đủ xu, vui lòng chờ chức năng được cập nhật."}, status_code=402)
+    if err == "not_found" or not updated:
+        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
+    return updated
+
+
+@app.post("/api/shop/equip")
+async def equip_frame_endpoint(request: Request, user: dict = Depends(require_auth)):
+    body     = await request.json()
+    frame_id = body.get("frameId")  # None = bỏ khung viền
+    if frame_id is not None:
+        frame = _FRAME_BY_ID.get(frame_id)
+        if not frame:
+            return JSONResponse({"error": "Khung viền không tồn tại."}, status_code=404)
+        owned = set(user.get("ownedFrames") or [])
+        if user.get("role") != "super_admin" and frame_id not in owned:
+            return JSONResponse({"error": "Bạn chưa sở hữu khung viền này."}, status_code=403)
+    updated = db.set_equipped_frame(user["id"], frame_id)
+    if not updated:
+        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
+    return updated
+
+# ─── End Cửa hàng khung viền ───────────────────────────────────────────────────
 
 
 # ─── Class management ─────────────────────────────────────────────────────────
@@ -3184,6 +3263,16 @@ _GEN_SECTION_PROMPTS = {
             'Mỗi câu có 4 đáp án A/B/C/D và 1 đáp án đúng. Nội dung hoàn toàn bằng Tiếng Anh.\n'
             f'Cấu trúc mỗi phần tử:\n'
             f'{{"question_number":1,"section":"READING","question_text":"...","choices":{{"A":"...","B":"...","C":"...","D":"..."}},"answer":"A","has_figure":false,"points":0.25}}'
+        ),
+    ),
+    "TỰ LUẬN": (
+        "essay",
+        lambda sec, n: (
+            f'Tạo đúng {n} câu tự luận Toán THPT. Học sinh sẽ trình bày lời giải và giáo viên '
+            'chấm tay, nên KHÔNG cần đáp án chi tiết — chỉ cần đề bài rõ ràng, đủ dữ kiện để giải.\n'
+            f'Cấu trúc mỗi phần tử trong mảng "questions":\n'
+            f'{{"question_number":1,"section":"TỰ LUẬN","question_text":"...","answer":"","has_figure":false,"points":1.0}}\n'
+            '"answer" để trống hoặc ghi gợi ý chấm/đáp số rất ngắn gọn (tuỳ chọn, không bắt buộc chính xác).'
         ),
     ),
 }

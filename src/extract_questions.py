@@ -5,6 +5,9 @@ Cấu trúc đề:
   PHẦN I  (3.0đ): Câu 1-12, trắc nghiệm 1 đáp án       → 0.25đ/câu
   PHẦN II (4.0đ): Câu 1-4,  đúng/sai 4 ý (a-d)         → 0.1/0.25/0.5/1.0đ
   PHẦN III(3.0đ): Câu 1-6,  trả lời ngắn                → 0.5đ/câu
+  TỰ LUẬN (tuỳ chọn): nếu đề gốc có phần tự luận, tự động nhận diện (bất kể được đề
+    gốc đánh số/ký hiệu gì) và chuẩn hoá về khoá "TỰ LUẬN" — chỉ giữ question_text +
+    points, KHÔNG cần đáp án vì giáo viên chấm tay.
 
 Chạy: python3 extract_questions.py [--pdf path/to/file.pdf] [--out output.json]
 """
@@ -44,7 +47,26 @@ SECTION_DESCS = {
     "PHẦN I":   "Trắc nghiệm nhiều phương án, chọn 1 đáp án đúng (Câu 1–12, 0.25đ/câu)",
     "PHẦN II":  "Trắc nghiệm Đúng/Sai, mỗi câu có 4 ý a-b-c-d (Câu 1–4, tối đa 1đ/câu)",
     "PHẦN III": "Trả lời ngắn, ghi đáp số (Câu 1–6, 0.5đ/câu)",
+    "TỰ LUẬN":  "Tự luận, học sinh trình bày lời giải/bài làm (giáo viên chấm tay)",
 }
+
+# Tiêu đề "TỰ LUẬN" không có tiền tố "PHẦN" cố định trong mọi đề gốc (có đề ghi
+# "PHẦN II. TỰ LUẬN", có đề chỉ ghi "II. TỰ LUẬN" hoặc "TỰ LUẬN" trần) nên dò riêng
+# bằng từ khoá thay vì theo mẫu "PHẦN X" như các phần trắc nghiệm/đúng-sai/trả lời ngắn.
+_ESSAY_RE = re.compile(r"TỰ\s*LUẬN", re.IGNORECASE)
+# Bản đứng-đầu-dòng, chỉ nhận khi "TỰ LUẬN" mở đầu một dòng (tuỳ chọn có số thứ tự/ký
+# hiệu phía trước) — tránh khớp nhầm khi cụm từ này chỉ được nhắc tới giữa câu văn khác.
+_ESSAY_BARE_RE = re.compile(
+    r"(?m)^\s*(?:[IVXLCDM]{1,4}|[A-Z]|\d{1,2})?[\.\):]?\s*TỰ\s*LUẬN\b", re.IGNORECASE
+)
+
+
+def _section_header_pattern(sec: str) -> re.Pattern:
+    """Regex định vị điểm bắt đầu tiêu đề `sec` trong text của trang chứa header đó."""
+    if sec == "TỰ LUẬN":
+        return _ESSAY_RE
+    roman = sec.replace("PHẦN ", "").strip()
+    return re.compile(rf"PHẦN\s+{re.escape(roman)}\b")
 
 VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
 PAGE_DPI = 200
@@ -158,11 +180,12 @@ def scan_pdf_layout(doc: fitz.Document) -> tuple:
         ("true_false",      re.compile(r"đúng sai",                  re.IGNORECASE)),
         ("short_answer",    re.compile(r"trả lời ngắn|điền vào|ngắn", re.IGNORECASE)),
     ]
-    default_pts = {"multiple_choice": 0.25, "true_false": 1.0, "short_answer": 0.5, "unknown": 0.25}
+    default_pts = {"multiple_choice": 0.25, "true_false": 1.0, "short_answer": 0.5, "essay": 1.0, "unknown": 0.25}
     type_labels  = {
         "multiple_choice": "Trắc nghiệm nhiều phương án (chọn 1 đáp án đúng)",
         "true_false":      "Trắc nghiệm Đúng/Sai (4 ý a-b-c-d mỗi câu)",
         "short_answer":    "Trả lời ngắn (ghi đáp số)",
+        "essay":           "Tự luận, trình bày lời giải/bài làm (giáo viên chấm tay)",
         "unknown":         "Câu hỏi",
     }
 
@@ -173,20 +196,27 @@ def scan_pdf_layout(doc: fitz.Document) -> tuple:
     for i, text in enumerate(all_texts):
         for m in header_re.finditer(text):
             identifier = m.group(1)
-            sec = f"PHẦN {identifier}"
+            excerpt_head = text[m.start():m.start() + 80]
+            # "PHẦN X. TỰ LUẬN" → chuẩn hoá về khoá cố định "TỰ LUẬN" (khớp cấu trúc app
+            # dùng cho câu tự luận chấm tay), bất kể X là số/chữ La Mã nào trong đề gốc.
+            sec = "TỰ LUẬN" if _ESSAY_RE.search(excerpt_head) else f"PHẦN {identifier}"
             if sec in section_header_page:
                 continue
             section_header_page[sec] = i
             excerpt = text[m.start():m.start() + 500]
 
-            sec_type = "unknown"
-            for t, pattern in type_patterns:
-                if pattern.search(excerpt):
-                    sec_type = t
-                    break
+            if sec == "TỰ LUẬN":
+                sec_type = "essay"
+            else:
+                sec_type = "unknown"
+                for t, pattern in type_patterns:
+                    if pattern.search(excerpt):
+                        sec_type = t
+                        break
 
             cm = count_re.search(excerpt)
-            count = int(cm.group(1)) if cm else SECTION_POINTS.get(sec, {}).get("count", 12)
+            fallback_count = 4 if sec_type == "essay" else SECTION_POINTS.get(sec, {}).get("count", 12)
+            count = int(cm.group(1)) if cm else fallback_count
             pts   = default_pts.get(sec_type, 0.25)
             detected_sections[sec] = {
                 "type":         sec_type,
@@ -196,6 +226,20 @@ def scan_pdf_layout(doc: fitz.Document) -> tuple:
                 "description":  f"{type_labels[sec_type]} — Câu 1–{count}",
             }
 
+        # Tiêu đề "TỰ LUẬN" đứng riêng, không có từ "PHẦN" phía trước (một số đề chỉ ghi
+        # "II. TỰ LUẬN" hoặc "TỰ LUẬN") — chỉ xét nếu chưa nhận diện được qua nhánh trên.
+        if "TỰ LUẬN" not in section_header_page:
+            m2 = _ESSAY_BARE_RE.search(text)
+            if m2:
+                section_header_page["TỰ LUẬN"] = i
+                detected_sections["TỰ LUẬN"] = {
+                    "type":         "essay",
+                    "count":        4,
+                    "points_per_q": default_pts["essay"],
+                    "total":        round(4 * default_pts["essay"], 2),
+                    "description":  f"{type_labels['essay']} — Câu 1–4",
+                }
+
     # Thứ tự các phần theo trang xuất hiện
     section_order = sorted(section_header_page, key=lambda s: section_header_page[s])
 
@@ -204,11 +248,10 @@ def scan_pdf_layout(doc: fitz.Document) -> tuple:
     q1_re = re.compile(r"Câu\s+1[\.\s]")
     for sec in section_order:
         hdr_page = section_header_page[sec]
-        roman = sec.replace("PHẦN ", "").strip()
         for i in range(hdr_page, doc.page_count):
             text = all_texts[i]
             if i == hdr_page:
-                hm = re.search(rf"PHẦN\s+{re.escape(roman)}\b", text)
+                hm = _section_header_pattern(sec).search(text)
                 search_text = text[hm.end():] if hm else text
             else:
                 search_text = text
@@ -268,8 +311,7 @@ def scan_question_starts(doc: fitz.Document, section_q_start_page: dict,
     header_end_offsets = {}  # (sec, page_idx) -> char offset
     if section_header_page:
         for sec, hdr_pg in section_header_page.items():
-            roman = sec.replace("PHẦN ", "").strip()
-            m = re.search(rf"PHẦN\s+{re.escape(roman)}\b", doc[hdr_pg].get_text())
+            m = _section_header_pattern(sec).search(doc[hdr_pg].get_text())
             if m:
                 header_end_offsets[(sec, hdr_pg)] = m.end()
 
@@ -310,8 +352,7 @@ def auto_detect_section_counts(doc: fitz.Document, section_q_start_page: dict,
     header_end_offsets = {}
     if section_header_page:
         for sec, hdr_pg in section_header_page.items():
-            roman = sec.replace("PHẦN ", "").strip()
-            m = re.search(rf"PHẦN\s+{re.escape(roman)}\b", doc[hdr_pg].get_text())
+            m = _section_header_pattern(sec).search(doc[hdr_pg].get_text())
             if m:
                 header_end_offsets[(sec, hdr_pg)] = m.end()
 
@@ -331,7 +372,7 @@ def auto_detect_section_counts(doc: fitz.Document, section_q_start_page: dict,
                 num = int(m.group(1))
                 if num > max_q:
                     max_q = num
-        hardcoded = SECTION_POINTS.get(sec, {}).get("count", 12)
+        hardcoded = 4 if sec == "TỰ LUẬN" else SECTION_POINTS.get(sec, {}).get("count", 12)
         counts[sec] = max(max_q, hardcoded) if max_q > 0 else hardcoded
 
     return counts
@@ -456,6 +497,10 @@ Lưu ý bắt buộc:
 - "sub_questions" chỉ có ở PHẦN II (4 ý a-b-c-d); correct_answer = true/false/null
 - "answer" ở PHẦN I = "A"/"B"/"C"/"D"; ở PHẦN III = đáp số; ở PHẦN II bỏ field này
 - "points": PHẦN I = 0.25 | PHẦN II = 1.0 (tối đa) | PHẦN III = 0.5
+- Nếu section là "TỰ LUẬN" (tự luận — học sinh trình bày lời giải, giáo viên chấm tay,
+  KHÔNG chấm tự động): bỏ "choices" và "sub_questions"; "answer" để trống ("") hoặc ghi
+  gợi ý chấm rất ngắn (không bắt buộc chính xác/đầy đủ); chỉ cần "question_text" đầy đủ
+  và "points" (điểm câu đó nếu đề ghi rõ, mặc định 1.0 nếu không thấy)
 - KHÔNG trích xuất dòng tiêu đề phần như "PHẦN II. (4,0 điểm)..."
 - DỪNG khi gặp mốc "ĐÁP ÁN", "HƯỚNG DẪN", "LỜI GIẢI" hoặc "----- HẾT -----": phần SAU các mốc này là đáp án/lời giải, KHÔNG phải câu hỏi — tuyệt đối không trích thành câu hỏi (kể cả bảng "Câu 1 2 3... Đáp án B D A...").
 - Nếu không có câu hỏi nào, trả về: {{"questions": []}}
