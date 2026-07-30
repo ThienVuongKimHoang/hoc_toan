@@ -73,6 +73,7 @@ export const FRAME_STYLES = {
   cau_vong:  { background: 'conic-gradient(from 0deg,#f87171,#fbbf24,#34d399,#38bdf8,#818cf8,#f472b6,#f87171)', glow: '0 0 16px rgba(244,114,182,.45)' },
   huyen_thoai: { image: '/img/frames/vien-huyen-thoai.svg', innerRatio: 0.6, glow: '0 0 16px rgba(139,47,217,.4)', wings: true },
   thien_nhien: { image: '/img/frames/vien_thien_nhien.png', innerRatio: 0.5, glow: '0 0 16px rgba(74,124,44,.45)', vines: true },
+  mo_bi_an:  { image: '/img/frames/vien_kim_cuong.png', innerRatio: 0.56, glow: '0 0 16px rgba(99,102,241,.45)', mascot: true },
 }
 
 /* Hình 1 lông cánh (quạt xoè từ gốc (0,0), toả theo góc dần thấp xuống ngang) —
@@ -204,6 +205,34 @@ function NatureVines() {
   )
 }
 
+/* ── Thợ mỏ sóc cho khung "Mỏ Kim Cương Bí Ẩn" — 1 chú sóc thợ mỏ đứng ở góc dưới-phải
+   (nơi ảnh vòng để trống), diễn 1 chuỗi hành động 3 khung lặp lại: đào (kim_cuong_1) →
+   đập trúng kim cương (kim_cuong_2) → ngồi thở dốc bên viên kim cương (kim_cuong_3),
+   chuyển cảnh bằng crossfade rồi quay lại từ đầu. Neo theo % của hộp khung ngoài, giống
+   cách đặt dây leo — không phụ thuộc avatarSize. ── */
+const MINE_FRAMES = [
+  '/img/frames/kim_cuong_1.png',
+  '/img/frames/kim_cuong_2.png',
+  '/img/frames/kim_cuong_3.png',
+]
+
+function MineMascot() {
+  return (
+    <div className="avt-mine-mascot">
+      {MINE_FRAMES.map((src, i) => (
+        <img
+          key={src}
+          src={src}
+          alt=""
+          className="avt-mine-frame"
+          draggable={false}
+          style={{ animationDelay: `${i * 2}s` }}
+        />
+      ))}
+    </div>
+  )
+}
+
 /* ── Khung viền wrapper — bọc quanh MỘT avatar tròn có sẵn (bất kỳ kích thước/markup
    nào: AvatarDisplay, hoặc avatar tự vẽ riêng ở trang khác) để hiện khung đã trang bị.
    Dùng chung ở AccountMenu, trang quản lý lớp, quản trị… nơi nào có avatar + user đầy
@@ -294,6 +323,7 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '', frameS
         <img src={frameStyle.image} alt="" className="avt-frame-image-ring" draggable={false} />
         {frameStyle.wings && <AngelWings avatarSize={size} ringSize={outerSize} />}
         {frameStyle.vines && <NatureVines />}
+        {frameStyle.mascot && <MineMascot />}
       </div>
     )
   }

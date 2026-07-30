@@ -5575,6 +5575,48 @@ button { font-family: inherit; }
   .avt-vine-stem { animation: none; stroke-dashoffset: 0; }
   .avt-vine-leaf { animation: none; opacity: 1; transform: scale(1); }
 }
+
+/* ─── Thợ mỏ sóc (khung Mỏ Kim Cương Bí Ẩn) — góc dưới-phải, lặp chuỗi 3 khung hình
+   đào → trúng kim cương → ngồi thở, chuyển cảnh bằng crossfade + nhún nhẹ liên tục ─── */
+.avt-mine-mascot {
+  position: absolute;
+  left: 84%;
+  top: 86%;
+  width: 34%;
+  height: 34%;
+  transform: translate(-50%, -100%);
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 2px 5px rgba(15, 23, 42, .5)) drop-shadow(0 0 6px rgba(99, 102, 241, .45));
+  animation: avt-mine-bob 2.4s ease-in-out infinite;
+}
+.avt-mine-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom center;
+  opacity: 0;
+  animation: avt-mine-crossfade 6s ease-in-out infinite both;
+}
+@keyframes avt-mine-crossfade {
+  0%   { opacity: 0; }
+  3%   { opacity: 1; }
+  30%  { opacity: 1; }
+  33%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes avt-mine-bob {
+  0%, 100% { transform: translate(-50%, -100%); }
+  50%      { transform: translate(-50%, calc(-100% - 4%)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avt-mine-mascot { animation: none; }
+  .avt-mine-frame { animation: none; opacity: 1; }
+  .avt-mine-frame:not(:first-child) { display: none; }
+}
 .avt-display-overlay {
   position: absolute; inset: 0;
   border-radius: 50%;
