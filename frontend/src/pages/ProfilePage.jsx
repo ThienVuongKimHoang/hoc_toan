@@ -128,48 +128,76 @@ function AngelWings({ avatarSize, ringSize }) {
   )
 }
 
-/* ── Dây leo cho khung huyền thoại thiên nhiên — 4 chồi non mọc chéo 4 góc khung
-   (nơi ảnh vòng lá vốn để trống), liên tục "mọc" dài ra rồi rút lại theo kiểu vẽ nét
-   (stroke-dashoffset), lệch nhịp nhau (delay âm khác nhau) để trông như dây leo đang
-   sinh sôi lan dần chứ không đồng loạt. Neo theo % của hộp khung ngoài — không cần quy
-   đổi theo avatarSize như cánh vì các chồi này chỉ bám rìa ảnh khung, luôn tỉ lệ đều
-   với hộp khung bất kể avatar to nhỏ ra sao. ── */
+/* ── Dây leo cho khung huyền thoại thiên nhiên — nhiều chồi non mọc rải quanh khung
+   (8 điểm neo quanh vòng, ứng với 8 hướng la bàn — không chỉ 4 góc chéo như trước để
+   trông rậm rạp hơn), liên tục "mọc" dài ra rồi rút lại theo kiểu vẽ nét
+   (stroke-dashoffset), lệch nhịp đều nhau quanh vòng nên lúc nào cũng có vài chồi đang
+   mọc — như một vòng sóng lan dần quanh khung thay vì đồng loạt. Mỗi chồi còn lệch
+   scale + đổi giữa 2 dáng nhánh (variant) để không lặp lại y hệt nhau, trông tự nhiên
+   hơn. Neo theo % của hộp khung ngoài — không cần quy đổi theo avatarSize như cánh vì
+   các chồi này chỉ bám rìa ảnh khung, luôn tỉ lệ đều với hộp khung bất kể avatar to nhỏ
+   ra sao. ── */
 const VINE_SPRIGS = [
-  { top: '14%', left: '24%', rotate: -135 }, // góc trên-trái, mọc chếch lên trái
-  { top: '14%', left: '76%', rotate: -45  }, // góc trên-phải, mọc chếch lên phải
-  { top: '68%', left: '24%', rotate: 135  }, // góc dưới-trái, mọc chếch xuống trái
-  { top: '68%', left: '76%', rotate: 45   }, // góc dưới-phải, mọc chếch xuống phải
+  { top: '41.0%', left: '84.0%', rotate: 0,    scale: 1.0,  variant: 0 }, // phải
+  { top: '14.5%', left: '76.0%', rotate: -45,  scale: 0.9,  variant: 1 }, // trên-phải
+  { top: '-3.0%', left: '50.0%', rotate: -90,  scale: 0.8,  variant: 0 }, // trên (gần mào lá)
+  { top: '14.0%', left: '23.5%', rotate: -135, scale: 1.1,  variant: 1 }, // trên-trái
+  { top: '41.0%', left: '18.5%', rotate: 180,  scale: 1.0,  variant: 0 }, // trái
+  { top: '63.8%', left: '27.6%', rotate: 135,  scale: 0.95, variant: 1 }, // dưới-trái
+  { top: '76.3%', left: '50.0%', rotate: 90,   scale: 1.05, variant: 0 }, // dưới
+  { top: '66.8%', left: '75.3%', rotate: 45,   scale: 0.9,  variant: 1 }, // dưới-phải
 ]
 
-function VineSprig({ delay }) {
+/* dáng A: nhánh 2 lá, cong thoải; dáng B: nhánh 3 lá, cong gấp hơn — xen kẽ nhau
+   quanh vòng để các chồi không trông như tem in giống hệt nhau. */
+const VINE_VARIANTS = [
+  {
+    path: 'M0,20 C10,6 18,34 28,16 C36,3 44,24 51,12',
+    leaves: [
+      { cx: 16, cy: 12, rx: 5,   ry: 2.6, fill: '#6fa83a', rot: -35, d: 0   },
+      { cx: 40, cy: 10, rx: 4.5, ry: 2.3, fill: '#7cb941', rot: 20,  d: 0.5 },
+    ],
+  },
+  {
+    path: 'M0,20 C6,32 14,6 20,20 C26,34 34,6 40,18 C45,26 49,14 53,17',
+    leaves: [
+      { cx: 12, cy: 20, rx: 4.2, ry: 2.2, fill: '#7cb941', rot: 50,  d: 0   },
+      { cx: 30, cy: 16, rx: 4.6, ry: 2.4, fill: '#5c9530', rot: -25, d: 0.35 },
+      { cx: 46, cy: 15, rx: 3.8, ry: 2,   fill: '#6fa83a', rot: 15,  d: 0.7 },
+    ],
+  },
+]
+
+function VineSprig({ delay, variant }) {
+  const v = VINE_VARIANTS[variant]
   return (
     <svg viewBox="0 0 60 40" width="100%" height="100%" style={{ overflow: 'visible' }}>
       <path
         className="avt-vine-stem"
-        d="M0,20 C10,6 18,34 28,16 C36,3 44,24 51,12"
+        d={v.path}
         fill="none" stroke="#4d7c2a" strokeWidth="2.6" strokeLinecap="round" strokeDasharray="130"
         style={{ animationDelay: `${delay}s` }}
       />
-      <g className="avt-vine-leaf" style={{ animationDelay: `${delay}s` }}>
-        <ellipse cx="16" cy="12" rx="5" ry="2.6" fill="#6fa83a" transform="rotate(-35 16 12)" />
-      </g>
-      <g className="avt-vine-leaf" style={{ animationDelay: `${delay + 0.5}s` }}>
-        <ellipse cx="40" cy="10" rx="4.5" ry="2.3" fill="#7cb941" transform="rotate(20 40 10)" />
-      </g>
+      {v.leaves.map((lf, i) => (
+        <g key={i} className="avt-vine-leaf" style={{ animationDelay: `${delay + lf.d}s` }}>
+          <ellipse cx={lf.cx} cy={lf.cy} rx={lf.rx} ry={lf.ry} fill={lf.fill} transform={`rotate(${lf.rot} ${lf.cx} ${lf.cy})`} />
+        </g>
+      ))}
     </svg>
   )
 }
 
 function NatureVines() {
+  const step = 5.2 / VINE_SPRIGS.length
   return (
     <>
       {VINE_SPRIGS.map((s, i) => (
         <div
           key={i}
           className="avt-vine-wrap"
-          style={{ top: s.top, left: s.left, transform: `rotate(${s.rotate}deg)` }}
+          style={{ top: s.top, left: s.left, transform: `rotate(${s.rotate}deg) scale(${s.scale})` }}
         >
-          <VineSprig delay={i * -1.3} />
+          <VineSprig delay={i * -step} variant={s.variant} />
         </div>
       ))}
     </>
