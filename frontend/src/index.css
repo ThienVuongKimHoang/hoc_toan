@@ -5598,15 +5598,20 @@ button { font-family: inherit; }
   height: 100%;
   object-fit: contain;
   object-position: bottom center;
+  transform-origin: 50% 100%;
   opacity: 0;
-  animation: avt-mine-crossfade 6s ease-in-out infinite both;
+  animation: avt-mine-swap 6s linear infinite both;
 }
-@keyframes avt-mine-crossfade {
-  0%   { opacity: 0; }
-  3%   { opacity: 1; }
-  30%  { opacity: 1; }
-  33%  { opacity: 0; }
-  100% { opacity: 0; }
+/* nhảy khung cứng như GIF sprite (không mờ dần) — mỗi khung hiện trọn vẹn trong 1/3
+   chu kỳ rồi biến mất ngay lập tức để khung tiếp theo hiện ra. Giữ 0% ở opacity 0 (chứ
+   không phải 1) để khi animation-fill-mode: both áp giá trị này trong lúc chờ delay,
+   khung chưa tới lượt vẫn ẩn — nếu không 3 khung sẽ đè lên nhau lúc mới tải trang. */
+@keyframes avt-mine-swap {
+  0%     { opacity: 0; }
+  0.2%   { opacity: 1; }
+  33.2%  { opacity: 1; }
+  33.4%  { opacity: 0; }
+  100%   { opacity: 0; }
 }
 @keyframes avt-mine-bob {
   0%, 100% { transform: translate(-50%, -100%); }

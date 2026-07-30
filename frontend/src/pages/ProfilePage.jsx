@@ -207,26 +207,28 @@ function NatureVines() {
 
 /* ── Thợ mỏ sóc cho khung "Mỏ Kim Cương Bí Ẩn" — 1 chú sóc thợ mỏ đứng ở góc dưới-phải
    (nơi ảnh vòng để trống), diễn 1 chuỗi hành động 3 khung lặp lại: đào (kim_cuong_1) →
-   đập trúng kim cương (kim_cuong_2) → ngồi thở dốc bên viên kim cương (kim_cuong_3),
-   chuyển cảnh bằng crossfade rồi quay lại từ đầu. Neo theo % của hộp khung ngoài, giống
-   cách đặt dây leo — không phụ thuộc avatarSize. ── */
+   đập trúng kim cương (kim_cuong_2) → ngồi thở dốc bên viên kim cương (kim_cuong_3).
+   Chuyển cảnh bằng nhảy khung cứng (giống GIF sprite, không mờ dần) rồi quay lại từ
+   đầu. Khung đầu (đào) phóng to x2 vì đây là hành động mở màn cần nổi bật, chân vẫn
+   neo đúng vị trí đứng nhờ transform-origin ở đáy. Neo theo % của hộp khung ngoài,
+   giống cách đặt dây leo — không phụ thuộc avatarSize. ── */
 const MINE_FRAMES = [
-  '/img/frames/kim_cuong_1.png',
-  '/img/frames/kim_cuong_2.png',
-  '/img/frames/kim_cuong_3.png',
+  { src: '/img/frames/kim_cuong_1.png', scale: 2 },
+  { src: '/img/frames/kim_cuong_2.png', scale: 1 },
+  { src: '/img/frames/kim_cuong_3.png', scale: 1 },
 ]
 
 function MineMascot() {
   return (
     <div className="avt-mine-mascot">
-      {MINE_FRAMES.map((src, i) => (
+      {MINE_FRAMES.map((f, i) => (
         <img
-          key={src}
-          src={src}
+          key={f.src}
+          src={f.src}
           alt=""
           className="avt-mine-frame"
           draggable={false}
-          style={{ animationDelay: `${i * 2}s` }}
+          style={{ animationDelay: `${i * 2}s`, transform: `scale(${f.scale})` }}
         />
       ))}
     </div>
