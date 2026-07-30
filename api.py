@@ -1893,6 +1893,7 @@ FRAME_CATALOG = [
     {"id": "hoang_gia",   "name": "Hoàng Gia",   "price": 900,  "rarity": "legendary"},
     {"id": "cau_vong",    "name": "Cầu Vồng",    "price": 1200, "rarity": "legendary"},
     {"id": "huyen_thoai", "name": "Huyền Thoại", "price": 1500, "rarity": "legendary"},
+    {"id": "thien_nhien", "name": "Thiên Nhiên Huyền Thoại", "price": 1400, "rarity": "legendary"},
 ]
 _FRAME_BY_ID = {f["id"]: f for f in FRAME_CATALOG}
 

@@ -5538,6 +5538,43 @@ button { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .avt-wing-flap--left, .avt-wing-flap--right { animation: none; }
 }
+
+/* ─── Dây leo (khung huyền thoại thiên nhiên) — 4 chồi non ở 4 góc, liên tục mọc dài
+   ra rồi rút lại (vẽ nét bằng stroke-dashoffset), lệch nhịp để trông như đang sinh sôi ─── */
+.avt-vine-wrap {
+  position: absolute;
+  width: 26%;
+  height: 18%;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  transform-origin: 0% 50%;
+  filter: drop-shadow(0 0 4px rgba(74, 124, 44, .5));
+}
+.avt-vine-stem {
+  animation: avt-vine-grow 5.2s ease-in-out infinite;
+}
+.avt-vine-leaf {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: avt-vine-leaf-pop 5.2s ease-in-out infinite;
+}
+@keyframes avt-vine-grow {
+  0%   { stroke-dashoffset: 130; }
+  45%  { stroke-dashoffset: 0; }
+  75%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 130; }
+}
+@keyframes avt-vine-leaf-pop {
+  0%, 25% { opacity: 0; transform: scale(.2); }
+  50%     { opacity: 1; transform: scale(1); }
+  80%     { opacity: 1; transform: scale(1); }
+  100%    { opacity: 0; transform: scale(.3); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avt-vine-stem { animation: none; stroke-dashoffset: 0; }
+  .avt-vine-leaf { animation: none; opacity: 1; transform: scale(1); }
+}
 .avt-display-overlay {
   position: absolute; inset: 0;
   border-radius: 50%;

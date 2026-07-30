@@ -72,6 +72,7 @@ export const FRAME_STYLES = {
   hoang_gia: { background: 'linear-gradient(135deg,#ddd6fe,#6d28d9,#FBBF24)', glow: '0 0 14px rgba(109,40,217,.4)' },
   cau_vong:  { background: 'conic-gradient(from 0deg,#f87171,#fbbf24,#34d399,#38bdf8,#818cf8,#f472b6,#f87171)', glow: '0 0 16px rgba(244,114,182,.45)' },
   huyen_thoai: { image: '/img/frames/vien-huyen-thoai.svg', innerRatio: 0.6, glow: '0 0 16px rgba(139,47,217,.4)', wings: true },
+  thien_nhien: { image: '/img/frames/vien_thien_nhien.png', innerRatio: 0.5, glow: '0 0 16px rgba(74,124,44,.45)', vines: true },
 }
 
 /* Hình 1 lông cánh (quạt xoè từ gốc (0,0), toả theo góc dần thấp xuống ngang) —
@@ -123,6 +124,54 @@ function AngelWings({ avatarSize, ringSize }) {
           <svg viewBox="-10 -60 90 130" width={dim} height={dim}>{feathers}</svg>
         </div>
       </div>
+    </>
+  )
+}
+
+/* ── Dây leo cho khung huyền thoại thiên nhiên — 4 chồi non mọc chéo 4 góc khung
+   (nơi ảnh vòng lá vốn để trống), liên tục "mọc" dài ra rồi rút lại theo kiểu vẽ nét
+   (stroke-dashoffset), lệch nhịp nhau (delay âm khác nhau) để trông như dây leo đang
+   sinh sôi lan dần chứ không đồng loạt. Neo theo % của hộp khung ngoài — không cần quy
+   đổi theo avatarSize như cánh vì các chồi này chỉ bám rìa ảnh khung, luôn tỉ lệ đều
+   với hộp khung bất kể avatar to nhỏ ra sao. ── */
+const VINE_SPRIGS = [
+  { top: '14%', left: '24%', rotate: -135 }, // góc trên-trái, mọc chếch lên trái
+  { top: '14%', left: '76%', rotate: -45  }, // góc trên-phải, mọc chếch lên phải
+  { top: '68%', left: '24%', rotate: 135  }, // góc dưới-trái, mọc chếch xuống trái
+  { top: '68%', left: '76%', rotate: 45   }, // góc dưới-phải, mọc chếch xuống phải
+]
+
+function VineSprig({ delay }) {
+  return (
+    <svg viewBox="0 0 60 40" width="100%" height="100%" style={{ overflow: 'visible' }}>
+      <path
+        className="avt-vine-stem"
+        d="M0,20 C10,6 18,34 28,16 C36,3 44,24 51,12"
+        fill="none" stroke="#4d7c2a" strokeWidth="2.6" strokeLinecap="round" strokeDasharray="130"
+        style={{ animationDelay: `${delay}s` }}
+      />
+      <g className="avt-vine-leaf" style={{ animationDelay: `${delay}s` }}>
+        <ellipse cx="16" cy="12" rx="5" ry="2.6" fill="#6fa83a" transform="rotate(-35 16 12)" />
+      </g>
+      <g className="avt-vine-leaf" style={{ animationDelay: `${delay + 0.5}s` }}>
+        <ellipse cx="40" cy="10" rx="4.5" ry="2.3" fill="#7cb941" transform="rotate(20 40 10)" />
+      </g>
+    </svg>
+  )
+}
+
+function NatureVines() {
+  return (
+    <>
+      {VINE_SPRIGS.map((s, i) => (
+        <div
+          key={i}
+          className="avt-vine-wrap"
+          style={{ top: s.top, left: s.left, transform: `rotate(${s.rotate}deg)` }}
+        >
+          <VineSprig delay={i * -1.3} />
+        </div>
+      ))}
     </>
   )
 }
@@ -216,6 +265,7 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '', frameS
         {circle}
         <img src={frameStyle.image} alt="" className="avt-frame-image-ring" draggable={false} />
         {frameStyle.wings && <AngelWings avatarSize={size} ringSize={outerSize} />}
+        {frameStyle.vines && <NatureVines />}
       </div>
     )
   }
