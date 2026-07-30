@@ -19,9 +19,9 @@ const IC = {
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
     </svg>
   ),
-  stats: (
+  coin: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+      <circle cx="12" cy="12" r="9"/><path d="M9.5 15.5c.5 1 1.5 1.5 2.5 1.5 1.7 0 3-1 3-2.3 0-3-5.5-1.5-5.5-4.5 0-1.3 1.3-2.2 3-2.2 1 0 2 .4 2.5 1.3"/><line x1="12" y1="6.5" x2="12" y2="17.5"/>
     </svg>
   ),
   system: (
@@ -62,7 +62,7 @@ function buildMenu(role, actions) {
   items.push({ icon: IC.profile,    label: 'Hồ sơ cá nhân', action: actions.onGoProfile })
 
   if (role === ROLES.STUDENT) {
-    items.push({ icon: IC.stats,   label: 'Học tập',          action: actions.onGoStudy })
+    items.push({ icon: IC.coin,    label: 'Nhiệm vụ',         action: actions.onGoMissions })
     items.push({ icon: IC.users,   label: 'Lớp của tôi',      action: actions.onGoMyClasses })
     items.push({ icon: IC.history, label: 'Lịch sử làm bài',  action: actions.onGoHistory })
     items.push({ icon: IC.shop,    label: 'Cửa hàng',         action: actions.onGoShop })
@@ -80,7 +80,7 @@ function buildMenu(role, actions) {
   return items
 }
 
-export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onGoTools, onGoHistory, onGoShop }) {
+export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, onGoMissions, onGoClasses, onGoMyClasses, onGoTools, onGoHistory, onGoShop }) {
   const [open, setOpen] = useState(false)
   const ref  = useRef(null)
   const meta = ROLE_META[user.role]
@@ -92,7 +92,7 @@ export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, on
   }, [])
 
   const close = () => setOpen(false)
-  const menuItems = buildMenu(user.role, { onGoProfile, onGoAdmin, onGoStudy, onGoClasses, onGoMyClasses, onGoTools, onGoHistory, onGoShop })
+  const menuItems = buildMenu(user.role, { onGoProfile, onGoAdmin, onGoMissions, onGoClasses, onGoMyClasses, onGoTools, onGoHistory, onGoShop })
 
   return (
     <div className="acct-wrap" ref={ref}>

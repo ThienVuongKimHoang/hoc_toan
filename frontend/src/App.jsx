@@ -10,7 +10,7 @@ import ProfilePage from './pages/ProfilePage.jsx'
 import ExamHistoryPage from './pages/ExamHistoryPage.jsx'
 import ShopPage from './pages/ShopPage.jsx'
 import SuperAdminPage from './pages/SuperAdminPage.jsx'
-import StudyPage from './pages/StudyPage.jsx'
+import MissionsPage from './pages/MissionsPage.jsx'
 import ClassManagementPage from './pages/ClassManagementPage.jsx'
 import MyClassesPage from './pages/MyClassesPage.jsx'
 import ExamReviewPage from './pages/ExamReviewPage.jsx'
@@ -58,7 +58,7 @@ function parseHash() {
   }
   if (hash === 'admin') return { view: 'super-admin', examId: null, classId: null, adminTab: null }
   if (hash.startsWith('admin/')) return { view: 'super-admin', examId: null, classId: null, adminTab: hash.slice(6) || null }
-  if (hash === 'study') return { view: 'study', examId: null, classId: null }
+  if (hash === 'missions') return { view: 'missions', examId: null, classId: null }
   // history — trang riêng "Lịch sử làm bài" (danh sách các đề học sinh đã làm)
   if (hash === 'history') return { view: 'exam-history', examId: null, classId: null }
   if (hash === 'shop') return { view: 'shop', examId: null, classId: null }
@@ -280,7 +280,7 @@ export default function App() {
     if (!hasAdminAccess(user.role)) return
     setHash(`admin/${tabKey}`); setAdminTab(tabKey); setAdminNavNonce(n => n + 1); setView('super-admin')
   }
-  const goStudy = () => user ? (setHash('study'), setView('study')) : goLogin()
+  const goMissions = () => user ? (setHash('missions'), setView('missions')) : goLogin()
   const goClasses = () => {
     if (!user) { goLogin(); return }
     if (!hasTeacherAccess(user.role)) return
@@ -381,7 +381,7 @@ export default function App() {
       onLogout={handleLogout}
       onGoProfile={goProfile}
       onGoAdmin={goAdmin}
-      onGoStudy={goStudy}
+      onGoMissions={goMissions}
       onGoClasses={goClasses}
       onGoMyClasses={goMyClasses}
       onOpenClass={openClass}
@@ -430,10 +430,10 @@ export default function App() {
     )
   }
 
-  if (view === 'study') return (
+  if (view === 'missions') return (
     <>
       {header}
-      <StudyPage user={user} onGoHome={goHome} />
+      <MissionsPage user={user} onGoHome={goHome} onOpenClass={openClass} />
       {teacherToolOverlays}
     </>
   )

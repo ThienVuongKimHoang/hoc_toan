@@ -97,7 +97,7 @@ export default function NotificationBell({ user, onOpenClass, onOpenReports }) {
                   onClick={() => handleClickNotif(n)}
                   title={n.classId ? 'Bấm để mở lớp & bài tập' : isReportNotif(n) ? 'Bấm để xem trang Báo cáo' : undefined}>
                   <div className="notif-icon">
-                    {n.type === 'register' ? '📋' : n.type === 'attendance' ? '🗓️' : n.type === 'report' ? '📊' : '📝'}
+                    {n.type === 'register' ? '📋' : n.type === 'attendance' ? '🗓️' : n.type === 'report' ? '📊' : n.type === 'coin' ? '🪙' : '📝'}
                   </div>
                   <div className="notif-content">
                     <div className="notif-title">{n.title}</div>

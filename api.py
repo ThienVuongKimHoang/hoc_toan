@@ -55,6 +55,7 @@ FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
 
 import database as db
 import ielts_grading as ielts
+import mission_coins as missions
 
 # task_id → {"status": pending|running|done|error, "progress": [...], "result": ..., "error": ...}
 TASKS: dict[str, dict] = {}
@@ -613,6 +614,14 @@ def _manual_total(manual_scores) -> float:
     return sum(_to_float(v) for v in manual_scores.values())
 
 
+def _exam_needs_manual_grading(exam: dict) -> bool:
+    """Đề có câu TỰ LUẬN (chấm tay) → điểm lúc nộp bài chưa phải điểm cuối cùng
+    (câu tự luận vẫn = 0 cho tới khi GV chấm tay), nên Xu nhiệm vụ phải đợi
+    đến khi chấm xong (xem grade_essay_submission) thay vì thưởng ngay lúc nộp."""
+    essay = (exam.get("sections") or {}).get("TỰ LUẬN") or {}
+    return bool(essay.get("questions"))
+
+
 def _recompute_submissions(exam_id: str, exam: dict) -> int:
     """Chấm lại toàn bộ bài nộp theo đáp án hiện tại của đề. Trả về số bài đã đổi điểm."""
     max_score = _calc_max_score(exam)
@@ -738,6 +747,68 @@ def _sub_belongs_to_asgn(sub, asgn_id, legacy_owner):
     return legacy_owner is not None and str(asgn_id) == str(legacy_owner)
 
 
+def _mission_notif_message(award: dict) -> str:
+    """Soạn nội dung thông báo nhận Xu — liệt kê các khoản > 0 trong breakdown."""
+    lines = [f"📚 Xu hoàn thành: {award['completionXu']} Xu"]
+    if award["bracketXu"]:
+        lines.append(f"🌟 Xu theo điểm ({award['normalizedScore']:.1f} đ): {award['bracketXu']} Xu")
+    if award["milestoneXu"]:
+        lines.append(f"🚀 Thưởng vượt mốc: {award['milestoneXu']} Xu")
+    if award["maintainXu"]:
+        lines.append(f"🔥 Thưởng duy trì điểm cao ({award['highScoreStreak']} tuần): {award['maintainXu']} Xu")
+    if award["effortXu"]:
+        lines.append(f"📈 Thưởng chuỗi nỗ lực ({award['effortStreak']} tuần): {award['effortXu']} Xu")
+    lines.append(f"🪙 Tổng nhận: {award['totalXu']} Xu")
+    return "\n".join(lines)
+
+
+def _award_mission_coins(cls: dict, asgn: dict, student_id, student_name: str, kind: str,
+                          raw_score, max_score, submitted_at) -> None:
+    """Tính & ghi Xu nhiệm vụ cho 1 lần chấm bài (idempotent theo student+assignment).
+    Gọi từ 3 nơi: nộp đề không có tự luận, chấm tay tự luận xong, chấm AI Writing xong."""
+    if raw_score is None or not max_score or student_id is None:
+        return
+    close = asgn.get("closeTime") or asgn.get("dueDate")
+    on_time = True
+    try:
+        if close and submitted_at:
+            on_time = (datetime.fromisoformat(str(submitted_at).replace("Z", "+00:00"))
+                       <= datetime.fromisoformat(str(close).replace("Z", "+00:00")))
+    except Exception:
+        pass
+
+    eligible = missions.sort_eligible(cls.get("assignments") or [])
+    idx = next((i for i, a in enumerate(eligible) if a.get("id") == asgn.get("id")), None)
+    if idx is None:
+        return
+
+    prev_row = db.get_mission_award(student_id, eligible[idx - 1]["id"]) if idx > 0 else None
+    prev_score = prev_row["normalizedScore"] if prev_row else None
+    prev_high  = prev_row["highScoreStreak"] if prev_row else 0
+    prev_eff   = prev_row["effortStreak"]    if prev_row else 0
+
+    score10 = missions.normalize(raw_score, max_score)
+    result = missions.compute_award(prev_score, prev_high, prev_eff, score10, on_time)
+
+    award = db.record_mission_award({
+        "id": _cls_id(), "studentId": student_id, "studentName": student_name or "",
+        "classId": cls["id"], "className": cls.get("name", ""),
+        "assignmentId": asgn["id"], "assignmentTitle": asgn.get("title", ""),
+        "kind": kind, "dueDate": close, "onTime": on_time,
+        "rawScore": raw_score, "maxScore": max_score, "normalizedScore": score10,
+        **result,
+    })
+    if award and award.get("totalXu"):
+        db.add_notif({
+            "id": _cls_id(), "type": "coin",
+            "targetUserId": str(student_id), "classId": cls["id"],
+            "className": cls.get("name", ""), "assignmentId": asgn["id"],
+            "title": f"+{award['totalXu']} Xu — {asgn.get('title','')}",
+            "message": _mission_notif_message(award),
+            "createdAt": _now_iso(), "read": False,
+        })
+
+
 def _is_class_member(cls, student_id, email=None):
     """Học sinh có thuộc lớp không — khớp theo userId hoặc email."""
     if student_id is None:
@@ -846,6 +917,14 @@ async def submit_exam(exam_id: str, request: Request, caller: Optional[dict] = D
     if not ok:
         return JSONResponse(
             {"error": f"Bạn đã làm đủ {max_attempts} lần cho phép."}, status_code=403)
+    # Xu nhiệm vụ: chỉ thưởng ngay nếu đề KHÔNG có câu tự luận (điểm đã final).
+    # Đề có tự luận sẽ được thưởng sau, khi GV chấm tay xong (grade_essay_submission).
+    if cls_id and asgn and not _exam_needs_manual_grading(exam):
+        try:
+            _award_mission_coins(cls, asgn, student_id, submission["studentName"], "exam",
+                                  score, max_score, submission["submittedAt"])
+        except Exception as e:
+            print(f"[mission_coins] submit_exam: {e}")
     # Trả kèm điểm SERVER đã chấm để client hiển thị ngay — client không còn nhận
     # được đáp án đúng qua GET /api/exams/{id} nên không thể tự tính điểm nữa.
     return {"ok": True, "submissionIndex": result, "score": score, "maxScore": max_score}
@@ -882,6 +961,79 @@ async def get_student_submissions(student_id: str, caller: dict = Depends(requir
             s["maxScore"] = None
             s["answers"] = {}
     return {"submissions": subs}
+
+
+@app.get("/api/students/{student_id}/missions")
+async def get_student_missions(student_id: str, caller: dict = Depends(require_auth)):
+    """Học sinh xem Xu, chuỗi nỗ lực/duy trì điểm cao và lịch sử thưởng Xu nhiệm vụ
+    của chính mình, theo từng lớp đang tham gia."""
+    if str(caller["id"]) != str(student_id):
+        return JSONResponse({"error": "Không có quyền xem nhiệm vụ của người khác"}, status_code=403)
+    user = db.get_user_by_id(student_id)
+    if not user:
+        return JSONResponse({"error": "Không tìm thấy học sinh"}, status_code=404)
+
+    awards = db.get_mission_awards_for_student(student_id)   # ORDER BY due_date DESC
+    awards_by_class: dict = {}
+    for a in awards:
+        awards_by_class.setdefault(a["classId"], []).append(a)
+
+    now = datetime.now(_tz.utc)
+    out_classes = []
+    for cls in db.list_classes_by_student(student_id, user.get("email")):
+        cls_awards = awards_by_class.get(cls["id"], [])
+        awarded_ids = {a["assignmentId"] for a in cls_awards}
+        eligible = missions.sort_eligible(cls.get("assignments") or [])
+
+        latest = cls_awards[0] if cls_awards else None
+        high_streak = latest["highScoreStreak"] if latest else 0
+        eff_streak  = latest["effortStreak"] if latest else 0
+        last_score  = latest["normalizedScore"] if latest else None
+
+        # Bài đủ điều kiện, chưa có dòng thưởng, đã quá hạn → coi như bỏ bài, chuỗi
+        # coi như đứt dù chưa có sự kiện thưởng nào ghi nhận việc này (chỉ hiển thị,
+        # DB row thật sự chỉ cập nhật khi có lần thưởng tiếp theo).
+        broken = False
+        pending = []
+        for a in eligible:
+            if a["id"] in awarded_ids:
+                continue
+            close = a.get("closeTime") or a.get("dueDate")
+            is_closed = False
+            try:
+                is_closed = bool(close) and now > datetime.fromisoformat(str(close).replace("Z", "+00:00"))
+            except Exception:
+                pass
+            if is_closed:
+                broken = True
+            else:
+                pending.append({
+                    "assignmentId": a["id"], "title": a.get("title", ""),
+                    "dueDate": close, "kind": "exam" if a.get("examId") else "homework",
+                })
+
+        out_classes.append({
+            "classId": cls["id"], "className": cls.get("name", ""),
+            "highScoreStreak": 0 if broken else high_streak,
+            "effortStreak": 0 if broken else eff_streak,
+            "streakBrokenSinceLastAward": broken,
+            "nextMilestone": missions.next_milestone_info(last_score if last_score is not None else 0.0),
+            "recentAwards": [{
+                "assignmentId": a["assignmentId"], "title": a["assignmentTitle"],
+                "dueDate": a["dueDate"], "kind": a["kind"],
+                "normalizedScore": a["normalizedScore"], "onTime": a["onTime"],
+                "breakdown": {
+                    "completionXu": a["completionXu"], "bracketXu": a["bracketXu"],
+                    "milestoneXu": a["milestoneXu"], "maintainXu": a["maintainXu"],
+                    "effortXu": a["effortXu"],
+                },
+                "totalXu": a["totalXu"], "awardedAt": a["createdAt"],
+            } for a in cls_awards[:10]],
+            "pendingEligible": pending,
+        })
+
+    out_classes = [c for c in out_classes if c["recentAwards"] or c["pendingEligible"]]
+    return {"coins": user.get("coins", 0), "classes": out_classes}
 
 
 @app.get("/api/exams/{exam_id}/submissions/{sub_id}/review")
@@ -942,6 +1094,16 @@ async def grade_essay_submission(exam_id: str, sub_id: str, request: Request, ca
     total = _round2(auto + _manual_total(clean))
     if not db.update_submission_grade(sub_id, clean, total):
         return JSONResponse({"error": "Không cập nhật được điểm"}, status_code=500)
+    # Đề có tự luận: điểm chỉ final SAU khi chấm tay xong → thưởng Xu nhiệm vụ ở đây.
+    if sub.get("classId") and sub.get("assignmentId"):
+        cls_row = db.get_class(sub["classId"])
+        asgn_row = _find_assignment(cls_row, sub["assignmentId"]) if cls_row else None
+        if cls_row and asgn_row:
+            try:
+                _award_mission_coins(cls_row, asgn_row, sub["studentId"], sub.get("studentName", ""),
+                                      "exam", total, _calc_max_score(exam), sub.get("submittedAt"))
+            except Exception as e:
+                print(f"[mission_coins] grade_essay_submission: {e}")
     return {"ok": True, "score": total, "maxScore": _calc_max_score(exam), "manualScores": clean}
 
 
@@ -2491,6 +2653,12 @@ def _grade_submission_sync(cls_id: str, asgn_id: str, student_id: str) -> dict:
     except Exception as e:
         grade = {"status": "error", "error": f"Lỗi khi chấm: {e}", "gradedAt": _now_iso()}
     _save_ai_grade(cls_id, asgn_id, student_id, grade)
+    if grade.get("status") == "done":
+        try:
+            _award_mission_coins(cls, asgn, student_id, sub.get("studentName", ""),
+                                  "homework", grade.get("overallBand"), 9, sub.get("submittedAt"))
+        except Exception as e:
+            print(f"[mission_coins] homework grade: {e}")
     return grade
 
 
