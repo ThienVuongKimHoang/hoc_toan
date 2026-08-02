@@ -557,7 +557,14 @@ function MCQChoiceRow({ letter, value, images, isCorrect, onChangeText, onSetCor
     const items = e.clipboardData?.items
     if (!items) return
     for (const item of Array.from(items)) {
-      if (item.type.startsWith('image/')) { e.preventDefault(); handleFile(item.getAsFile()); return }
+      if (item.type.startsWith('image/')) {
+        e.preventDefault()
+        // Chặn sự kiện lan lên listener paste cấp document (chèn ảnh vào đề bài khi
+        // đang sửa nội dung câu hỏi) — nếu không, ảnh bị chèn nhầm CẢ vào đề bài.
+        e.stopPropagation()
+        handleFile(item.getAsFile())
+        return
+      }
     }
   }
 
@@ -895,6 +902,9 @@ export default function EditableQuestion({
       // Chỉ xử lý nếu focus đang trong card này (hoặc không focus ở textarea — textarea tự handle rồi)
       if (taRef.current && document.activeElement === taRef.current) return
       if (cardRef.current && !cardRef.current.contains(document.activeElement)) return
+      // Đang paste trong 1 ô đáp án A/B/C/D — ô đó tự xử lý riêng (chèn ảnh vào đúng
+      // đáp án), không chèn thêm vào đề bài ở đây.
+      if (document.activeElement?.closest?.('.eq-choice-row')) return
       const items = e.clipboardData?.items
       if (!items) return
       for (const item of Array.from(items)) {

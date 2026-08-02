@@ -110,6 +110,16 @@ function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, 
   const useShuffled = shuffleChoices && Array.isArray(choiceOrder) && choiceOrder.length === rawEntries.length
   const entries = useShuffled ? choiceOrder.map(k => [k, q.choices[k]]) : rawEntries
   const DISPLAY_LABELS = ['A', 'B', 'C', 'D']
+  // Câu chữ giải thích ("Đáp án đúng: X") phải in NHÃN TRÊN MÀN HÌNH của đáp án đó, không
+  // phải chữ cái GỐC trong q.choices — khi đề bật trộn, 2 cái có thể khác nhau (ô đúng có
+  // thể nằm ở vị trí "B" trên màn hình dù key gốc là "A"), nếu không sẽ vừa tô xanh đúng ô
+  // vừa ghi nhãn sai, nhìn như mâu thuẫn.
+  const labelOf = (realKey) => {
+    if (!useShuffled || realKey == null) return realKey
+    const idx = entries.findIndex(([k]) => k === realKey)
+    return idx >= 0 ? (DISPLAY_LABELS[idx] || realKey) : realKey
+  }
+  const correctLabel = labelOf(correct)
 
   return (
     <div className="q-body">
@@ -132,12 +142,12 @@ function MultipleChoiceCard({ q, examMode, onAnswerChange, hidePassage = false, 
       {!examMode && selected !== null && correct !== null && (
         <p className={`answer-feedback ${selected === correct ? 'correct' : 'wrong'}`}>
           {selected === correct
-            ? `✓ Đúng! Đáp án: ${correct}`
-            : `✗ Sai! Đáp án đúng là: ${correct}`}
+            ? `✓ Đúng! Đáp án: ${correctLabel}`
+            : `✗ Sai! Đáp án đúng là: ${correctLabel}`}
         </p>
       )}
       {!examMode && readOnly && selected === null && correct !== null && (
-        <p className="answer-feedback wrong">Chưa chọn đáp án. Đáp án đúng: {correct}</p>
+        <p className="answer-feedback wrong">Chưa chọn đáp án. Đáp án đúng: {correctLabel}</p>
       )}
       {!examMode && selected !== null && correct === null && (
         <p className="answer-feedback neutral">Chưa có đáp án chính thức cho câu này.</p>
