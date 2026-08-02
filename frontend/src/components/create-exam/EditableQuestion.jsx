@@ -109,6 +109,15 @@ function MathEditField({ value, onChange, placeholder, multiline = true, images 
 
   const startEdit = () => { setDraft(value || ''); setEditing(true) }
 
+  // Đồng bộ draft khi `value` đổi từ BÊN NGOÀI trong lúc đang edit (vd: paste/bấm nút
+  // chèn ảnh ở MCQChoiceRow ghi thẳng vào choices[key], không qua onChange của field
+  // này). Thiếu chỗ này: draft cũ (chưa có ảnh) sẽ đè mất marker ảnh khi người dùng
+  // click ra ngoài để lưu — ảnh mất marker, thành "mồ côi" và hiện lạc sang mục
+  // "Hình ảnh đính kèm" dù đã hiện đúng trong ô lúc vừa dán.
+  useEffect(() => {
+    if (editing) setDraft(value || '')
+  }, [value])
+
   useEffect(() => {
     if (editing && inputRef.current) {
       inputRef.current.focus()
