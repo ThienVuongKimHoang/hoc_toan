@@ -8,21 +8,47 @@ import { gradeSubmission } from '../store/examStore.js'
  */
 export default function GradeEssayModal({ exam, submission, teacherId, onClose, onSaved }) {
   const essayQs = exam?.sections?.['TỰ LUẬN']?.questions ?? []
+  const maxOf = (q) => Number(q.points) || 0
 
-  const [scores, setScores] = useState(() => {
+  // Điểm cũ có thể VƯỢT điểm tối đa hiện tại nếu đề bị sửa (giảm điểm câu này)
+  // SAU KHI bài đã được chấm — clampedKeys ghi lại những câu bị giới hạn lại lúc
+  // hiển thị, để báo cho GV biết thay vì âm thầm đổi số (tránh hiểu nhầm là bug
+  // hiển thị "2/1đ" khi thực ra là điểm cũ chưa khớp thang điểm mới).
+  // Tính 1 lần lúc mount — submission/exam không đổi trong vòng đời modal (mở
+  // lại cho bài khác luôn unmount/mount modal mới, xem ClassManagementPage.jsx).
+  const initial = useMemo(() => {
     const init = {}
+    const clamped = new Set()
     const saved = submission?.manualScores || {}
     essayQs.forEach(q => {
       const key = `TL_${q.question_number}`
-      init[key] = saved[key] != null ? String(saved[key]) : ''
+      const max = maxOf(q)
+      const raw = saved[key]
+      if (raw == null) { init[key] = ''; return }
+      const num = Number(raw)
+      const bounded = Math.max(0, Math.min(num, max))
+      init[key] = String(bounded)
+      if (bounded !== num) clamped.add(key)
     })
-    return init
-  })
+    return { scores: init, clamped }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const [scores, setScores] = useState(initial.scores)
+  const clampedKeys = initial.clamped
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState('')
   const [zoom, setZoom]     = useState(null)   // url ảnh đang phóng to
 
-  const maxOf = (q) => Number(q.points) || 0
+  // Điểm tự luận cũ không khớp với câu hỏi nào hiện có trong đề — thường do đề bị
+  // sửa (thêm/xoá/đổi thứ tự câu tự luận) SAU KHI bài này đã được chấm, khiến
+  // question_number (dùng làm key TL_n) trỏ sang câu khác. Điểm này VẪN được cộng
+  // vào tổng điểm bài thi (xem _manual_total ở backend) nên không mất, nhưng
+  // không có ô nào để hiển thị — liệt kê riêng để GV biết và chấm lại đúng câu
+  // nếu cần, thay vì tưởng nhầm câu đó "chưa có điểm".
+  const currentKeys = new Set(essayQs.map(q => `TL_${q.question_number}`))
+  const orphanedEntries = Object.entries(submission?.manualScores || {})
+    .filter(([k]) => !currentKeys.has(k))
 
   const total = useMemo(
     () => essayQs.reduce((s, q) => {
@@ -115,9 +141,30 @@ export default function GradeEssayModal({ exam, submission, teacherId, onClose, 
                     />
                     <span className="ge-score-max">/ {max}đ</span>
                   </div>
+                  {clampedKeys.has(key) && (
+                    <div className="ge-clamp-warn">
+                      ⚠️ Điểm đã lưu trước đó vượt điểm tối đa hiện tại của câu này (đề có thể
+                      đã bị sửa sau khi chấm) — đã giới hạn lại còn {max}đ. Kiểm tra lại nếu cần.
+                    </div>
+                  )}
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {orphanedEntries.length > 0 && (
+          <div className="ge-orphan-warn">
+            <div className="ge-orphan-title">
+              ⚠️ Có điểm tự luận cũ không khớp câu nào trong đề hiện tại (đề có thể đã bị
+              sửa — thêm/xoá/đổi thứ tự câu tự luận sau khi bài này đã được chấm). Điểm này
+              vẫn được cộng vào tổng, nhưng nên kiểm tra và chấm lại cho đúng câu:
+            </div>
+            {orphanedEntries.map(([key, val]) => (
+              <div key={key} className="ge-orphan-row">
+                <code>{key}</code>: {val}đ
+              </div>
+            ))}
           </div>
         )}
 

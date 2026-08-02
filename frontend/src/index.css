@@ -10084,6 +10084,18 @@ button { font-family: inherit; }
 .ge-score-row label { font-weight: 700; font-size: 0.9rem; }
 .ge-score-input { width: 90px; padding: 8px 10px; border: 1.5px solid #f0b45a; border-radius: 8px; font-size: 1rem; font-weight: 700; text-align: center; }
 .ge-score-max { color: #94a3b8; font-size: 0.9rem; }
+.ge-clamp-warn {
+  margin-top: 8px; padding: 8px 10px; border-radius: 8px;
+  background: #fffbeb; border: 1px solid #fde68a;
+  color: #92400e; font-size: 0.8rem; line-height: 1.5;
+}
+.ge-orphan-warn {
+  margin: 4px 0 14px; padding: 12px 14px; border-radius: 10px;
+  background: #fef2f2; border: 1px solid #fecaca;
+}
+.ge-orphan-title { color: #991b1b; font-size: 0.85rem; line-height: 1.5; margin-bottom: 8px; }
+.ge-orphan-row { font-size: 0.85rem; color: #7f1d1d; padding: 2px 0; }
+.ge-orphan-row code { background: #fee2e2; padding: 1px 6px; border-radius: 4px; font-size: 0.8rem; }
 .ge-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 6px; border-top: 1px solid #f1f5f9; }
 .ge-empty { color: #64748b; padding: 20px 0; text-align: center; }
 
