@@ -94,12 +94,10 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
   const essayMax    = (exam.sections?.['TỰ LUẬN']?.questions || []).reduce((s, q) => s + (Number(q.points) || 0), 0)
   const hasEssay    = sectionList.includes('TỰ LUẬN')
   const essayGraded = hasEssay && submission.manualScores && Object.keys(submission.manualScores).length > 0
-  // Tự luận chưa chấm → điểm hiển thị phải LOẠI phần tự luận khỏi cả tử số lẫn mẫu số,
-  // giống màn hình "Đã nộp bài" ngay sau khi nộp (ExamTakePage). Nếu không, điểm ở đây
-  // (mẫu số gồm cả điểm tự luận, tử số vẫn 0) sẽ thấp hơn điểm học sinh thấy lúc vừa nộp
-  // — cùng một bài nhưng hai màn hình ra hai điểm khác nhau.
+  // Điểm hiển thị luôn tính trên TỔNG điểm toàn đề (kể cả tự luận, dù chưa chấm — phần
+  // đó tạm là 0đ cho đến khi giáo viên chấm) để khớp với điểm giáo viên thấy, tránh
+  // cùng một bài mà 2 màn hình ra 2 điểm khác nhau.
   const pendingEssay  = hasEssay && essayMax > 0 && !essayGraded
-  const displayMax    = pendingEssay ? submission.maxScore - essayMax : submission.maxScore
 
   return (
     <div className="et-exam">
@@ -117,21 +115,17 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
 
       <div className="app" style={{ paddingTop: 16 }}>
         <div className="review-score-card">
-          {pendingEssay && displayMax <= 0 ? (
-            <div className="review-score-num">—<span>/10</span></div>
-          ) : (
-            <div className="review-score-num">
-              {scaledScore(submission.score, displayMax)}<span>/10</span>
-            </div>
-          )}
+          <div className="review-score-num">
+            {scaledScore(submission.score, submission.maxScore)}<span>/10</span>
+          </div>
           <div className="review-score-meta">
-            {!(pendingEssay && displayMax <= 0) && <span>{submission.score}/{displayMax} điểm</span>}
+            <span>{submission.score}/{submission.maxScore} điểm</span>
             <span>⏱ {formatDuration(submission.timeSpent)}</span>
             {submission.className && <span>🏫 {submission.className}</span>}
           </div>
           {pendingEssay && (
             <p className="review-essay-pending">
-              ✍️ Phần tự luận đang chờ giáo viên chấm — điểm trên chưa gồm phần này.
+              ✍️ Phần tự luận đang chờ giáo viên chấm — điểm trên đã tính trên tổng điểm toàn đề (0đ cho phần tự luận cho đến khi được chấm).
             </p>
           )}
         </div>

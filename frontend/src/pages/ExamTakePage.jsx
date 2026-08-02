@@ -376,9 +376,9 @@ function SectionNav({ sections, sectionList, active, onChange }) {
 function ExamView({ exam, studentName, studentId, className, classId, assignmentId, onGoHome }) {
   const hideResults    = exam.settings?.hideResults || false
   const sectionList    = getSectionList(exam)
-  // Đề có phần tự luận: điểm chấm tay đến sau, nên điểm hiện ngay chỉ là phần tự động (tạm tính)
-  const essayMax       = (exam.sections?.['TỰ LUẬN']?.questions || [])
-                           .reduce((s, q) => s + (Number(q.points) || 0), 0)
+  // Đề có phần tự luận: điểm chấm tay đến sau (0đ cho đến khi giáo viên chấm), nhưng
+  // điểm hiển thị luôn tính trên TỔNG điểm toàn đề (kể cả tự luận) — khớp với điểm
+  // giáo viên thấy, tránh 2 màn hình ra 2 điểm khác nhau cho cùng 1 bài.
   const hasEssay       = sectionList.includes('TỰ LUẬN')
   // Lượt làm bài đang dở (nếu có) — đọc 1 lần lúc mount để khôi phục giờ bắt đầu + đáp án đã chọn
   const attemptKeyStr  = attemptKey(exam.id, classId, assignmentId, studentId)
@@ -472,21 +472,13 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
               <p>Kết quả sẽ được công bố bởi giáo viên.</p>
               <p className="etl-name-tag">Bài làm của: <strong>{studentName}</strong></p>
             </div>
-          ) : hasEssay ? (
-            <div className="etl-score">
-              <div className="etl-essay-pending">
-                ✍️ Bài có phần <strong>tự luận</strong> — giáo viên sẽ chấm và cập nhật điểm sau.
-              </div>
-              {finalMax - essayMax > 0 && (
-                <>
-                  <div className="etl-score-num">{scaledScore(finalScore, finalMax - essayMax)} <span>/ 10</span></div>
-                  <div className="etl-score-label">điểm trắc nghiệm (tạm tính, chưa gồm tự luận)</div>
-                </>
-              )}
-              <p className="etl-name-tag">Bài làm của: <strong>{studentName}</strong></p>
-            </div>
           ) : (
             <div className="etl-score">
+              {hasEssay && (
+                <div className="etl-essay-pending">
+                  ✍️ Bài có phần <strong>tự luận</strong> — giáo viên sẽ chấm và cập nhật điểm sau (điểm dưới đây đã tính trên tổng điểm toàn đề).
+                </div>
+              )}
               <div className="etl-score-num">{scaledScore(finalScore, finalMax)} <span>/ 10</span></div>
               <div className="etl-score-label">điểm</div>
               <p className="etl-name-tag">Bài làm của: <strong>{studentName}</strong></p>

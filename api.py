@@ -2617,16 +2617,6 @@ async def class_progress_endpoint(cls_id: str, caller: dict = Depends(require_au
         asgn_subject = asgn.get("subject") or cls.get("subject")
         member_ids = [str(m.get("userId")) for m in cls.get("members", [])
                       if not asgn_subject or (m.get("subject") or cls.get("subject")) == asgn_subject]
-        # Đề có TỰ LUẬN chưa chấm: maxScore của bài nộp vẫn gồm điểm tự luận (tử số = 0
-        # phần đó) → phải trừ essayMax khỏi mẫu số cho bài chưa chấm, khớp cách
-        # ExamTakePage/ExamReviewPage hiển thị điểm ngay sau khi nộp (loại tự luận khỏi
-        # cả tử lẫn mẫu số cho tới khi GV chấm tay xong).
-        essay_max = 0.0
-        if asgn.get("examId"):
-            exam_for_asgn = db.get_exam(asgn["examId"])
-            if exam_for_asgn:
-                essay_max = sum(_to_float(q.get("points"))
-                                 for q in ((exam_for_asgn.get("sections") or {}).get("TỰ LUẬN") or {}).get("questions", []))
         if asgn.get("examId"):
             submitted_by = {str(s.get("studentId")): s
                             for s in db.get_submissions_for_assignment(cls_id, asgn["id"])}
@@ -2644,9 +2634,6 @@ async def class_progress_endpoint(cls_id: str, caller: dict = Depends(require_au
                 st["assignments"]["submitted"] += 1
                 score, max_score = sub.get("score"), sub.get("maxScore")
                 if score is not None and max_score:
-                    graded = bool(sub.get("manualScores"))
-                    if essay_max > 0 and not graded and max_score - essay_max > 0:
-                        max_score = max_score - essay_max
                     st["scoreHistory"].append({
                         "title": asgn.get("title", ""), "date": sub.get("submittedAt"),
                         "score": score, "maxScore": max_score,

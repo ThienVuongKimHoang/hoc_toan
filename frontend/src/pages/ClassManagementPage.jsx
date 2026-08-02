@@ -286,17 +286,9 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
             if (!byStudent.has(k)) byStudent.set(k, [])
             byStudent.get(k).push(s)
           })
-          // Tự luận chưa chấm → maxScore của bài nộp vẫn gồm điểm tự luận (tử số = 0 phần
-          // đó), nên scaledScore(...) sẽ ra điểm THẤP HƠN điểm học sinh thấy lúc vừa nộp
-          // (ExamTakePage loại điểm tự luận khỏi cả tử lẫn mẫu số khi chưa chấm). Loại
-          // essayMax khỏi mẫu số ở đây tương tự, để điểm GV thấy khớp điểm học sinh thấy.
-          const essayMax = (examObj?.sections?.['TỰ LUẬN']?.questions || [])
-            .reduce((s, q) => s + (Number(q.points) || 0), 0)
-          const subScaled = (s) => {
-            const graded = s.manualScores && Object.keys(s.manualScores).length > 0
-            const denom = (!graded && essayMax > 0) ? s.maxScore - essayMax : s.maxScore
-            return denom > 0 ? scaledScore(s.score, denom) : scaledScore(s.score, s.maxScore)
-          }
+          // Điểm luôn tính trên TỔNG điểm toàn đề (kể cả tự luận, dù chưa chấm — tạm 0đ
+          // phần đó cho đến khi giáo viên chấm) để khớp với điểm học sinh thấy.
+          const subScaled = (s) => scaledScore(s.score, s.maxScore)
           const rows = [...byStudent.values()].map(list => {
             list.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt))
             const last = list[list.length - 1]

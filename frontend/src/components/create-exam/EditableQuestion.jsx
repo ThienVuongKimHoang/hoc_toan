@@ -976,6 +976,14 @@ export default function EditableQuestion({
   const color = SECTION_COLOR[q.section] || '#2563eb'
   const isEnglishLike = q.section === 'TIẾNG ANH' || q.section === 'READING'
   const images = q.images || []
+  // "Hình ảnh đính kèm" chỉ hiện ảnh gắn vào NỘI DUNG CÂU HỎI — ảnh chèn riêng vào 1
+  // đáp án (paste ngay trong ô đáp án) không hiện lại ở đây, tránh hiểu nhầm là ảnh
+  // đó cũng hiển thị ở đề bài; nó chỉ hiện trong đáp án tương ứng (xem MCQChoiceRow).
+  const galleryImages = (() => {
+    const choiceRefs = new Set(Object.values(q.choices || {}).flatMap(referencedImageIds))
+    const qRefs = new Set(referencedImageIds(q.question_text))
+    return images.filter(img => qRefs.has(img.id) || !choiceRefs.has(img.id))
+  })()
   const totalImgs = (q.figure_path ? 1 : 0) + images.length
   const suspicious = hasSuspiciousLatex(q.question_text)
 
@@ -1188,7 +1196,7 @@ export default function EditableQuestion({
           )}
 
           <ImageGallery
-            images={images}
+            images={galleryImages}
             onAdd={handleAddImage}
             onDelete={handleDeleteImage}
             figurePath={q.figure_path}
@@ -1254,7 +1262,7 @@ export default function EditableQuestion({
                   </div>
 
                   <ImageGallery
-                    images={images}
+                    images={galleryImages}
                     onAdd={handleAddImage}
                     onDelete={handleDeleteImage}
                     figurePath={q.figure_path}
@@ -1295,7 +1303,7 @@ export default function EditableQuestion({
                 </div>
 
                 <ImageGallery
-                  images={images}
+                  images={galleryImages}
                   onAdd={handleAddImage}
                   onDelete={handleDeleteImage}
                   figurePath={q.figure_path}
@@ -1378,7 +1386,7 @@ export default function EditableQuestion({
           </div>
 
           <ImageGallery
-            images={images}
+            images={galleryImages}
             onAdd={handleAddImage}
             onDelete={handleDeleteImage}
             figurePath={q.figure_path}
