@@ -170,7 +170,7 @@ export async function fetchExamById(id, teacherId) {
 }
 
 /** Học sinh nộp bài */
-export async function submitResult(examId, { studentName, studentId, answers, score, maxScore, className, classId, assignmentId, startedAt, timeSpent, violationCount }) {
+export async function submitResult(examId, { studentName, studentId, answers, score, maxScore, className, classId, assignmentId, startedAt, timeSpent, violationCount, shuffleMap }) {
   const body = {
     studentName,
     studentId,
@@ -184,6 +184,9 @@ export async function submitResult(examId, { studentName, studentId, answers, sc
     startedAt: startedAt || null,
     timeSpent: timeSpent ?? null,   // giây làm bài
     violationCount: violationCount ?? null,   // số lần vi phạm khóa màn hình
+    // Đề bật "Trộn thứ tự": gửi kèm bản đồ trộn để server lưu lại, dùng khi học sinh
+    // xem lại bài làm (khớp đúng thứ tự/nhãn câu đã thấy lúc làm, xem ExamReviewPage).
+    shuffleMap: shuffleMap || null,
   }
   const res = await fetch(`/api/exams/${examId}/submit`, {
     method:  'POST',

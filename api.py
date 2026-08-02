@@ -32,6 +32,7 @@ sys.path.insert(0, str(SRC_DIR))
 
 from extract_questions import (  # noqa: E402
     SECTION_POINTS,
+    apply_choice_figures,
     auto_detect_section_counts,
     build_section_context,
     derive_section_counts,
@@ -352,6 +353,7 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "", exam_
                 if isinstance(fig_idx, int) and 1 <= fig_idx <= len(content_images):
                     q["figure_path"] = content_images[fig_idx - 1]["path"]
                 q["has_figure"] = "figure_path" in q
+                apply_choice_figures(q, content_images)
                 sec = q.get("section", "")
                 num = q.get("question_number", 0)
                 if sec and isinstance(num, int) and num > last_q_per_section.get(sec, 0):

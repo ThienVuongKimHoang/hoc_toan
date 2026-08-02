@@ -27,6 +27,7 @@ from groq import Groq
 
 from extract_questions import (
     MAX_TOKENS_DEFAULT,
+    apply_choice_figures,
     call_groq_vision,
     extract_json_from_text,
     page_to_base64,
@@ -243,6 +244,7 @@ Rules:
 - "choices": {{"A": "...", "B": "...", "C": "...", "D": "..."}}
 - "answer": always null.
 - "figure_index": 0 if the question has no image. If it references one of the images listed above, set to its 1-based position (1 = topmost image on page, etc.).
+- "choice_figures": {{"A": 0, "B": 0, "C": 0, "D": 0}} — only set a letter's value (> 0) when THAT SPECIFIC option is itself a picture/diagram (not the question stem). Same 1-based position numbering as figure_index. Almost always all zero.
 - Do NOT include section instruction lines like "Mark the letter A, B, C, or D...".
 - If no questions found, return {{"questions": []}}.
 
@@ -255,6 +257,7 @@ Return ONLY valid JSON:
       "passage_title": null,
       "passage_text": null,
       "choices": {{"A": "...", "B": "...", "C": "...", "D": "..."}},
+      "choice_figures": {{"A": 0, "B": 0, "C": 0, "D": 0}},
       "answer": null,
       "figure_index": 0
     }}
@@ -282,6 +285,7 @@ Rules:
 - "choices": always {{"A": "...", "B": "...", "C": "...", "D": "..."}}
 - "answer": always null here.
 - "figure_index": 0 if no image. Set to 1-based position of the image on this page if question has a figure.
+- "choice_figures": {{"A": 0, "B": 0, "C": 0, "D": 0}} — only set a letter's value (> 0) when THAT SPECIFIC option is itself a picture/diagram (not the question stem). Same 1-based position numbering as figure_index. Almost always all zero.
 - Do NOT extract section instruction lines like "Mark the letter A, B, C, or D on your answer sheet to indicate...".
 - If no questions found, return {{"questions": []}}.
 
@@ -294,6 +298,7 @@ Return ONLY valid JSON, no other text:
       "passage_title": null,
       "passage_text": null,
       "choices": {{"A": "...", "B": "...", "C": "...", "D": "..."}},
+      "choice_figures": {{"A": 0, "B": 0, "C": 0, "D": 0}},
       "answer": null,
       "figure_index": 0
     }}
@@ -796,6 +801,7 @@ def _extract_questions_from_page(
             q["has_figure"] = True
         else:
             q.setdefault("has_figure", False)
+        apply_choice_figures(q, content_images)
 
         q["section"] = ENGLISH_SECTION_NAME
         q["points"]  = ENGLISH_POINTS_PER_Q

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import MathText from '../MathText.jsx'
+import MarkerText, { referencedImageIds } from '../MarkerText.jsx'
 import { DIFFICULTY_LEVELS, getLabelGroups } from '../../data/labels.js'
 import './EditableQuestion.css'
 const PASSAGE_SPLIT_THRESHOLD = 300
@@ -94,7 +95,9 @@ export function PassageEditor({ value, onChange }) {
 }
 
 /* ─── Click-to-edit field with LaTeX preview ─── */
-function MathEditField({ value, onChange, placeholder, multiline = true }) {
+// `images`: nếu truyền vào, preview sẽ render marker [img:id] thành ảnh thật
+// (dùng cho đáp án ABCD có chèn ảnh) — không truyền thì preview y như cũ (MathText thuần).
+function MathEditField({ value, onChange, placeholder, multiline = true, images }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const wrapRef = useRef(null)
@@ -158,7 +161,7 @@ function MathEditField({ value, onChange, placeholder, multiline = true }) {
     <div ref={wrapRef} className={`eq-mf-wrap eq-mf-preview${!value ? ' eq-mf-empty' : ''}`}
       onClick={startEdit} title="Click để chỉnh sửa">
       {value
-        ? <MathText text={value} />
+        ? (images ? <MarkerText text={value} images={images} showMissingPlaceholder /> : <MathText text={value} />)
         : <span className="eq-placeholder">{placeholder}</span>}
       <span className="eq-edit-hint">✏️</span>
     </div>
@@ -319,30 +322,7 @@ function LatexToolbar({ taRef, value, onChange, onImageFile }) {
 /* ─── Inline image preview in split pane ─── */
 function PreviewWithImages({ text, images }) {
   if (!text) return <span className="eq-placeholder">Xem trước xuất hiện ở đây…</span>
-  const parts = text.split(/(\[img:[^\]]*\])/g)
-  return (
-    <>
-      {parts.map((part, i) => {
-        const m = part.match(/^\[img:([^\]]*)\]$/)
-        if (m) {
-          const img = (images || []).find(im => im.id === m[1])
-          if (img) {
-            return (
-              <span key={i} className="eq-preview-img-wrap">
-                <img
-                  src={img.dataUrl || (img.url ? `/images/${img.url.replace('images/', '')}` : '')}
-                  alt={img.name || 'Hình'}
-                  className="eq-preview-img"
-                />
-              </span>
-            )
-          }
-          return <span key={i} className="eq-img-ref-placeholder">📷</span>
-        }
-        return part ? <MathText key={i} text={part} /> : null
-      })}
-    </>
-  )
+  return <MarkerText text={text} images={images} showMissingPlaceholder />
 }
 
 /* ─── Detect garbled LaTeX from LLM failure ─── */
@@ -558,27 +538,94 @@ function LabelRow({ q, subject, grade, onChange, onAutoClassify, classifying }) 
 /* ═══════════════════════════════════════════
    PHẦN I — Trắc nghiệm
 ═══════════════════════════════════════════ */
+// Một đáp án A/B/C/D: text field (LaTeX) + nút chèn ảnh riêng cho đáp án đó
+// (chèn marker [img:id] vào cuối nội dung, ảnh lưu chung trong q.images như ảnh đề bài).
+function MCQChoiceRow({ letter, value, images, isCorrect, onChangeText, onSetCorrect, onAddImage, onRemoveImage }) {
+  const fileRef = useRef(null)
+  const referencedIds = referencedImageIds(value)
+  const attached = images.filter(im => referencedIds.includes(im.id))
+
+  const handleFile = (file) => {
+    if (!file || !file.type.startsWith('image/')) return
+    if (file.size > 5 * 1024 * 1024) { alert('Ảnh quá lớn (tối đa 5 MB).'); return }
+    const reader = new FileReader()
+    reader.onload = (e) => onAddImage({ id: `c${Date.now()}${Math.random().toString(36).slice(2, 6)}`, dataUrl: e.target.result, name: file.name })
+    reader.readAsDataURL(file)
+  }
+
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) { e.preventDefault(); handleFile(item.getAsFile()); return }
+    }
+  }
+
+  return (
+    <div className={`eq-choice-row ${isCorrect ? 'correct' : ''}`} onPaste={handlePaste}>
+      <button className={`eq-choice-letter ${isCorrect ? 'correct' : ''}`}
+        onClick={onSetCorrect} title="Click để chọn / bỏ chọn đáp án đúng" type="button">
+        {letter}
+      </button>
+      <div className="eq-choice-field-wrap">
+        <MathEditField value={value} onChange={onChangeText} placeholder={`Đáp án ${letter}…`} images={images} />
+        <div className="eq-choice-img-row">
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+            onChange={e => { handleFile(e.target.files?.[0]); e.target.value = '' }} />
+          <button type="button" className="eq-choice-img-btn"
+            title="Chèn ảnh vào đáp án này (hoặc dán Ctrl+V)"
+            onClick={() => fileRef.current?.click()}>
+            🖼 Ảnh
+          </button>
+          {attached.map(img => (
+            <span key={img.id} className="eq-choice-img-chip">
+              <img src={img.dataUrl || (img.url ? `/images/${img.url.replace('images/', '')}` : '')}
+                alt={img.name || 'Hình'} onClick={() => window.open(img.dataUrl || img.url, '_blank')} />
+              <button type="button" onClick={() => onRemoveImage(img.id)} title="Xoá ảnh">✕</button>
+            </span>
+          ))}
+        </div>
+      </div>
+      {isCorrect && <span className="eq-correct-tag">✓ Đúng</span>}
+    </div>
+  )
+}
+
 function MCQEditor({ q, onChange }) {
   const choices = q.choices || { A: '', B: '', C: '', D: '' }
+  const images = q.images || []
   const correct = q.answer  // null = chưa có đáp án
   const setChoice = (key, val) => onChange({ ...q, choices: { ...choices, [key]: val } })
   const setCorrect = (key) => onChange({ ...q, answer: correct === key ? null : key })
+
+  const addChoiceImage = (key, img) => {
+    const marker = `[img:${img.id}]`
+    const nextVal = choices[key] ? `${choices[key]}\n${marker}` : marker
+    onChange({ ...q, images: [...images, img], choices: { ...choices, [key]: nextVal } })
+  }
+  const removeChoiceImage = (key, id) => {
+    const strip = (t) => (t || '').replace(new RegExp(`\\n?\\[img:${id}\\]`, 'g'), '')
+    onChange({ ...q, images: images.filter(i => i.id !== id), choices: { ...choices, [key]: strip(choices[key]) } })
+  }
 
   return (
     <div className="eq-body">
       <div className="eq-choices">
         {Object.entries(choices).map(([key, val]) => (
-          <div key={key} className={`eq-choice-row ${correct === key ? 'correct' : ''}`}>
-            <button className={`eq-choice-letter ${correct === key ? 'correct' : ''}`}
-              onClick={() => setCorrect(key)} title="Click để chọn / bỏ chọn đáp án đúng" type="button">
-              {key}
-            </button>
-            <MathEditField value={val} onChange={v => setChoice(key, v)} placeholder={`Đáp án ${key}…`} />
-            {correct === key && <span className="eq-correct-tag">✓ Đúng</span>}
-          </div>
+          <MCQChoiceRow
+            key={key}
+            letter={key}
+            value={val}
+            images={images}
+            isCorrect={correct === key}
+            onChangeText={v => setChoice(key, v)}
+            onSetCorrect={() => setCorrect(key)}
+            onAddImage={img => addChoiceImage(key, img)}
+            onRemoveImage={id => removeChoiceImage(key, id)}
+          />
         ))}
       </div>
-      <p className="eq-hint">💡 Click chữ cái để đánh dấu đáp án đúng (click lại để bỏ)</p>
+      <p className="eq-hint">💡 Click chữ cái để đánh dấu đáp án đúng · 🖼 để chèn ảnh vào đáp án (dán Ctrl+V cũng được)</p>
     </div>
   )
 }

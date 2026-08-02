@@ -205,6 +205,7 @@
   font-weight: 800; font-size: 0.82rem;
 }
 .rt-choice-text { line-height: 1.45; color: #1e293b; }
+.rt-choice-text .figure-img { max-height: 130px; }
 .rt-choice.selected { background: #ecfeff; border-color: #22d3ee; }
 .rt-choice.selected .rt-choice-letter { background: #0e7490; color: #fff; }
 .rt-choice.correct { background: #ecfdf5; border-color: #34d399; }

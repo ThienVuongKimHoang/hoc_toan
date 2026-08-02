@@ -255,13 +255,25 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
     addToast(`Đã ghi nhận báo cáo: "${type}"`, 'success')
   }
 
-  /* ── Tổng điểm phần: chỉnh tay → chia lại điểm/câu theo tổng đó ── */
+  /* ── Tổng điểm phần: chỉnh tay → chia lại điểm/câu theo tổng đó ──
+     Phải ghi đè "points" của TỪNG câu (không chỉ points_per_q ở cấp phần): TỰ LUẬN
+     chấm điểm dựa vào q.points của từng câu (không đọc points_per_q), nên nếu chỉ
+     đổi points_per_q thì điểm chấm tay tối đa mỗi câu vẫn giữ giá trị cũ (vd 1đ) dù
+     GV đã đổi tổng phần xuống 0.5đ. Các phần trắc nghiệm (I/II/III) cũng đồng bộ
+     q.points theo để badge điểm/câu hiển thị đúng, dù chấm điểm vẫn dựa points_per_q. */
   const updateSectionTotal = (sec, total) => {
     setSections(prev => {
       const count = prev[sec]?.questions?.length || 0
       if (!prev[sec] || count === 0) return prev
       const ppq = Math.round((total / count) * 10000) / 10000
-      return { ...prev, [sec]: { ...prev[sec], points_per_q: ppq } }
+      return {
+        ...prev,
+        [sec]: {
+          ...prev[sec],
+          points_per_q: ppq,
+          questions: prev[sec].questions.map(q => ({ ...q, points: ppq })),
+        },
+      }
     })
   }
 
@@ -278,7 +290,11 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
         const count = prev[sec]?.questions?.length || 0
         if (!prev[sec] || count === 0) continue
         const ppq = Math.round((gradExamTotals[sec] / count) * 10000) / 10000
-        next[sec] = { ...prev[sec], points_per_q: ppq }
+        next[sec] = {
+          ...prev[sec],
+          points_per_q: ppq,
+          questions: prev[sec].questions.map(q => ({ ...q, points: ppq })),
+        }
       }
       return next
     })

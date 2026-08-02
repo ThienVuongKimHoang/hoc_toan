@@ -445,7 +445,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
       // nên không thể tự tính điểm ở đây như trước).
       const result = await submitResult(exam.id, { studentName, studentId, answers, className, classId, assignmentId,
                                     startedAt: new Date(effStart).toISOString(), timeSpent,
-                                    violationCount: lockOn ? violations : null })
+                                    violationCount: lockOn ? violations : null, shuffleMap })
       setFinalScore(result.score)
       setFinalMax(result.maxScore)
       setSubmitted(true)
@@ -628,7 +628,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
             questions.map((q, i) => (
               <QuestionCard
                 key={`${q.section}-${q.question_number}-${i}`}
-                q={q} index={i}
+                q={q} index={i} displayNumber={i + 1}
                 examMode={true}
                 answers={answers}
                 onAnswerChange={handleAnswerChange}

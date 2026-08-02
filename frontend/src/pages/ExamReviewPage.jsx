@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { fetchSubmissionReview, scaledScore } from '../store/examStore.js'
 import QuestionCard from '../components/QuestionCard.jsx'
 import ReadingTakeView from '../components/ReadingTakeView.jsx'
+import { reorderByQuestionNumber } from '../utils/shuffle.js'
 
 const SECTION_LABELS = {
   'PHẦN I':    { label: 'Phần I – Trắc nghiệm',    color: '#2563eb' },
@@ -82,12 +83,23 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
 
   const sectionList = getSectionList(exam)
   const curSection  = activeSection || sectionList[0] || null
-  const questions   = curSection ? (exam.sections?.[curSection]?.questions ?? []) : []
+  const rawQuestions = curSection ? (exam.sections?.[curSection]?.questions ?? []) : []
+  // Đề bật "Trộn thứ tự": server đã lưu lại đúng bản đồ trộn học sinh thấy lúc làm bài
+  // (submission.shuffleMap, xem ExamTakePage) — dùng lại ở đây để "Câu 1, 2, 3…" và thứ
+  // tự A/B/C/D khi xem lại KHỚP với lúc làm, tránh học sinh tưởng nhầm câu/đáp án.
+  const shuffleMap = submission.shuffleMap || null
+  const questions  = reorderByQuestionNumber(rawQuestions, shuffleMap?.sections?.[curSection])
   const scrollTop   = () => window.scrollTo({ top: 0, behavior: 'smooth' })
 
   const essayMax    = (exam.sections?.['TỰ LUẬN']?.questions || []).reduce((s, q) => s + (Number(q.points) || 0), 0)
   const hasEssay    = sectionList.includes('TỰ LUẬN')
   const essayGraded = hasEssay && submission.manualScores && Object.keys(submission.manualScores).length > 0
+  // Tự luận chưa chấm → điểm hiển thị phải LOẠI phần tự luận khỏi cả tử số lẫn mẫu số,
+  // giống màn hình "Đã nộp bài" ngay sau khi nộp (ExamTakePage). Nếu không, điểm ở đây
+  // (mẫu số gồm cả điểm tự luận, tử số vẫn 0) sẽ thấp hơn điểm học sinh thấy lúc vừa nộp
+  // — cùng một bài nhưng hai màn hình ra hai điểm khác nhau.
+  const pendingEssay  = hasEssay && essayMax > 0 && !essayGraded
+  const displayMax    = pendingEssay ? submission.maxScore - essayMax : submission.maxScore
 
   return (
     <div className="et-exam">
@@ -105,15 +117,19 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
 
       <div className="app" style={{ paddingTop: 16 }}>
         <div className="review-score-card">
-          <div className="review-score-num">
-            {scaledScore(submission.score, submission.maxScore)}<span>/10</span>
-          </div>
+          {pendingEssay && displayMax <= 0 ? (
+            <div className="review-score-num">—<span>/10</span></div>
+          ) : (
+            <div className="review-score-num">
+              {scaledScore(submission.score, displayMax)}<span>/10</span>
+            </div>
+          )}
           <div className="review-score-meta">
-            <span>{submission.score}/{submission.maxScore} điểm</span>
+            {!(pendingEssay && displayMax <= 0) && <span>{submission.score}/{displayMax} điểm</span>}
             <span>⏱ {formatDuration(submission.timeSpent)}</span>
             {submission.className && <span>🏫 {submission.className}</span>}
           </div>
-          {hasEssay && essayMax > 0 && !essayGraded && (
+          {pendingEssay && (
             <p className="review-essay-pending">
               ✍️ Phần tự luận đang chờ giáo viên chấm — điểm trên chưa gồm phần này.
             </p>
@@ -146,8 +162,10 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
             questions.map((q, i) => (
               <QuestionCard
                 key={`${q.section}-${q.question_number}-${i}`}
-                q={q} index={i} examMode={false} readOnly
+                q={q} index={i} displayNumber={i + 1} examMode={false} readOnly
                 answers={submission.answers}
+                choiceOrders={shuffleMap?.choices}
+                shuffleChoices={!!shuffleMap}
               />
             ))
           )}

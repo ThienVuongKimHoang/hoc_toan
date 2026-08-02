@@ -159,6 +159,28 @@ def extract_embedded_images(doc: fitz.Document, page_idx: int, out_dir: Path) ->
     return entries
 
 
+def apply_choice_figures(q: dict, content_images: list) -> None:
+    """Map "choice_figures" (do Groq trả về, vị trí ảnh 1-based riêng cho từng đáp án
+    A/B/C/D — vd câu "đồ thị nào sau đây đúng") thành ảnh thật, gắn vào q["images"]
+    và chèn marker [img:id] vào cuối nội dung đáp án tương ứng trong q["choices"].
+    Dùng chung marker [img:id] với ảnh chèn tay ở frontend (EditableQuestion.jsx) nên
+    không cần đổi shape của "choices" (vẫn là string thuần)."""
+    choice_figs = q.pop("choice_figures", None)
+    choices = q.get("choices")
+    if not isinstance(choice_figs, dict) or not isinstance(choices, dict):
+        return
+    for letter, idx in choice_figs.items():
+        if letter not in choices or not isinstance(idx, int) or not (1 <= idx <= len(content_images)):
+            continue
+        img = content_images[idx - 1]
+        # Dùng tên file (luôn có, không phụ thuộc "xref" — pipeline tiếng Anh không có field này)
+        # làm id thay vì Date.now() phía frontend, để id ổn định qua các lần trích lại.
+        img_id = f"cf_{Path(img['path']).stem}_{letter}"
+        q.setdefault("images", []).append({"id": img_id, "url": img["path"], "name": f"Hình đáp án {letter}", "source": "ai"})
+        marker = f"[img:{img_id}]"
+        choices[letter] = f"{choices[letter]}\n{marker}" if choices[letter] else marker
+
+
 def scan_pdf_layout(doc: fitz.Document) -> tuple:
     """
     Phân tích bố cục PDF để tìm chính xác trang nào chứa câu hỏi của từng phần.
@@ -478,6 +500,7 @@ Trích xuất TẤT CẢ câu hỏi. Trả về CHỈ JSON, không có text nào
       "question_number": 1,
       "question_text": "nội dung câu hỏi, dùng LaTeX $...$ cho công thức toán",
       "choices": {{"A": "...", "B": "...", "C": "...", "D": "..."}},
+      "choice_figures": {{"A": 0, "B": 0, "C": 0, "D": 0}},
       "sub_questions": [
         {{"label": "a", "text": "...", "correct_answer": true}},
         {{"label": "b", "text": "...", "correct_answer": false}},
@@ -493,6 +516,7 @@ Trích xuất TẤT CẢ câu hỏi. Trả về CHỈ JSON, không có text nào
 
 Lưu ý bắt buộc:
 - "figure_index": PHẦN LỚN câu hỏi KHÔNG có hình → đặt 0. Chỉ đặt > 0 khi câu đó CÓ biểu đồ/đồ thị/hình vẽ riêng (nằm ngay dưới nội dung câu đó, trước đáp án). Đây là VỊ TRÍ (1 = hình cao nhất trang, 2 = hình thứ 2...), KHÔNG phải số câu. Mỗi hình chỉ thuộc 1 câu.
+- "choice_figures": chỉ dùng khi CHÍNH MỘT ĐÁP ÁN (không phải cả câu hỏi) là một hình/đồ thị/biểu đồ riêng (ví dụ "đồ thị nào sau đây là đúng" với 4 hình A/B/C/D). PHẦN LỚN để {{"A":0,"B":0,"C":0,"D":0}}. Nếu đáp án X là hình, đặt choice_figures.X = VỊ TRÍ hình đó trên trang (cùng cách đánh số với figure_index, 1 = hình cao nhất). Không dùng chung 1 vị trí hình cho cả figure_index và choice_figures của cùng 1 câu.
 - "choices" chỉ có ở PHẦN I (bỏ qua ở PHẦN II và III)
 - "sub_questions" chỉ có ở PHẦN II (4 ý a-b-c-d); correct_answer = true/false/null
 - "answer" ở PHẦN I = "A"/"B"/"C"/"D"; ở PHẦN III = đáp số; ở PHẦN II bỏ field này
@@ -926,6 +950,7 @@ def run(pdf_path: Path, out_path: Path, start_page: int = 1) -> None:
             if isinstance(fig_idx, int) and 1 <= fig_idx <= len(content_images):
                 q["figure_path"] = content_images[fig_idx - 1]["path"]
             q["has_figure"] = "figure_path" in q
+            apply_choice_figures(q, content_images)
             # Cập nhật last_q tracker
             sec = q.get("section", "")
             num = q.get("question_number", 0)

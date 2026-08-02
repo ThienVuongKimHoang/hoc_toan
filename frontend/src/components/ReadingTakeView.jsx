@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react'
 import MathText from './MathText.jsx'
+import MarkerText from './MarkerText.jsx'
 import './ReadingTakeView.css'
 
 /* ════════════════════════════════════════════════════════
@@ -169,7 +170,7 @@ function ReadingQuestion({ q, examMode, isCloze, selected, onSelect, flash, regi
             disabled={locked}
           >
             <span className="rt-choice-letter">{key}</span>
-            <span className="rt-choice-text"><MathText text={q.choices?.[key] || ''} /></span>
+            <span className="rt-choice-text"><MarkerText text={q.choices?.[key] || ''} images={q.images} /></span>
           </button>
         ))}
       </div>
