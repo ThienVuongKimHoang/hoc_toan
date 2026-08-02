@@ -55,7 +55,6 @@ FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
 
 import database as db
 import ielts_grading as ielts
-import mission_coins as missions
 
 # task_id → {"status": pending|running|done|error, "progress": [...], "result": ..., "error": ...}
 TASKS: dict[str, dict] = {}
@@ -614,14 +613,6 @@ def _manual_total(manual_scores) -> float:
     return sum(_to_float(v) for v in manual_scores.values())
 
 
-def _exam_needs_manual_grading(exam: dict) -> bool:
-    """Đề có câu TỰ LUẬN (chấm tay) → điểm lúc nộp bài chưa phải điểm cuối cùng
-    (câu tự luận vẫn = 0 cho tới khi GV chấm tay), nên Xu nhiệm vụ phải đợi
-    đến khi chấm xong (xem grade_essay_submission) thay vì thưởng ngay lúc nộp."""
-    essay = (exam.get("sections") or {}).get("TỰ LUẬN") or {}
-    return bool(essay.get("questions"))
-
-
 def _recompute_submissions(exam_id: str, exam: dict) -> int:
     """Chấm lại toàn bộ bài nộp theo đáp án hiện tại của đề. Trả về số bài đã đổi điểm."""
     max_score = _calc_max_score(exam)
@@ -747,68 +738,6 @@ def _sub_belongs_to_asgn(sub, asgn_id, legacy_owner):
     return legacy_owner is not None and str(asgn_id) == str(legacy_owner)
 
 
-def _mission_notif_message(award: dict) -> str:
-    """Soạn nội dung thông báo nhận Xu — liệt kê các khoản > 0 trong breakdown."""
-    lines = [f"📚 Xu hoàn thành: {award['completionXu']} Xu"]
-    if award["bracketXu"]:
-        lines.append(f"🌟 Xu theo điểm ({award['normalizedScore']:.1f} đ): {award['bracketXu']} Xu")
-    if award["milestoneXu"]:
-        lines.append(f"🚀 Thưởng vượt mốc: {award['milestoneXu']} Xu")
-    if award["maintainXu"]:
-        lines.append(f"🔥 Thưởng duy trì điểm cao ({award['highScoreStreak']} tuần): {award['maintainXu']} Xu")
-    if award["effortXu"]:
-        lines.append(f"📈 Thưởng chuỗi nỗ lực ({award['effortStreak']} tuần): {award['effortXu']} Xu")
-    lines.append(f"🪙 Tổng nhận: {award['totalXu']} Xu")
-    return "\n".join(lines)
-
-
-def _award_mission_coins(cls: dict, asgn: dict, student_id, student_name: str, kind: str,
-                          raw_score, max_score, submitted_at) -> None:
-    """Tính & ghi Xu nhiệm vụ cho 1 lần chấm bài (idempotent theo student+assignment).
-    Gọi từ 3 nơi: nộp đề không có tự luận, chấm tay tự luận xong, chấm AI Writing xong."""
-    if raw_score is None or not max_score or student_id is None:
-        return
-    close = asgn.get("closeTime") or asgn.get("dueDate")
-    on_time = True
-    try:
-        if close and submitted_at:
-            on_time = (datetime.fromisoformat(str(submitted_at).replace("Z", "+00:00"))
-                       <= datetime.fromisoformat(str(close).replace("Z", "+00:00")))
-    except Exception:
-        pass
-
-    eligible = missions.sort_eligible(cls.get("assignments") or [])
-    idx = next((i for i, a in enumerate(eligible) if a.get("id") == asgn.get("id")), None)
-    if idx is None:
-        return
-
-    prev_row = db.get_mission_award(student_id, eligible[idx - 1]["id"]) if idx > 0 else None
-    prev_score = prev_row["normalizedScore"] if prev_row else None
-    prev_high  = prev_row["highScoreStreak"] if prev_row else 0
-    prev_eff   = prev_row["effortStreak"]    if prev_row else 0
-
-    score10 = missions.normalize(raw_score, max_score)
-    result = missions.compute_award(prev_score, prev_high, prev_eff, score10, on_time)
-
-    award = db.record_mission_award({
-        "id": _cls_id(), "studentId": student_id, "studentName": student_name or "",
-        "classId": cls["id"], "className": cls.get("name", ""),
-        "assignmentId": asgn["id"], "assignmentTitle": asgn.get("title", ""),
-        "kind": kind, "dueDate": close, "onTime": on_time,
-        "rawScore": raw_score, "maxScore": max_score, "normalizedScore": score10,
-        **result,
-    })
-    if award and award.get("totalXu"):
-        db.add_notif({
-            "id": _cls_id(), "type": "coin",
-            "targetUserId": str(student_id), "classId": cls["id"],
-            "className": cls.get("name", ""), "assignmentId": asgn["id"],
-            "title": f"+{award['totalXu']} Xu — {asgn.get('title','')}",
-            "message": _mission_notif_message(award),
-            "createdAt": _now_iso(), "read": False,
-        })
-
-
 def _is_class_member(cls, student_id, email=None):
     """Học sinh có thuộc lớp không — khớp theo userId hoặc email."""
     if student_id is None:
@@ -910,6 +839,10 @@ async def submit_exam(exam_id: str, request: Request, caller: Optional[dict] = D
         "classId":      body.get("classId"),
         "assignmentId": asgn_id if cls_id else None,
         "manualScores": {},   # GV chấm câu tự luận sau khi nộp
+        # Bản đồ trộn câu/đáp án học sinh thấy lúc làm bài (nếu đề bật shuffleQuestions) —
+        # lưu lại để "xem lại bài làm" hiển thị đúng thứ tự/nhãn câu học sinh đã thấy,
+        # thay vì tụt về thứ tự/số câu gốc (gây lệch với lúc làm bài thật).
+        "shuffleMap":   body.get("shuffleMap") or None,
     }
     # Đếm số lần đã làm + insert trong CÙNG transaction (khóa advisory) — hai
     # request nộp song song không thể cùng lách qua giới hạn maxAttempts.
@@ -917,14 +850,6 @@ async def submit_exam(exam_id: str, request: Request, caller: Optional[dict] = D
     if not ok:
         return JSONResponse(
             {"error": f"Bạn đã làm đủ {max_attempts} lần cho phép."}, status_code=403)
-    # Xu nhiệm vụ: chỉ thưởng ngay nếu đề KHÔNG có câu tự luận (điểm đã final).
-    # Đề có tự luận sẽ được thưởng sau, khi GV chấm tay xong (grade_essay_submission).
-    if cls_id and asgn and not _exam_needs_manual_grading(exam):
-        try:
-            _award_mission_coins(cls, asgn, student_id, submission["studentName"], "exam",
-                                  score, max_score, submission["submittedAt"])
-        except Exception as e:
-            print(f"[mission_coins] submit_exam: {e}")
     # Trả kèm điểm SERVER đã chấm để client hiển thị ngay — client không còn nhận
     # được đáp án đúng qua GET /api/exams/{id} nên không thể tự tính điểm nữa.
     return {"ok": True, "submissionIndex": result, "score": score, "maxScore": max_score}
@@ -961,79 +886,6 @@ async def get_student_submissions(student_id: str, caller: dict = Depends(requir
             s["maxScore"] = None
             s["answers"] = {}
     return {"submissions": subs}
-
-
-@app.get("/api/students/{student_id}/missions")
-async def get_student_missions(student_id: str, caller: dict = Depends(require_auth)):
-    """Học sinh xem Xu, chuỗi nỗ lực/duy trì điểm cao và lịch sử thưởng Xu nhiệm vụ
-    của chính mình, theo từng lớp đang tham gia."""
-    if str(caller["id"]) != str(student_id):
-        return JSONResponse({"error": "Không có quyền xem nhiệm vụ của người khác"}, status_code=403)
-    user = db.get_user_by_id(student_id)
-    if not user:
-        return JSONResponse({"error": "Không tìm thấy học sinh"}, status_code=404)
-
-    awards = db.get_mission_awards_for_student(student_id)   # ORDER BY due_date DESC
-    awards_by_class: dict = {}
-    for a in awards:
-        awards_by_class.setdefault(a["classId"], []).append(a)
-
-    now = datetime.now(_tz.utc)
-    out_classes = []
-    for cls in db.list_classes_by_student(student_id, user.get("email")):
-        cls_awards = awards_by_class.get(cls["id"], [])
-        awarded_ids = {a["assignmentId"] for a in cls_awards}
-        eligible = missions.sort_eligible(cls.get("assignments") or [])
-
-        latest = cls_awards[0] if cls_awards else None
-        high_streak = latest["highScoreStreak"] if latest else 0
-        eff_streak  = latest["effortStreak"] if latest else 0
-        last_score  = latest["normalizedScore"] if latest else None
-
-        # Bài đủ điều kiện, chưa có dòng thưởng, đã quá hạn → coi như bỏ bài, chuỗi
-        # coi như đứt dù chưa có sự kiện thưởng nào ghi nhận việc này (chỉ hiển thị,
-        # DB row thật sự chỉ cập nhật khi có lần thưởng tiếp theo).
-        broken = False
-        pending = []
-        for a in eligible:
-            if a["id"] in awarded_ids:
-                continue
-            close = a.get("closeTime") or a.get("dueDate")
-            is_closed = False
-            try:
-                is_closed = bool(close) and now > datetime.fromisoformat(str(close).replace("Z", "+00:00"))
-            except Exception:
-                pass
-            if is_closed:
-                broken = True
-            else:
-                pending.append({
-                    "assignmentId": a["id"], "title": a.get("title", ""),
-                    "dueDate": close, "kind": "exam" if a.get("examId") else "homework",
-                })
-
-        out_classes.append({
-            "classId": cls["id"], "className": cls.get("name", ""),
-            "highScoreStreak": 0 if broken else high_streak,
-            "effortStreak": 0 if broken else eff_streak,
-            "streakBrokenSinceLastAward": broken,
-            "nextMilestone": missions.next_milestone_info(last_score if last_score is not None else 0.0),
-            "recentAwards": [{
-                "assignmentId": a["assignmentId"], "title": a["assignmentTitle"],
-                "dueDate": a["dueDate"], "kind": a["kind"],
-                "normalizedScore": a["normalizedScore"], "onTime": a["onTime"],
-                "breakdown": {
-                    "completionXu": a["completionXu"], "bracketXu": a["bracketXu"],
-                    "milestoneXu": a["milestoneXu"], "maintainXu": a["maintainXu"],
-                    "effortXu": a["effortXu"],
-                },
-                "totalXu": a["totalXu"], "awardedAt": a["createdAt"],
-            } for a in cls_awards[:10]],
-            "pendingEligible": pending,
-        })
-
-    out_classes = [c for c in out_classes if c["recentAwards"] or c["pendingEligible"]]
-    return {"coins": user.get("coins", 0), "classes": out_classes}
 
 
 @app.get("/api/exams/{exam_id}/submissions/{sub_id}/review")
@@ -1094,16 +946,6 @@ async def grade_essay_submission(exam_id: str, sub_id: str, request: Request, ca
     total = _round2(auto + _manual_total(clean))
     if not db.update_submission_grade(sub_id, clean, total):
         return JSONResponse({"error": "Không cập nhật được điểm"}, status_code=500)
-    # Đề có tự luận: điểm chỉ final SAU khi chấm tay xong → thưởng Xu nhiệm vụ ở đây.
-    if sub.get("classId") and sub.get("assignmentId"):
-        cls_row = db.get_class(sub["classId"])
-        asgn_row = _find_assignment(cls_row, sub["assignmentId"]) if cls_row else None
-        if cls_row and asgn_row:
-            try:
-                _award_mission_coins(cls_row, asgn_row, sub["studentId"], sub.get("studentName", ""),
-                                      "exam", total, _calc_max_score(exam), sub.get("submittedAt"))
-            except Exception as e:
-                print(f"[mission_coins] grade_essay_submission: {e}")
     return {"ok": True, "score": total, "maxScore": _calc_max_score(exam), "manualScores": clean}
 
 
@@ -1864,99 +1706,7 @@ async def admin_reset_user_password(user_id: str, request: Request, caller: dict
     return {"ok": True}
 
 
-@app.put("/api/admin/users/{user_id}/coins")
-async def admin_adjust_user_coins(user_id: str, request: Request, caller: dict = Depends(require_super_admin)):
-    """Super admin cấp/thu hồi xu thủ công cho học sinh dùng ở cửa hàng khung viền."""
-    body  = await request.json()
-    delta = body.get("delta")
-    if not isinstance(delta, (int, float)) or int(delta) == 0:
-        return JSONResponse({"error": "Số xu cộng/trừ không hợp lệ."}, status_code=400)
-    updated = db.adjust_user_coins(user_id, int(delta))
-    if not updated:
-        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
-    return updated
-
 # ─── End User management ──────────────────────────────────────────────────────
-
-
-# ─── Cửa hàng khung viền ───────────────────────────────────────────────────────
-# Danh mục khung viền tĩnh — giá/tên là nguồn xác thực server-side, hình dáng (màu/gradient)
-# do frontend tự vẽ theo id (xem FRAME_STYLES trong ProfilePage.jsx). Super admin coi như
-# đã mở khoá toàn bộ, không cần mua.
-FRAME_CATALOG = [
-    {"id": "dong",      "name": "Vòng Đồng",     "price": 50,   "rarity": "common"},
-    {"id": "bac",       "name": "Vòng Bạc",      "price": 120,  "rarity": "common"},
-    {"id": "ngoc_bich", "name": "Ngọc Bích",     "price": 300,  "rarity": "rare"},
-    {"id": "vang",      "name": "Vòng Vàng",     "price": 350,  "rarity": "rare"},
-    {"id": "navy_gold", "name": "Ánh Sáng Navy", "price": 500,  "rarity": "epic"},
-    {"id": "kim_cuong", "name": "Kim Cương",     "price": 700,  "rarity": "epic"},
-    {"id": "hoang_gia",   "name": "Hoàng Gia",   "price": 900,  "rarity": "legendary"},
-    {"id": "cau_vong",    "name": "Cầu Vồng",    "price": 1200, "rarity": "legendary"},
-    {"id": "huyen_thoai", "name": "Huyền Thoại", "price": 1500, "rarity": "legendary"},
-    {"id": "thien_nhien", "name": "Thiên Nhiên Huyền Thoại", "price": 1400, "rarity": "legendary"},
-    {"id": "mo_bi_an",    "name": "Mỏ Kim Cương Bí Ẩn",    "price": 1450, "rarity": "legendary"},
-]
-_FRAME_BY_ID = {f["id"]: f for f in FRAME_CATALOG}
-
-# Học sinh phải mở khoá một lần bằng xu mới được đổi ảnh đại diện; GV/Admin/Super admin
-# dùng tự do nên bỏ qua kiểm tra này.
-AVATAR_UNLOCK_PRICE = 300
-
-
-@app.get("/api/shop/frames")
-async def get_shop_frames(user: dict = Depends(require_auth)):
-    is_super = user.get("role") == "super_admin"
-    owned    = set(user.get("ownedFrames") or [])
-    frames = [{**f, "owned": is_super or f["id"] in owned} for f in FRAME_CATALOG]
-    return {"coins": user.get("coins", 0), "equippedFrame": user.get("equippedFrame"), "frames": frames}
-
-
-@app.post("/api/shop/buy")
-async def buy_frame_endpoint(request: Request, user: dict = Depends(require_auth)):
-    body     = await request.json()
-    frame_id = body.get("frameId")
-    frame    = _FRAME_BY_ID.get(frame_id)
-    if not frame:
-        return JSONResponse({"error": "Khung viền không tồn tại."}, status_code=404)
-    if user.get("role") == "super_admin":
-        return user
-    updated, err = db.purchase_frame(user["id"], frame_id, frame["price"])
-    if err == "insufficient":
-        return JSONResponse({"error": "Không đủ xu, vui lòng chờ chức năng được cập nhật."}, status_code=402)
-    if err == "not_found" or not updated:
-        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
-    return updated
-
-
-@app.post("/api/shop/equip")
-async def equip_frame_endpoint(request: Request, user: dict = Depends(require_auth)):
-    body     = await request.json()
-    frame_id = body.get("frameId")  # None = bỏ khung viền
-    if frame_id is not None:
-        frame = _FRAME_BY_ID.get(frame_id)
-        if not frame:
-            return JSONResponse({"error": "Khung viền không tồn tại."}, status_code=404)
-        owned = set(user.get("ownedFrames") or [])
-        if user.get("role") != "super_admin" and frame_id not in owned:
-            return JSONResponse({"error": "Bạn chưa sở hữu khung viền này."}, status_code=403)
-    updated = db.set_equipped_frame(user["id"], frame_id)
-    if not updated:
-        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
-    return updated
-
-@app.post("/api/shop/unlock-avatar")
-async def unlock_avatar_endpoint(user: dict = Depends(require_auth)):
-    """Học sinh trả 300 xu để mở khoá tính năng đổi ảnh đại diện (một lần, vĩnh viễn)."""
-    if user.get("role") != "hoc_sinh":
-        return user
-    updated, err = db.unlock_avatar(user["id"], AVATAR_UNLOCK_PRICE)
-    if err == "insufficient":
-        return JSONResponse({"error": f"Không đủ xu, cần {AVATAR_UNLOCK_PRICE} xu để mở khoá đổi ảnh đại diện."}, status_code=402)
-    if err == "not_found" or not updated:
-        return JSONResponse({"error": "Không tìm thấy người dùng."}, status_code=404)
-    return updated
-
-# ─── End Cửa hàng khung viền ───────────────────────────────────────────────────
 
 
 # ─── Class management ─────────────────────────────────────────────────────────
@@ -2655,12 +2405,6 @@ def _grade_submission_sync(cls_id: str, asgn_id: str, student_id: str) -> dict:
     except Exception as e:
         grade = {"status": "error", "error": f"Lỗi khi chấm: {e}", "gradedAt": _now_iso()}
     _save_ai_grade(cls_id, asgn_id, student_id, grade)
-    if grade.get("status") == "done":
-        try:
-            _award_mission_coins(cls, asgn, student_id, sub.get("studentName", ""),
-                                  "homework", grade.get("overallBand"), 9, sub.get("submittedAt"))
-        except Exception as e:
-            print(f"[mission_coins] homework grade: {e}")
     return grade
 
 
@@ -2871,6 +2615,16 @@ async def class_progress_endpoint(cls_id: str, caller: dict = Depends(require_au
         asgn_subject = asgn.get("subject") or cls.get("subject")
         member_ids = [str(m.get("userId")) for m in cls.get("members", [])
                       if not asgn_subject or (m.get("subject") or cls.get("subject")) == asgn_subject]
+        # Đề có TỰ LUẬN chưa chấm: maxScore của bài nộp vẫn gồm điểm tự luận (tử số = 0
+        # phần đó) → phải trừ essayMax khỏi mẫu số cho bài chưa chấm, khớp cách
+        # ExamTakePage/ExamReviewPage hiển thị điểm ngay sau khi nộp (loại tự luận khỏi
+        # cả tử lẫn mẫu số cho tới khi GV chấm tay xong).
+        essay_max = 0.0
+        if asgn.get("examId"):
+            exam_for_asgn = db.get_exam(asgn["examId"])
+            if exam_for_asgn:
+                essay_max = sum(_to_float(q.get("points"))
+                                 for q in ((exam_for_asgn.get("sections") or {}).get("TỰ LUẬN") or {}).get("questions", []))
         if asgn.get("examId"):
             submitted_by = {str(s.get("studentId")): s
                             for s in db.get_submissions_for_assignment(cls_id, asgn["id"])}
@@ -2888,6 +2642,9 @@ async def class_progress_endpoint(cls_id: str, caller: dict = Depends(require_au
                 st["assignments"]["submitted"] += 1
                 score, max_score = sub.get("score"), sub.get("maxScore")
                 if score is not None and max_score:
+                    graded = bool(sub.get("manualScores"))
+                    if essay_max > 0 and not graded and max_score - essay_max > 0:
+                        max_score = max_score - essay_max
                     st["scoreHistory"].append({
                         "title": asgn.get("title", ""), "date": sub.get("submittedAt"),
                         "score": score, "maxScore": max_score,

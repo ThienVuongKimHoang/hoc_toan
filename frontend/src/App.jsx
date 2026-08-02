@@ -8,9 +8,7 @@ import PracticeExamPage from './pages/PracticeExamPage.jsx'
 import ExamLobbyPage from './pages/ExamLobbyPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
 import ExamHistoryPage from './pages/ExamHistoryPage.jsx'
-import ShopPage from './pages/ShopPage.jsx'
 import SuperAdminPage from './pages/SuperAdminPage.jsx'
-import MissionsPage from './pages/MissionsPage.jsx'
 import ClassManagementPage from './pages/ClassManagementPage.jsx'
 import MyClassesPage from './pages/MyClassesPage.jsx'
 import ExamReviewPage from './pages/ExamReviewPage.jsx'
@@ -58,10 +56,8 @@ function parseHash() {
   }
   if (hash === 'admin') return { view: 'super-admin', examId: null, classId: null, adminTab: null }
   if (hash.startsWith('admin/')) return { view: 'super-admin', examId: null, classId: null, adminTab: hash.slice(6) || null }
-  if (hash === 'missions') return { view: 'missions', examId: null, classId: null }
   // history — trang riêng "Lịch sử làm bài" (danh sách các đề học sinh đã làm)
   if (hash === 'history') return { view: 'exam-history', examId: null, classId: null }
-  if (hash === 'shop') return { view: 'shop', examId: null, classId: null }
   // classes | classes/<khối> | classes/<khối>/<classId> — điều hướng khối→lớp→chi tiết
   // do ClassManagementPage tự đọc từ hash; ở đây chỉ cần giữ view class-mgmt.
   if (hash === 'classes' || hash.startsWith('classes/')) return { view: 'class-mgmt', examId: null, classId: null }
@@ -265,7 +261,6 @@ export default function App() {
   const goHome = () => { setHash(''); setView('home') }
   const goProfile = () => user ? (setHash(''), setView('profile')) : goLogin()
   const goHistory = () => user ? (setHash('history'), setView('exam-history')) : goLogin()
-  const goShop = () => user ? (setHash('shop'), setView('shop')) : goLogin()
   const goLogin = () => { setHash(''); setView('login') }
   const goExam = () => user ? (setHash(''), setView('exam')) : goLogin()
   const goAdmin = () => {
@@ -280,7 +275,6 @@ export default function App() {
     if (!hasAdminAccess(user.role)) return
     setHash(`admin/${tabKey}`); setAdminTab(tabKey); setAdminNavNonce(n => n + 1); setView('super-admin')
   }
-  const goMissions = () => user ? (setHash('missions'), setView('missions')) : goLogin()
   const goClasses = () => {
     if (!user) { goLogin(); return }
     if (!hasTeacherAccess(user.role)) return
@@ -381,14 +375,12 @@ export default function App() {
       onLogout={handleLogout}
       onGoProfile={goProfile}
       onGoAdmin={goAdmin}
-      onGoMissions={goMissions}
       onGoClasses={goClasses}
       onGoMyClasses={goMyClasses}
       onOpenClass={openClass}
       onOpenReports={() => goAdminTab('reports')}
       onGoTools={goTools}
       onGoHistory={goHistory}
-      onGoShop={goShop}
     />
   )
 
@@ -429,14 +421,6 @@ export default function App() {
       </>
     )
   }
-
-  if (view === 'missions') return (
-    <>
-      {header}
-      <MissionsPage user={user} onGoHome={goHome} onOpenClass={openClass} />
-      {teacherToolOverlays}
-    </>
-  )
 
   if (view === 'class-mgmt') {
     if (!user) return (
@@ -491,19 +475,6 @@ export default function App() {
           onGoHome={goHome}
           onGoHistory={goHistory}
         />
-        {teacherToolOverlays}
-      </>
-    )
-  }
-
-  if (view === 'shop') {
-    if (!user) return (
-      <>{header}<AccessDenied message="Bạn cần đăng nhập để vào cửa hàng." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
-    )
-    return (
-      <>
-        {header}
-        <ShopPage user={user} onUpdateUser={handleUpdateUser} onGoHome={goHome} />
         {teacherToolOverlays}
       </>
     )

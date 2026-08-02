@@ -30,22 +30,19 @@ import { isExerciseDoc, sortDocsByOrder } from '../utils/exerciseDocs.js'
 import { extractYoutubeId, youtubeEmbedUrl, youtubeThumbnail, youtubeWatchUrl } from '../utils/youtube.js'
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, GradePicker, SubjectPicker, gradeLabel } from '../components/SubjectBadge.jsx'
 import { ROLES } from '../auth/mockUsers.js'
-import { AvatarFrame, FRAME_STYLES } from './ProfilePage.jsx'
 
 /* Avatar học sinh/giáo viên trong kết quả tìm kiếm: user.avatar có thể là URL ảnh Google
    (đăng nhập Google) hoặc chữ cái đầu (tài khoản thường) — cần phân biệt để không
-   in nguyên URL ra màn hình. Kèm khung viền nếu user đã trang bị (cửa hàng khung viền). */
+   in nguyên URL ra màn hình. */
 function PersonAvatar({ user }) {
   const [failed, setFailed] = useState(false)
   const src   = user.avatar || ''
   const isImg = /^https?:\/\//.test(src) || src.startsWith('data:')
   const initial = (user.name || user.email || '?')[0].toUpperCase()
 
-  const avatar = (isImg && !failed)
+  return (isImg && !failed)
     ? <img className="cm-student-avatar cm-student-avatar--img" src={src} alt="" onError={() => setFailed(true)} />
     : <div className="cm-student-avatar">{initial}</div>
-
-  return <AvatarFrame frameStyle={FRAME_STYLES[user.equippedFrame]} size={34}>{avatar}</AvatarFrame>
 }
 
 /* Môn "chính" của lớp (fallback cho dữ liệu cũ chưa gắn môn) */
@@ -289,14 +286,25 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
             if (!byStudent.has(k)) byStudent.set(k, [])
             byStudent.get(k).push(s)
           })
+          // Tự luận chưa chấm → maxScore của bài nộp vẫn gồm điểm tự luận (tử số = 0 phần
+          // đó), nên scaledScore(...) sẽ ra điểm THẤP HƠN điểm học sinh thấy lúc vừa nộp
+          // (ExamTakePage loại điểm tự luận khỏi cả tử lẫn mẫu số khi chưa chấm). Loại
+          // essayMax khỏi mẫu số ở đây tương tự, để điểm GV thấy khớp điểm học sinh thấy.
+          const essayMax = (examObj?.sections?.['TỰ LUẬN']?.questions || [])
+            .reduce((s, q) => s + (Number(q.points) || 0), 0)
+          const subScaled = (s) => {
+            const graded = s.manualScores && Object.keys(s.manualScores).length > 0
+            const denom = (!graded && essayMax > 0) ? s.maxScore - essayMax : s.maxScore
+            return denom > 0 ? scaledScore(s.score, denom) : scaledScore(s.score, s.maxScore)
+          }
           const rows = [...byStudent.values()].map(list => {
             list.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt))
             const last = list[list.length - 1]
             // Quy đổi điểm từng lần về thang 10 trước khi gộp.
-            const scores = list.map(s => scaledScore(s.score, s.maxScore))
+            const scores = list.map(subScaled)
             let score
             if (mode === 'average') score = Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
-            else if (mode === 'latest') score = scaledScore(last.score, last.maxScore)
+            else if (mode === 'latest') score = subScaled(last)
             else score = Math.max(...scores)   // highest
             return {
               studentId: last.studentId, studentName: last.studentName,

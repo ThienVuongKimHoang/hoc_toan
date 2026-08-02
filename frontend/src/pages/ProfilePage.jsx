@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react'
 import RoleBadge from '../components/RoleBadge.jsx'
 import { ROLES, hasTeacherAccess, authHeaders } from '../auth/mockUsers.js'
 import { getExamsByTeacher, getAllExams, fetchMySubmissions, scaledScore } from '../store/examStore.js'
-import { FrameShopSection } from './ShopPage.jsx'
 
 const USER_KEY = 'hoctoan_user'
 
@@ -18,10 +17,6 @@ const ROLE_DEFAULT_COLOR = {
   admin:       '#7c3aed',
   super_admin: '#d97706',
 }
-
-/* Học sinh phải mở khoá một lần bằng xu mới đổi được ảnh đại diện; giá phải khớp
-   AVATAR_UNLOCK_PRICE trong api.py. GV/Admin/Super admin không bị giới hạn. */
-const AVATAR_UNLOCK_PRICE = 300
 
 /* ── SVG helper ── */
 function Ic({ size = 16, children, style }) {
@@ -51,7 +46,6 @@ const IcUser   = (s) => <Ic size={s}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 
 const IcShield = (s) => <Ic size={s}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></Ic>
 const IcChevronRight = (s) => <Ic size={s}><polyline points="9 18 15 12 9 6"/></Ic>
 const IcLock   = (s) => <Ic size={s}><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></Ic>
-const IcCoin   = (s) => <Ic size={s}><circle cx="12" cy="12" r="9"/><path d="M9.5 15.5c.5 1 1.5 1.5 2.5 1.5 1.7 0 3-1 3-2.3 0-3-5.5-1.5-5.5-4.5 0-1.3 1.3-2.2 3-2.2 1 0 2 .4 2.5 1.3"/><line x1="12" y1="6.5" x2="12" y2="17.5"/></Ic>
 
 /* user.avatarUrl: undefined = chưa từng tuỳ chỉnh (dùng ảnh Google trong user.avatar nếu có),
    null = đã chọn xoá ảnh để dùng màu nền, string = ảnh tuỳ chỉnh/ảnh Google đã chốt. */
@@ -60,239 +54,19 @@ export function resolveAvatarSrc(user) {
   return typeof src === 'string' && (/^https?:\/\//.test(src) || src.startsWith('data:')) ? src : null
 }
 
-/* ── Khung viền (cửa hàng) — id → hình vẽ (gradient/glow). Giá & tên là dữ liệu
-   server (FRAME_CATALOG trong api.py); id ở đây phải khớp id bên đó. ── */
-export const FRAME_STYLES = {
-  dong:      { background: 'linear-gradient(135deg,#c58f4f,#7c4a1e)' },
-  bac:       { background: 'linear-gradient(135deg,#e6ebf2,#94a3b8)' },
-  ngoc_bich: { background: 'linear-gradient(135deg,#5eead4,#047857)' },
-  vang:      { background: 'linear-gradient(135deg,#fde68a,#d97706)' },
-  navy_gold: { background: 'linear-gradient(135deg,#FBBF24,#0F172A 55%,#FBBF24)' },
-  kim_cuong: { background: 'linear-gradient(135deg,#bae6fd,#38bdf8,#f0f9ff)', glow: '0 0 14px rgba(56,189,248,.55)' },
-  hoang_gia: { background: 'linear-gradient(135deg,#ddd6fe,#6d28d9,#FBBF24)', glow: '0 0 14px rgba(109,40,217,.4)' },
-  cau_vong:  { background: 'conic-gradient(from 0deg,#f87171,#fbbf24,#34d399,#38bdf8,#818cf8,#f472b6,#f87171)', glow: '0 0 16px rgba(244,114,182,.45)' },
-  huyen_thoai: { image: '/img/frames/vien-huyen-thoai.svg', innerRatio: 0.6, glow: '0 0 16px rgba(139,47,217,.4)', wings: true },
-  thien_nhien: { image: '/img/frames/vien_thien_nhien.png', innerRatio: 0.5, glow: '0 0 16px rgba(74,124,44,.45)', vines: true },
-  mo_bi_an:  { image: '/img/frames/vien_kim_cuong.png', innerRatio: 0.56, glow: '0 0 16px rgba(99,102,241,.45)', mascot: true },
-}
-
-/* Hình 1 lông cánh (quạt xoè từ gốc (0,0), toả theo góc dần thấp xuống ngang) —
-   dùng chung cho cả 5 lông của khung huyền thoại. */
-const WING_FEATHERS = [
-  { deg: -62, len: 34, fill: '#f2c14e' },
-  { deg: -46, len: 43, fill: '#fff3c4' },
-  { deg: -30, len: 52, fill: '#f2c14e' },
-  { deg: -15, len: 61, fill: '#fff3c4' },
-  { deg: 2,   len: 70, fill: '#f2c14e' },
-]
-
-/* ── Cánh thiên thần cho khung huyền thoại — 2 cánh vàng vẫy nhẹ liên tục 2 bên
-   avatar. Gốc cánh (điểm (0,0) trong viewBox, ứng với dim/9 tính từ mép trái SVG vì
-   viewBox rộng 90 bắt đầu từ x=-10) được canh bằng pixel vào đúng mép trái/phải của
-   khung tròn (ringSize) — không phụ thuộc vào việc container to hay nhỏ, khác với
-   cách canh theo % trước đây vốn chỉ đúng khi avatar và khung có cùng kích thước.
-   avatarSize = kích thước ảnh đại diện (quyết định độ lớn của cánh); ringSize = kích
-   thước hộp khung viền (quyết định điểm gắn cánh). ── */
-function AngelWings({ avatarSize, ringSize }) {
-  const dim          = Math.round(avatarSize * 0.65)
-  const marginTop     = -Math.round(dim * 0.4615)
-  const originOffset  = dim / 9
-  const leftWingLeft  = -Math.round(dim - originOffset)
-  const rightWingLeft = Math.round(ringSize - originOffset)
-
-  const feathers = (
-    <>
-      {WING_FEATHERS.map(({ deg, len, fill }) => (
-        <g key={deg} transform={`rotate(${deg})`}>
-          <path
-            d={`M0,0 Q${(len * 0.55).toFixed(1)},${-(len * 0.176).toFixed(1)} ${len},0 Q${(len * 0.55).toFixed(1)},${(len * 0.176).toFixed(1)} 0,0 Z`}
-            fill={fill}
-          />
-        </g>
-      ))}
-    </>
-  )
-
-  return (
-    <>
-      <div className="avt-wing-wrap avt-wing-wrap--left" style={{ width: dim, height: dim, left: leftWingLeft, marginTop }}>
-        <div className="avt-wing-flap avt-wing-flap--left">
-          <svg viewBox="-10 -60 90 130" width={dim} height={dim} style={{ transform: 'scaleX(-1)' }}>{feathers}</svg>
-        </div>
-      </div>
-      <div className="avt-wing-wrap avt-wing-wrap--right" style={{ width: dim, height: dim, left: rightWingLeft, marginTop }}>
-        <div className="avt-wing-flap avt-wing-flap--right">
-          <svg viewBox="-10 -60 90 130" width={dim} height={dim}>{feathers}</svg>
-        </div>
-      </div>
-    </>
-  )
-}
-
-/* ── Dây leo cho khung huyền thoại thiên nhiên — nhiều chồi non mọc rải quanh khung
-   (8 điểm neo quanh vòng, ứng với 8 hướng la bàn — không chỉ 4 góc chéo như trước để
-   trông rậm rạp hơn), liên tục "mọc" dài ra rồi rút lại theo kiểu vẽ nét
-   (stroke-dashoffset), lệch nhịp đều nhau quanh vòng nên lúc nào cũng có vài chồi đang
-   mọc — như một vòng sóng lan dần quanh khung thay vì đồng loạt. Mỗi chồi còn lệch
-   scale + đổi giữa 2 dáng nhánh (variant) để không lặp lại y hệt nhau, trông tự nhiên
-   hơn. Neo theo % của hộp khung ngoài — không cần quy đổi theo avatarSize như cánh vì
-   các chồi này chỉ bám rìa ảnh khung, luôn tỉ lệ đều với hộp khung bất kể avatar to nhỏ
-   ra sao. ── */
-const VINE_SPRIGS = [
-  { top: '41.0%', left: '84.0%', rotate: 0,    scale: 1.0,  variant: 0 }, // phải
-  { top: '14.5%', left: '76.0%', rotate: -45,  scale: 0.9,  variant: 1 }, // trên-phải
-  { top: '-3.0%', left: '50.0%', rotate: -90,  scale: 0.8,  variant: 0 }, // trên (gần mào lá)
-  { top: '14.0%', left: '23.5%', rotate: -135, scale: 1.1,  variant: 1 }, // trên-trái
-  { top: '41.0%', left: '18.5%', rotate: 180,  scale: 1.0,  variant: 0 }, // trái
-  { top: '63.8%', left: '27.6%', rotate: 135,  scale: 0.95, variant: 1 }, // dưới-trái
-  { top: '76.3%', left: '50.0%', rotate: 90,   scale: 1.05, variant: 0 }, // dưới
-  { top: '66.8%', left: '75.3%', rotate: 45,   scale: 0.9,  variant: 1 }, // dưới-phải
-]
-
-/* dáng A: nhánh 2 lá, cong thoải; dáng B: nhánh 3 lá, cong gấp hơn — xen kẽ nhau
-   quanh vòng để các chồi không trông như tem in giống hệt nhau. */
-const VINE_VARIANTS = [
-  {
-    path: 'M0,20 C10,6 18,34 28,16 C36,3 44,24 51,12',
-    leaves: [
-      { cx: 16, cy: 12, rx: 5,   ry: 2.6, fill: '#6fa83a', rot: -35, d: 0   },
-      { cx: 40, cy: 10, rx: 4.5, ry: 2.3, fill: '#7cb941', rot: 20,  d: 0.5 },
-    ],
-  },
-  {
-    path: 'M0,20 C6,32 14,6 20,20 C26,34 34,6 40,18 C45,26 49,14 53,17',
-    leaves: [
-      { cx: 12, cy: 20, rx: 4.2, ry: 2.2, fill: '#7cb941', rot: 50,  d: 0   },
-      { cx: 30, cy: 16, rx: 4.6, ry: 2.4, fill: '#5c9530', rot: -25, d: 0.35 },
-      { cx: 46, cy: 15, rx: 3.8, ry: 2,   fill: '#6fa83a', rot: 15,  d: 0.7 },
-    ],
-  },
-]
-
-function VineSprig({ delay, variant }) {
-  const v = VINE_VARIANTS[variant]
-  return (
-    <svg viewBox="0 0 60 40" width="100%" height="100%" style={{ overflow: 'visible' }}>
-      <path
-        className="avt-vine-stem"
-        d={v.path}
-        fill="none" stroke="#4d7c2a" strokeWidth="2.6" strokeLinecap="round" strokeDasharray="130"
-        style={{ animationDelay: `${delay}s` }}
-      />
-      {v.leaves.map((lf, i) => (
-        <g key={i} className="avt-vine-leaf" style={{ animationDelay: `${delay + lf.d}s` }}>
-          <ellipse cx={lf.cx} cy={lf.cy} rx={lf.rx} ry={lf.ry} fill={lf.fill} transform={`rotate(${lf.rot} ${lf.cx} ${lf.cy})`} />
-        </g>
-      ))}
-    </svg>
-  )
-}
-
-function NatureVines() {
-  const step = 5.2 / VINE_SPRIGS.length
-  return (
-    <>
-      {VINE_SPRIGS.map((s, i) => (
-        <div
-          key={i}
-          className="avt-vine-wrap"
-          style={{ top: s.top, left: s.left, transform: `rotate(${s.rotate}deg) scale(${s.scale})` }}
-        >
-          <VineSprig delay={i * -step} variant={s.variant} />
-        </div>
-      ))}
-    </>
-  )
-}
-
-/* ── Thợ mỏ sóc cho khung "Mỏ Kim Cương Bí Ẩn" — 1 chú sóc thợ mỏ đứng ở góc dưới-phải
-   (nơi ảnh vòng để trống), diễn 1 chuỗi hành động 3 khung lặp lại: đào (kim_cuong_1) →
-   đập trúng kim cương (kim_cuong_2) → ngồi thở dốc bên viên kim cương (kim_cuong_3).
-   Chuyển cảnh bằng nhảy khung cứng (giống GIF sprite, không mờ dần) rồi quay lại từ
-   đầu. Cả 3 khung phóng to x2 cho nổi bật, chân vẫn neo đúng vị trí đứng nhờ
-   transform-origin ở đáy. Neo theo % của hộp khung ngoài, giống cách đặt dây leo —
-   không phụ thuộc avatarSize. ── */
-const MINE_FRAMES = [
-  { src: '/img/frames/kim_cuong_1.png', scale: 2 },
-  { src: '/img/frames/kim_cuong_2.png', scale: 2 },
-  { src: '/img/frames/kim_cuong_3.png', scale: 2 },
-]
-
-function MineMascot() {
-  return (
-    <div className="avt-mine-mascot">
-      {MINE_FRAMES.map((f, i) => (
-        <img
-          key={f.src}
-          src={f.src}
-          alt=""
-          className="avt-mine-frame"
-          draggable={false}
-          style={{ animationDelay: `${i * 2}s`, transform: `scale(${f.scale})` }}
-        />
-      ))}
-    </div>
-  )
-}
-
-/* ── Khung viền wrapper — bọc quanh MỘT avatar tròn có sẵn (bất kỳ kích thước/markup
-   nào: AvatarDisplay, hoặc avatar tự vẽ riêng ở trang khác) để hiện khung đã trang bị.
-   Dùng chung ở AccountMenu, trang quản lý lớp, quản trị… nơi nào có avatar + user đầy
-   đủ field equippedFrame thì bọc thêm khung, không có thì bỏ qua (trả về nguyên avatar). ── */
-export function AvatarFrame({ frameStyle, size, children }) {
-  if (!frameStyle) return children
-
-  if (frameStyle.image) {
-    /* ảnh PNG có viền trang trí quanh rìa + vùng trong suốt ở giữa. Avatar gốc giữ
-       nguyên size (khớp các khung dạng vòng khác) — phần ảnh khung phóng to hơn size
-       để avatar vẫn lọt đúng vào vùng trống, thay vì co nhỏ avatar lại như trước.
-       Không hiện cánh (wings) ở đây — component này dùng cho danh sách/bảng chật hẹp
-       (quản lý lớp, quản trị), cánh xoè ra sẽ đè lên nội dung bên cạnh. */
-    const innerRatio = frameStyle.innerRatio ?? 0.62
-    const outerSize  = Math.round(size / innerRatio)
-    return (
-      <div
-        className="avt-frame-image"
-        style={{ width: outerSize, height: outerSize, filter: frameStyle.glow ? `drop-shadow(${frameStyle.glow})` : undefined }}
-      >
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
-          {children}
-        </div>
-        <img src={frameStyle.image} alt="" className="avt-frame-image-ring" draggable={false} />
-      </div>
-    )
-  }
-
-  const ringPad = Math.max(4, Math.round(size * 0.08))
-  return (
-    <div
-      className={`avt-frame-ring${frameStyle.glow ? ' avt-frame-ring--glow' : ''}`}
-      style={{
-        width: size + ringPad * 2,
-        height: size + ringPad * 2,
-        padding: ringPad,
-        background: frameStyle.background,
-        boxShadow: frameStyle.glow || undefined,
-      }}
-    >
-      {children}
-    </div>
-  )
-}
-
 /* ── Avatar display ── */
-export function AvatarDisplay({ user, size = 80, onClick, className = '', frameStyle = null, locked = false }) {
+export function AvatarDisplay({ user, size = 80, onClick, className = '' }) {
   const [failed, setFailed] = useState(false)
   const initial  = (user.name || user.email || '?')[0].toUpperCase()
   const bgColor  = user.avatarColor || ROLE_DEFAULT_COLOR[user.role] || '#2563eb'
   const src      = resolveAvatarSrc(user)
 
-  const circle = (
+  return (
     <div
       className={`avt-display ${onClick ? 'avt-display--clickable' : ''} ${className}`}
       style={{ width: size, height: size }}
       onClick={onClick}
-      title={onClick ? (locked ? 'Mở khoá đổi ảnh đại diện' : 'Đổi ảnh đại diện') : undefined}
+      title={onClick ? 'Đổi ảnh đại diện' : undefined}
     >
       {src && !failed
         ? <img src={src} alt="avatar" className="avt-display-img" onError={() => setFailed(true)} />
@@ -302,47 +76,9 @@ export function AvatarDisplay({ user, size = 80, onClick, className = '', frameS
       }
       {onClick && (
         <div className="avt-display-overlay">
-          {locked ? IcLock(Math.round(size * 0.3)) : IcCamera(Math.round(size * 0.3))}
+          {IcCamera(Math.round(size * 0.3))}
         </div>
       )}
-      {locked && <div className="avt-lock-badge">{IcLock(Math.round(size * 0.16))}</div>}
-    </div>
-  )
-
-  if (!frameStyle) return circle
-
-  if (frameStyle.image) {
-    /* Avatar giữ nguyên size (khớp các khung dạng vòng khác) — phần ảnh khung phóng to
-       hơn size theo innerRatio để avatar vẫn lọt đúng vào vùng trống của khung. */
-    const innerRatio = frameStyle.innerRatio ?? 0.62
-    const outerSize  = Math.round(size / innerRatio)
-    return (
-      <div
-        className="avt-frame-image"
-        style={{ width: outerSize, height: outerSize, filter: frameStyle.glow ? `drop-shadow(${frameStyle.glow})` : undefined }}
-      >
-        {circle}
-        <img src={frameStyle.image} alt="" className="avt-frame-image-ring" draggable={false} />
-        {frameStyle.wings && <AngelWings avatarSize={size} ringSize={outerSize} />}
-        {frameStyle.vines && <NatureVines />}
-        {frameStyle.mascot && <MineMascot />}
-      </div>
-    )
-  }
-
-  const ringPad = Math.max(4, Math.round(size * 0.08))
-  return (
-    <div
-      className={`avt-frame-ring${frameStyle.glow ? ' avt-frame-ring--glow' : ''}`}
-      style={{
-        width: size + ringPad * 2,
-        height: size + ringPad * 2,
-        padding: ringPad,
-        background: frameStyle.background,
-        boxShadow: frameStyle.glow || undefined,
-      }}
-    >
-      {circle}
     </div>
   )
 }
@@ -418,43 +154,6 @@ function AvatarPicker({ user, onSave, onClose }) {
           <button className="pm-cancel" onClick={onClose}>Huỷ</button>
           <button className="pm-submit" onClick={() => onSave({ avatarUrl: preview || null, avatarColor: selColor })}>
             {IcCheck(14)} Lưu thay đổi
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ── Mở khoá đổi ảnh đại diện (học sinh, 1 lần, bằng xu) ── */
-function AvatarUnlockModal({ coins, busy, error, onConfirm, onClose }) {
-  const canAfford = coins >= AVATAR_UNLOCK_PRICE
-
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box avt-unlock-modal">
-        <div className="modal-header">
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {IcLock(20)} Mở khoá đổi ảnh đại diện
-          </h2>
-          <button className="modal-close" onClick={onClose}>{IcClose(18)}</button>
-        </div>
-
-        <p className="prof-section-desc">
-          Học sinh cần mở khoá một lần bằng xu để đổi ảnh đại diện. Sau khi mở khoá,
-          bạn có thể đổi ảnh đại diện không giới hạn số lần.
-        </p>
-
-        <div className="avt-unlock-price-row">
-          <span className="prof-coin-badge">{IcCoin(14)} Số dư: {coins} xu</span>
-          <span className="prof-shop-tag prof-shop-tag--price">{IcCoin(11)} {AVATAR_UNLOCK_PRICE} xu</span>
-        </div>
-
-        {error && <div className="form-error">{error}</div>}
-
-        <div className="pm-footer">
-          <button className="pm-cancel" onClick={onClose}>Huỷ</button>
-          <button className="pm-submit" onClick={onConfirm} disabled={busy || !canAfford}>
-            {IcLock(14)} {busy ? 'Đang xử lý…' : canAfford ? 'Mở khoá ngay' : 'Không đủ xu'}
           </button>
         </div>
       </div>
@@ -554,12 +253,7 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
   const [nameError,        setNameError]        = useState('')
   const [saved,            setSaved]            = useState(false)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
-  const [showUnlockModal,  setShowUnlockModal]  = useState(false)
-  const [unlockBusy,       setUnlockBusy]       = useState(false)
-  const [unlockError,      setUnlockError]      = useState('')
   const [submissions,      setSubmissions]      = useState([])
-
-  const avatarLocked = user.role === ROLES.STUDENT && !user.avatarUnlocked
 
   const [curPwd,      setCurPwd]      = useState('')
   const [newPwd,      setNewPwd]      = useState('')
@@ -633,27 +327,6 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
     setShowAvatarPicker(false)
   }
 
-  const handleUnlockAvatar = async () => {
-    setUnlockError(''); setUnlockBusy(true)
-    try {
-      const res = await fetch('/api/shop/unlock-avatar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      })
-      const data = await res.json()
-      if (!res.ok) { setUnlockError(data.error || 'Mở khoá thất bại.'); return }
-      const updated = { ...user, ...data }
-      localStorage.setItem(USER_KEY, JSON.stringify(updated))
-      onUpdateUser(updated)
-      setShowUnlockModal(false)
-      setShowAvatarPicker(true)
-    } catch {
-      setUnlockError('Không thể kết nối server.')
-    } finally {
-      setUnlockBusy(false)
-    }
-  }
-
   return (
     <div className="prof-page">
       <div className="container prof-container">
@@ -668,18 +341,11 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
               <AvatarDisplay
                 user={user}
                 size={60}
-                onClick={() => (avatarLocked ? setShowUnlockModal(true) : setShowAvatarPicker(true))}
-                frameStyle={FRAME_STYLES[user.equippedFrame]}
-                locked={avatarLocked}
+                onClick={() => setShowAvatarPicker(true)}
               />
               <div className="prof-avatar-meta">
                 <span className="prof-avatar-name">{user.name}</span>
                 <RoleBadge role={user.role} size="sm" />
-                {avatarLocked && (
-                  <span className="prof-avatar-lock-hint">
-                    {IcLock(11)} Cần {AVATAR_UNLOCK_PRICE} xu để mở khoá đổi ảnh đại diện
-                  </span>
-                )}
               </div>
             </div>
 
@@ -760,12 +426,6 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
           </div>
         </div>
 
-        {/* ── Cửa hàng khung viền — nhúng thẳng tại đây để chọn khung ngay, không cần
-             chuyển trang ── */}
-        {(user.role === ROLES.STUDENT || user.role === ROLES.SUPERADMIN) && (
-          <FrameShopSection user={user} onUpdateUser={onUpdateUser} />
-        )}
-
         {/* ── Thống kê theo vai trò ── */}
         {user.role === ROLES.STUDENT && <StudentStats submissions={submissions} />}
         {hasTeacherAccess(user.role)  && <TeacherStats userId={user.id} />}
@@ -814,16 +474,6 @@ export default function ProfilePage({ user, onUpdateUser, onGoHome, onGoHistory 
           user={user}
           onSave={handleSaveAvatar}
           onClose={() => setShowAvatarPicker(false)}
-        />
-      )}
-
-      {showUnlockModal && (
-        <AvatarUnlockModal
-          coins={user.coins ?? 0}
-          busy={unlockBusy}
-          error={unlockError}
-          onConfirm={handleUnlockAvatar}
-          onClose={() => setShowUnlockModal(false)}
         />
       )}
     </div>

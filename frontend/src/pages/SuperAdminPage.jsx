@@ -4,7 +4,6 @@ import { getAllExams } from '../store/examStore.js'
 import { GRADES, gradeLabel } from '../components/SubjectBadge.jsx'
 import SiteContentTab from './SiteContentTab.jsx'
 import ReportsTab from './ReportsTab.jsx'
-import { AvatarFrame, FRAME_STYLES } from './ProfilePage.jsx'
 
 /* ── SVG primitives ── */
 function Ic({ size = 16, children, style }) {
@@ -33,7 +32,6 @@ const IcKey     = (s) => <Ic size={s}><circle cx="7.5" cy="15.5" r="5.5"/><path 
 const IcCheck   = (s) => <Ic size={s}><polyline points="20 6 9 17 4 12"/></Ic>
 const IcLock    = (s) => <Ic size={s}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></Ic>
 const IcBan     = (s) => <Ic size={s}><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></Ic>
-const IcCoin    = (s) => <Ic size={s}><circle cx="12" cy="12" r="9"/><path d="M9.5 15.5c.5 1 1.5 1.5 2.5 1.5 1.7 0 3-1 3-2.3 0-3-5.5-1.5-5.5-4.5 0-1.3 1.3-2.2 3-2.2 1 0 2 .4 2.5 1.3"/><line x1="12" y1="6.5" x2="12" y2="17.5"/></Ic>
 
 /* ── KPI Card ── */
 function KpiCard({ label, value, sub, color = '#2563eb', icon }) {
@@ -477,61 +475,15 @@ function ResetPasswordModal({ user, onSave, onClose }) {
   )
 }
 
-function CoinsModal({ user, onSave, onClose }) {
-  const [delta,  setDelta]  = useState('')
-  const [err,    setErr]    = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const handleSave = async (sign) => {
-    const n = parseInt(delta, 10)
-    if (!Number.isFinite(n) || n <= 0) { setErr('Nhập số xu hợp lệ (lớn hơn 0).'); return }
-    setSaving(true)
-    await onSave(user.id, sign * n)
-    setSaving(false)
-  }
-
-  return (
-    <div className="sa-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="sa-modal sa-modal--sm">
-        <div className="sa-modal-header">
-          <h3>{IcCoin(16)} Cấp / thu xu — {user.name}</h3>
-          <button className="sa-modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <p className="sa-field-hint" style={{ margin: 0 }}>Số dư hiện tại: <strong>{user.coins ?? 0} xu</strong></p>
-          <input
-            type="number"
-            min="1"
-            className="sa-config-input"
-            placeholder="Số xu"
-            value={delta}
-            onChange={e => { setDelta(e.target.value); setErr('') }}
-            autoFocus
-          />
-          {err && <div style={{ color: '#ef4444', fontSize: '0.82rem' }}>⚠️ {err}</div>}
-        </div>
-        <div className="sa-modal-footer">
-          <button className="sa-btn sa-btn--ghost" onClick={onClose}>Huỷ</button>
-          <button className="sa-btn sa-btn--ghost" onClick={() => handleSave(-1)} disabled={saving}>− Thu xu</button>
-          <button className="sa-btn sa-btn--primary" onClick={() => handleSave(1)} disabled={saving}>
-            {saving ? '⏳ Đang lưu…' : '+ Cấp xu'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 /* Avatar người dùng: hiển thị ảnh nếu là URL/data-URI (vd. đăng nhập Google),
-   nếu không (hoặc ảnh lỗi) thì hiển thị chữ cái đầu. Kèm khung viền nếu user đã
-   trang bị (cửa hàng khung viền). */
+   nếu không (hoặc ảnh lỗi) thì hiển thị chữ cái đầu. */
 function UserAvatar({ user, meta }) {
   const [failed, setFailed] = useState(false)
   const src     = user.avatarUrl || user.avatar
   const isImg   = typeof src === 'string' && (/^https?:\/\//.test(src) || src.startsWith('data:'))
   const initial = (user.name || user.email || '?')[0].toUpperCase()
 
-  const avatar = (isImg && !failed)
+  return (isImg && !failed)
     ? (
       <div className="sa-user-avatar sa-user-avatar--img">
         <img src={src} alt="" onError={() => setFailed(true)} />
@@ -543,8 +495,6 @@ function UserAvatar({ user, meta }) {
         {isImg ? initial : (user.avatar || initial)}
       </div>
     )
-
-  return <AvatarFrame frameStyle={FRAME_STYLES[user.equippedFrame]} size={30}>{avatar}</AvatarFrame>
 }
 
 function UsersTab() {
@@ -555,7 +505,6 @@ function UsersTab() {
   const [editing,  setEditing]  = useState(null)
   const [deleting, setDeleting] = useState(null)
   const [pwdEdit,  setPwdEdit]  = useState(null)
-  const [coinsEdit, setCoinsEdit] = useState(null)
   const [page,     setPage]     = useState(1)
   const PER_PAGE = 15
 
@@ -636,26 +585,6 @@ function UsersTab() {
     setPwdEdit(null)
   }
 
-  const handleAdjustCoins = async (userId, delta) => {
-    try {
-      const r = await fetch(`/api/admin/users/${userId}/coins`, {
-        method:  'PUT',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body:    JSON.stringify({ delta }),
-      })
-      if (r.ok) {
-        const updated = await r.json()
-        setUsers(prev => prev.map(u => String(u.id) === String(userId) ? { ...u, coins: updated.coins } : u))
-        if (currentUser && String(currentUser.id) === String(userId)) {
-          const merged = { ...currentUser, coins: updated.coins }
-          localStorage.setItem('hoctoan_user', JSON.stringify(merged))
-          window.dispatchEvent(new CustomEvent('hoctoan_user_updated', { detail: merged }))
-        }
-      }
-    } catch {}
-    setCoinsEdit(null)
-  }
-
   const fmt = iso => iso ? new Date(iso).toLocaleDateString('vi-VN') : '—'
 
   return (
@@ -673,9 +602,6 @@ function UsersTab() {
       )}
       {pwdEdit && (
         <ResetPasswordModal user={pwdEdit} onSave={handleResetPwd} onClose={() => setPwdEdit(null)} />
-      )}
-      {coinsEdit && (
-        <CoinsModal user={coinsEdit} onSave={handleAdjustCoins} onClose={() => setCoinsEdit(null)} />
       )}
 
       <div className="sa-toolbar">
@@ -715,14 +641,13 @@ function UsersTab() {
                   <th>Email</th>
                   <th>Vai trò</th>
                   <th>Khối</th>
-                  <th>Xu</th>
                   <th>Ngày tạo</th>
                   <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 {paginated.length === 0 ? (
-                  <tr><td colSpan={8} className="sa-empty">Không có người dùng nào.</td></tr>
+                  <tr><td colSpan={7} className="sa-empty">Không có người dùng nào.</td></tr>
                 ) : paginated.map(u => {
                   const meta   = ROLE_META[u.role]
                   const isSelf = String(currentUser?.id) === String(u.id)
@@ -748,7 +673,6 @@ function UsersTab() {
                           ? <span className="sa-grade-pill">🎓 {gradeLabel(u.grade)}</span>
                           : <span className="sa-grade-empty">—</span>}
                       </td>
-                      <td><span className="sa-coin-pill">{IcCoin(12)} {u.coins ?? 0}</span></td>
                       <td>{fmt(u.createdAt)}</td>
                       <td>
                         <div className="sa-actions">
@@ -758,11 +682,6 @@ function UsersTab() {
                           <button className="sa-act-btn" title="Đặt lại mật khẩu" onClick={() => setPwdEdit(u)}>
                             {IcKey(14)}
                           </button>
-                          {currentUser?.role === 'super_admin' && (
-                            <button className="sa-act-btn" title="Cấp / thu xu (khung viền)" onClick={() => setCoinsEdit(u)}>
-                              {IcCoin(14)}
-                            </button>
-                          )}
                           {!isSelf && (
                             <button className="sa-act-btn sa-act-btn--del" title="Xoá tài khoản" onClick={() => setDeleting(u)}>
                               {IcTrash(14)}

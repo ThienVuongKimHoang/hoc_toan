@@ -95,14 +95,6 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) DEFAULT NULL;
 ALTER TABLE users ALTER COLUMN avatar TYPE VARCHAR(500);
 -- Cấp độ (khối lớp) học sinh chọn khi đăng ký: '1'..'12'. GV/Admin để trống.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS grade VARCHAR(20);
--- Xu dùng trong cửa hàng khung viền — hiện chỉ super admin cấp thủ công cho học sinh.
-ALTER TABLE users ADD COLUMN IF NOT EXISTS coins INTEGER NOT NULL DEFAULT 0;
--- Danh sách id khung viền đã mua/mở khoá. Super admin coi như sở hữu hết nên không cần lưu ở đây.
-ALTER TABLE users ADD COLUMN IF NOT EXISTS owned_frames JSONB DEFAULT '[]';
--- Khung viền đang trang bị (hiển thị quanh avatar ở trang cá nhân). NULL = không dùng khung.
-ALTER TABLE users ADD COLUMN IF NOT EXISTS equipped_frame VARCHAR(50);
--- Học sinh phải mở khoá một lần bằng xu mới được đổi ảnh đại diện. GV/Admin không bị giới hạn.
-ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_unlocked BOOLEAN NOT NULL DEFAULT FALSE;
 
 
 CREATE TABLE IF NOT EXISTS exams (
@@ -153,6 +145,10 @@ ALTER TABLE submissions ADD COLUMN IF NOT EXISTS violation_count INTEGER;
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS assignment_id VARCHAR(50);
 -- Điểm chấm tay cho câu tự luận (GV nhập): { "TL_1": 1.5, ... }. Cộng vào score.
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS manual_scores JSONB DEFAULT '{}';
+-- Bản đồ trộn câu/đáp án học sinh thấy lúc làm bài (xem utils/shuffle.js buildShuffleMap
+-- ở frontend) — lưu lại để lúc xem "lịch sử làm bài" hiển thị đúng thứ tự/nhãn câu đã
+-- thấy khi làm, tránh "Câu 3" lúc làm thành "Câu 7" lúc xem lại (đề bật trộn câu).
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS shuffle_map JSONB;
 
 CREATE TABLE IF NOT EXISTS classes (
     id            VARCHAR(50)  PRIMARY KEY,
@@ -234,38 +230,6 @@ CREATE TABLE IF NOT EXISTS notifications (
     read           BOOLEAN      DEFAULT FALSE
 );
 CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(target_user_id);
-
--- Xu thưởng nhiệm vụ (bài tập/đề đã chấm) — 1 dòng/(student,assignment), vừa là
--- sổ cái chống thưởng trùng (UNIQUE student_id+assignment_id) vừa là nguồn để
--- tính điểm/chuỗi của lần thưởng kế tiếp mà không cần quét lịch sử hay job nền:
--- mỗi dòng lưu sẵn độ dài 2 chuỗi NGAY SAU khi thưởng.
-CREATE TABLE IF NOT EXISTS mission_coin_awards (
-    id                 VARCHAR(50)  PRIMARY KEY,
-    student_id         VARCHAR(100) NOT NULL,
-    student_name       VARCHAR(255) DEFAULT '',
-    class_id           VARCHAR(50)  NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
-    class_name         VARCHAR(255) DEFAULT '',
-    assignment_id      VARCHAR(50)  NOT NULL,
-    assignment_title   VARCHAR(500) DEFAULT '',
-    kind               VARCHAR(20)  NOT NULL DEFAULT 'exam',  -- exam | homework
-    due_date           TIMESTAMPTZ,
-    on_time            BOOLEAN      NOT NULL DEFAULT TRUE,
-    raw_score          FLOAT,
-    max_score          FLOAT,
-    normalized_score   FLOAT,                -- 0..10
-    completion_xu      INT NOT NULL DEFAULT 0,
-    bracket_xu         INT NOT NULL DEFAULT 0,
-    milestone_xu       INT NOT NULL DEFAULT 0,
-    maintain_xu        INT NOT NULL DEFAULT 0,
-    effort_xu          INT NOT NULL DEFAULT 0,
-    total_xu           INT NOT NULL DEFAULT 0,
-    high_score_streak  INT NOT NULL DEFAULT 0,   -- độ dài chuỗi ≥7 điểm SAU dòng này
-    effort_streak      INT NOT NULL DEFAULT 0,   -- độ dài chuỗi nộp đúng hạn SAU dòng này
-    created_at         TIMESTAMPTZ  DEFAULT NOW()
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_mission_award_unique ON mission_coin_awards(student_id, assignment_id);
-CREATE INDEX IF NOT EXISTS idx_mission_award_student ON mission_coin_awards(student_id);
-CREATE INDEX IF NOT EXISTS idx_mission_award_class   ON mission_coin_awards(class_id);
 
 CREATE TABLE IF NOT EXISTS admin_config (
     key   VARCHAR(100) PRIMARY KEY,
@@ -667,6 +631,7 @@ def _sub_from_row(row: dict) -> dict:
         "classId":     r["class_id"],
         "assignmentId": r.get("assignment_id"),
         "manualScores": r.get("manual_scores") or {},
+        "shuffleMap":  r.get("shuffle_map"),
     }
 
 
@@ -930,8 +895,9 @@ def add_submission_guarded(exam_id: str, sub: dict, max_attempts=None, legacy_ow
                         return False, used
                 cur.execute("""
                     INSERT INTO submissions(exam_id,submitted_at,started_at,time_spent,violation_count,
-                        student_name,student_id,answers,score,max_score,class_name,class_id,assignment_id)
-                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                        student_name,student_id,answers,score,max_score,class_name,class_id,assignment_id,
+                        shuffle_map)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
                 """, (
                     exam_id, sub.get("submittedAt"),
                     sub.get("startedAt"), sub.get("timeSpent"), sub.get("violationCount"),
@@ -940,6 +906,7 @@ def add_submission_guarded(exam_id: str, sub: dict, max_attempts=None, legacy_ow
                     sub.get("score"), sub.get("maxScore"),
                     sub.get("className"), sub.get("classId"),
                     asgn_id or None,
+                    json.dumps(sub.get("shuffleMap")) if sub.get("shuffleMap") else None,
                 ))
                 new_id = cur.fetchone()[0]
                 cur.execute("SELECT COUNT(*) FROM submissions WHERE exam_id=%s AND id<=%s",
@@ -1243,10 +1210,6 @@ def _user_from_row(row: dict, pwd: bool = False) -> dict:
         "avatar":       r["avatar"] or "",
         "google_id":    r.get("google_id"),   # ADD THIS
         "grade":        r.get("grade") or None,   # cấp độ (khối lớp) của học sinh
-        "coins":         r.get("coins") or 0,
-        "ownedFrames":   r.get("owned_frames") or [],
-        "equippedFrame": r.get("equipped_frame"),
-        "avatarUnlocked": bool(r.get("avatar_unlocked")),
         "isRegistered": bool(r["is_registered"]),
         "createdAt":    r["created_at"].isoformat() if r.get("created_at") else None,
     }
@@ -1331,81 +1294,6 @@ def update_user_role(uid: str, role: str) -> Optional[dict]:
     with _C() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("UPDATE users SET role=%s WHERE id=%s RETURNING *", (role, int(uid)))
-            row = cur.fetchone()
-        conn.commit()
-    return _user_from_row(dict(row)) if row else None
-
-
-def purchase_frame(uid: str, frame_id: str, price: int) -> tuple:
-    """Mua một khung viền: trừ xu + thêm vào owned_frames (atomic, khoá dòng user).
-    Trả (user, None) khi thành công hoặc đã sở hữu sẵn; (None, "insufficient") nếu
-    thiếu xu; (None, "not_found") nếu không có user."""
-    with _C() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM users WHERE id=%s FOR UPDATE", (int(uid),))
-            row = cur.fetchone()
-            if not row:
-                conn.commit()
-                return None, "not_found"
-            owned = row["owned_frames"] or []
-            if frame_id in owned:
-                conn.commit()
-                return _user_from_row(dict(row)), None
-            if (row["coins"] or 0) < price:
-                conn.commit()
-                return None, "insufficient"
-            cur.execute(
-                "UPDATE users SET coins = coins - %s, owned_frames = %s WHERE id=%s RETURNING *",
-                (price, json.dumps(owned + [frame_id], ensure_ascii=False), int(uid)),
-            )
-            updated = cur.fetchone()
-        conn.commit()
-    return _user_from_row(dict(updated)), None
-
-
-def unlock_avatar(uid: str, price: int) -> tuple:
-    """Mở khoá đổi ảnh đại diện cho học sinh: trừ xu + đánh dấu avatar_unlocked (atomic,
-    khoá dòng user). Trả (user, None) khi thành công hoặc đã mở khoá sẵn; (None, "insufficient")
-    nếu thiếu xu; (None, "not_found") nếu không có user."""
-    with _C() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM users WHERE id=%s FOR UPDATE", (int(uid),))
-            row = cur.fetchone()
-            if not row:
-                conn.commit()
-                return None, "not_found"
-            if row["avatar_unlocked"]:
-                conn.commit()
-                return _user_from_row(dict(row)), None
-            if (row["coins"] or 0) < price:
-                conn.commit()
-                return None, "insufficient"
-            cur.execute(
-                "UPDATE users SET coins = coins - %s, avatar_unlocked = TRUE WHERE id=%s RETURNING *",
-                (price, int(uid)),
-            )
-            updated = cur.fetchone()
-        conn.commit()
-    return _user_from_row(dict(updated)), None
-
-
-def set_equipped_frame(uid: str, frame_id) -> Optional[dict]:
-    with _C() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("UPDATE users SET equipped_frame=%s WHERE id=%s RETURNING *", (frame_id, int(uid)))
-            row = cur.fetchone()
-        conn.commit()
-    return _user_from_row(dict(row)) if row else None
-
-
-def adjust_user_coins(uid: str, delta: int) -> Optional[dict]:
-    """Super admin cộng/trừ xu thủ công cho user (delta có thể âm); không cho xuống âm."""
-    with _C() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                "UPDATE users SET coins = GREATEST(0, coins + %s) WHERE id=%s RETURNING *",
-                (int(delta), int(uid)),
-            )
             row = cur.fetchone()
         conn.commit()
     return _user_from_row(dict(row)) if row else None
@@ -2003,100 +1891,6 @@ def add_notif(n: dict) -> None:
                 bool(n.get("read", False)),
             ))
         conn.commit()
-
-
-# ── Mission coin engine (Xu nhiệm vụ) ────────────────────────────────────────
-
-def _mission_award_from_row(row: dict) -> dict:
-    r = dict(row)
-    return {
-        "id":               r["id"],
-        "studentId":        r["student_id"],
-        "studentName":      r["student_name"] or "",
-        "classId":          r["class_id"],
-        "className":        r["class_name"] or "",
-        "assignmentId":     r["assignment_id"],
-        "assignmentTitle":  r["assignment_title"] or "",
-        "kind":             r["kind"] or "exam",
-        "dueDate":          r["due_date"].isoformat() if r.get("due_date") else None,
-        "onTime":           bool(r["on_time"]),
-        "rawScore":         r["raw_score"],
-        "maxScore":         r["max_score"],
-        "normalizedScore":  r["normalized_score"],
-        "completionXu":     r["completion_xu"],
-        "bracketXu":        r["bracket_xu"],
-        "milestoneXu":      r["milestone_xu"],
-        "maintainXu":       r["maintain_xu"],
-        "effortXu":         r["effort_xu"],
-        "totalXu":          r["total_xu"],
-        "highScoreStreak":  r["high_score_streak"],
-        "effortStreak":     r["effort_streak"],
-        "createdAt":        r["created_at"].isoformat() if r.get("created_at") else None,
-    }
-
-
-def get_mission_award(student_id: str, assignment_id: str) -> Optional[dict]:
-    with _C() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                "SELECT * FROM mission_coin_awards WHERE student_id=%s AND assignment_id=%s",
-                (str(student_id), assignment_id),
-            )
-            row = cur.fetchone()
-    return _mission_award_from_row(dict(row)) if row else None
-
-
-def get_mission_awards_for_student(student_id: str) -> list:
-    with _C() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                "SELECT * FROM mission_coin_awards WHERE student_id=%s "
-                "ORDER BY due_date DESC NULLS LAST, created_at DESC",
-                (str(student_id),),
-            )
-            rows = cur.fetchall()
-    return [_mission_award_from_row(dict(r)) for r in rows]
-
-
-def record_mission_award(award: dict) -> Optional[dict]:
-    """Ghi 1 dòng thưởng Xu nhiệm vụ + cộng Xu vào users trong CÙNG transaction
-    (idempotent theo student_id+assignment_id — nộp lại/chấm lại không thưởng trùng).
-    Trả None nếu đã tồn tại (đã thưởng lần này rồi)."""
-    with _C() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
-                INSERT INTO mission_coin_awards(
-                    id, student_id, student_name, class_id, class_name,
-                    assignment_id, assignment_title, kind, due_date, on_time,
-                    raw_score, max_score, normalized_score,
-                    completion_xu, bracket_xu, milestone_xu, maintain_xu, effort_xu, total_xu,
-                    high_score_streak, effort_streak)
-                VALUES (%s,%s,%s,%s,%s, %s,%s,%s,%s,%s, %s,%s,%s, %s,%s,%s,%s,%s,%s, %s,%s)
-                ON CONFLICT (student_id, assignment_id) DO NOTHING
-                RETURNING *
-            """, (
-                award.get("id", ""), str(award.get("studentId", "")), award.get("studentName", ""),
-                award["classId"], award.get("className", ""),
-                award["assignmentId"], award.get("assignmentTitle", ""),
-                award.get("kind", "exam"), award.get("dueDate"), bool(award.get("onTime", True)),
-                award.get("rawScore"), award.get("maxScore"), award.get("normalizedScore"),
-                int(award.get("completionXu", 0)), int(award.get("bracketXu", 0)),
-                int(award.get("milestoneXu", 0)), int(award.get("maintainXu", 0)),
-                int(award.get("effortXu", 0)), int(award.get("totalXu", 0)),
-                int(award.get("highScoreStreak", 0)), int(award.get("effortStreak", 0)),
-            ))
-            row = cur.fetchone()
-            if row is None:
-                conn.commit()
-                return None
-            total_xu = int(award.get("totalXu", 0))
-            if total_xu:
-                cur.execute(
-                    "UPDATE users SET coins = coins + %s WHERE id=%s",
-                    (total_xu, int(award["studentId"])),
-                )
-        conn.commit()
-    return _mission_award_from_row(dict(row))
 
 
 def mark_notif_read(nid: str) -> None:
