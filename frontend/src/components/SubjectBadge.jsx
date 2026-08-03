@@ -35,8 +35,8 @@ export const SUBJECT_ORDER = ['toan', 'ly', 'hoa', 'anh', 'toeic', 'ielts', 'thi
 export const NO_GRADE_SUBJECTS = ['toeic', 'ielts', 'thieunhi', 'ngupap']
 
 /** Cấp độ (khối lớp) — học sinh chọn khi đăng ký, lớp gắn với một cấp độ.
- *  Giá trị là chuỗi '1'..'12'; nhãn hiển thị "Lớp N". */
-export const GRADES = Array.from({ length: 12 }, (_, i) => String(i + 1))
+ *  Giá trị là chuỗi '6'..'12' (THCS-THPT); nhãn hiển thị "Lớp N". */
+export const GRADES = Array.from({ length: 7 }, (_, i) => String(i + 6))
 export const gradeLabel = (g) => (g ? `Lớp ${g}` : '')
 
 /** Badge cấp độ (pill xám) — dùng cạnh tên lớp/thẻ học sinh. */

@@ -608,13 +608,6 @@ function ClassFormModal({ initial, defaultGrade = null, onClose, onSave, loading
             value={name} onChange={e => setName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && submit()} autoFocus />
 
-          {!noGradeSubject && (
-            <>
-              <label className="cm-label" style={{ marginTop: 14 }}>Cấp độ (khối lớp) *</label>
-              <GradePicker value={grade} onChange={setGrade} />
-            </>
-          )}
-
           <label className="cm-label" style={{ marginTop: 14 }}>Môn học của lớp * <span style={{ color: '#94a3b8', fontWeight: 400 }}>(mỗi môn là 1 lớp)</span></label>
           <SubjectPicker value={subject} onChange={pickSubject} />
           {subject === 'anh' && (
@@ -627,6 +620,13 @@ function ClassFormModal({ initial, defaultGrade = null, onClose, onSave, loading
               {SUBJECTS[subject]?.icon} Lớp {SUBJECTS[subject]?.label} không phân theo khối — học sinh mọi khối đều tham gia được.
               {subject === 'ielts' && <> Bài tập nộp file có thể bật <strong>chấm điểm IELTS Writing bằng AI</strong>.</>}
             </div>
+          )}
+
+          {!noGradeSubject && (
+            <>
+              <label className="cm-label" style={{ marginTop: 14 }}>Cấp độ (khối lớp) *</label>
+              <GradePicker value={grade} onChange={setGrade} />
+            </>
           )}
 
           <label className="cm-label" style={{ marginTop: 14 }}>Mô tả</label>
