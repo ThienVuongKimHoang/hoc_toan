@@ -59,6 +59,7 @@ const IC = {
   lock:     (s=16) => <Svg size={s}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></Svg>,
   timer:    (s=16) => <Svg size={s}><line x1="10" y1="2" x2="14" y2="2"/><line x1="12" y1="14" x2="15" y2="11"/><circle cx="12" cy="14" r="8"/></Svg>,
   chevronRight: (s=16) => <Svg size={s}><polyline points="9 18 15 12 9 6"/></Svg>,
+  pencil:   (s=16) => <Svg size={s}><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></Svg>,
 }
 
 /* ─── File type helper ─── */
@@ -227,8 +228,8 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
               <>
                 {assignment.writingTask && (
                   <div className="cm-info-note ielts-submit-note" style={{marginBottom:12}}>
-                    🤖 Bài <strong>IELTS Writing {assignment.writingTask === 'task1' ? 'Task 1' : 'Task 2'}</strong> —
-                    giáo viên sẽ dùng AI chấm điểm (band 0–9) sau khi bạn nộp.
+                    📝 Bài <strong>IELTS Writing {assignment.writingTask === 'task1' ? 'Task 1' : 'Task 2'}</strong> —
+                    giáo viên sẽ chấm điểm (band 0–9) sau khi bạn nộp.
                     Nộp file <strong>.txt / .docx / .pdf</strong> hoặc <strong>ảnh chụp bài viết tay</strong> đều được.
                   </div>
                 )}
@@ -431,7 +432,7 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
           <span className={`cm-due-chip ${isDuePast ? 'cm-due-chip--past' : ''}`}>
             {IC.clock(12)} Hạn: {formatDt(assignment.dueDate)}{isDuePast && ' (Hết hạn)'}
           </span>
-          {isWriting && <span className="cm-exam-chip ielts-task-chip">🤖 {taskLabel} · AI chấm điểm</span>}
+          {isWriting && <span className="cm-exam-chip ielts-task-chip">📝 {taskLabel} · Chấm điểm tự động</span>}
           {assignment.attachments?.length > 0 && <span className="cm-exam-chip">{IC.clip(12)} {assignment.attachments.length} file đính kèm</span>}
         </div>
         {mySubmission && (
@@ -444,10 +445,10 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
           <div className="ielts-row-actions" style={{marginTop:8}}>
             {myGrade?.status === 'done' && (
               <button className="ielts-band-view" onClick={() => setShowGrade(true)}>
-                <BandChip band={myGrade.overallBand} size="sm" /> Xem kết quả AI
+                <BandChip band={myGrade.overallBand} size="sm" /> Xem kết quả
               </button>
             )}
-            {myGrade?.status === 'pending' && <span className="ielts-pending-chip">⏳ AI đang chấm bài…</span>}
+            {myGrade?.status === 'pending' && <span className="ielts-pending-chip">⏳ Đang chấm bài…</span>}
             {myGrade?.status === 'error' && <span className="ielts-error-chip" title={myGrade.error}>⚠️ Chấm lỗi — nộp lại hoặc báo giáo viên</span>}
             <button className="mec-btn" onClick={() => setShowStats(true)}>📊 Bảng điểm lớp</button>
           </div>
@@ -460,7 +461,7 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
       >
         {isDuePast
           ? (mySubmission ? '✅ Đã nộp (hết hạn)' : '🔒 Đã hết hạn')
-          : (mySubmission ? '✏️ Nộp lại' : '📤 Nộp bài')}
+          : (mySubmission ? <>{IC.pencil(14)} Nộp lại</> : '📤 Nộp bài')}
       </button>
       {showGrade && myGrade && (
         <IeltsGradeModal grade={myGrade} studentName={user.name} taskLabel={taskLabel}

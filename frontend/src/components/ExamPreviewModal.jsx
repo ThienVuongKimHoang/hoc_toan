@@ -1,6 +1,16 @@
 import React, { useRef, useState } from 'react'
 import MathText from './MathText.jsx'
 
+function PencilIcon({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      style={{ flexShrink: 0, verticalAlign: 'middle' }}>
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  )
+}
+
 const SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III', 'TỰ LUẬN']
 const SECTION_META = {
   'PHẦN I':   { label: 'PHẦN I. TRẮC NGHIỆM', color: '#2563eb', points: '' },
@@ -50,7 +60,7 @@ function MCQPreview({ q, showAnswers, onEditAnswer }) {
                 title="Click để sửa"
               >
                 <MathText text={val} />
-                <span className="ep-edit-pencil">✏️</span>
+                <span className="ep-edit-pencil"><PencilIcon /></span>
               </span>
             )}
             {showAnswers && key === q.answer && (
@@ -208,7 +218,7 @@ export default function ExamPreviewModal({ result, title, onClose, onSave, onEdi
                           onClick={() => { onClose(); onEditQuestion?.(sec, idx) }}
                           title="Quay lại để chỉnh sửa câu này"
                         >
-                          ✏️ Sửa
+                          <PencilIcon /> Sửa
                         </button>
                       </div>
 

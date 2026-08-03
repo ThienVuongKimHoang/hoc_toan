@@ -6,9 +6,30 @@ export const CRITERIA_META = (criterionLabel) => ([
   ['task_response',      criterionLabel || 'Task Response', '🎯'],
   ['coherence_cohesion', 'Coherence & Cohesion',            '🔗'],
   ['lexical_resource',   'Lexical Resource',                '📚'],
-  ['grammatical_range',  'Grammar Range & Accuracy',        '✏️'],
+  ['grammatical_range',  'Grammar Range & Accuracy',        IC.pencil(13)],
 ])
 const CRIT_KEYS = ['task_response', 'coherence_cohesion', 'lexical_resource', 'grammatical_range']
+
+/* ─── Icon SVG dùng cho các nút phía giáo viên (thay cho emoji) ─── */
+function Svg({ size = 14, children }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      style={{ flexShrink: 0, verticalAlign: 'middle' }}>
+      {children}
+    </svg>
+  )
+}
+const IC = {
+  zap:     (s = 14) => <Svg size={s}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></Svg>,
+  refresh: (s = 14) => <Svg size={s}><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></Svg>,
+  pencil:  (s = 14) => <Svg size={s}><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></Svg>,
+  trash:   (s = 14) => <Svg size={s}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></Svg>,
+  check:   (s = 14) => <Svg size={s}><polyline points="20 6 9 17 4 12" /></Svg>,
+  x:       (s = 14) => <Svg size={s}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Svg>,
+  plus:    (s = 14) => <Svg size={s}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></Svg>,
+  eye:     (s = 14) => <Svg size={s}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></Svg>,
+}
 
 export function bandColor(b) {
   if (b == null) return '#94a3b8'
@@ -92,18 +113,18 @@ function AnnotEditPopover({ isNew, quote, fix: initFix = '', explain: initExplai
       <textarea className="ielts-annot-pop-textarea" value={explain} onChange={e => setExplain(e.target.value)}
         placeholder="Giải thích ngắn (tiếng Việt)..." rows={2} />
       <div className="ielts-annot-pop-actions">
-        {!isNew && <button type="button" className="ielts-annot-pop-del" onClick={onDelete}>🗑 Xoá</button>}
-        <button type="button" className="ielts-annot-pop-cancel" onClick={onCancel}>Huỷ</button>
+        {!isNew && <button type="button" className="ielts-annot-pop-del" onClick={onDelete}>{IC.trash(12)} Xoá</button>}
+        <button type="button" className="ielts-annot-pop-cancel" onClick={onCancel}>{IC.x(12)} Huỷ</button>
         <button type="button" className="ielts-annot-pop-save" disabled={!fix.trim()}
           onClick={() => onSubmit({ fix: fix.trim(), explain: explain.trim(), type })}>
-          {isNew ? '+ Thêm' : 'Lưu'}
+          {isNew ? <>{IC.plus(12)} Thêm</> : <>{IC.check(12)} Lưu</>}
         </button>
       </div>
     </div>
   )
 }
 
-function AnnotatedEssay({ text, corrections, editable, onChangeCorrection, onDeleteCorrection, onAddCorrection }) {
+function AnnotatedEssay({ text, corrections, editable, canEdit, focusIndex, onRequestEdit, onChangeCorrection, onDeleteCorrection, onAddCorrection }) {
   const wrapRef = useRef(null)
   const [activeIdx, setActiveIdx] = useState(null)
   const [creating, setCreating] = useState(null)
@@ -117,6 +138,10 @@ function AnnotatedEssay({ text, corrections, editable, onChangeCorrection, onDel
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [activeIdx, creating])
+
+  useEffect(() => {
+    if (editable && focusIndex != null) setActiveIdx(focusIndex)
+  }, [editable, focusIndex])
 
   const located = corrections.filter(c => c.start != null && c.end != null)
   const unlocated = corrections.map((c, i) => ({ ...c, _idx: i })).filter(c => c.start == null || c.end == null)
@@ -141,14 +166,26 @@ function AnnotatedEssay({ text, corrections, editable, onChangeCorrection, onDel
 
   const segments = buildSegments(text, corrections, creating)
 
+  const handleWrapDoubleClick = (e) => {
+    if (editable || !canEdit) return
+    if (e.target.closest('.ielts-annot')) return   // mark tự xử lý double-click riêng
+    onRequestEdit?.(null)
+  }
+
   return (
-    <div className={`ielts-essay-wrap ${editable ? 'ielts-essay-wrap--editable' : ''}`} ref={wrapRef} onMouseUp={handleMouseUp}>
+    <div className={`ielts-essay-wrap ${editable ? 'ielts-essay-wrap--editable' : ''}`} ref={wrapRef}
+      onMouseUp={handleMouseUp} onDoubleClick={handleWrapDoubleClick}>
       {segments.map((seg, i) => seg.kind === 'text'
         ? <React.Fragment key={i}>{seg.text}</React.Fragment>
         : (
           <mark key={i}
             className={`ielts-annot ielts-annot--${seg.corr._creating ? 'pending' : (seg.corr.type || 'grammar')} ${activeIdx === seg.corr._idx ? 'ielts-annot--active' : ''}`}
-            onClick={() => { if (seg.corr._creating) return; setCreating(null); setActiveIdx(p => p === seg.corr._idx ? null : seg.corr._idx) }}>
+            onClick={() => { if (seg.corr._creating) return; setCreating(null); setActiveIdx(p => p === seg.corr._idx ? null : seg.corr._idx) }}
+            onDoubleClick={(e) => {
+              if (seg.corr._creating) return
+              e.stopPropagation()
+              if (!editable && canEdit) onRequestEdit?.(seg.corr._idx)
+            }}>
             {seg.text}
             {seg.corr._creating && (
               <AnnotEditPopover isNew quote={seg.corr.quote}
@@ -175,6 +212,9 @@ function AnnotatedEssay({ text, corrections, editable, onChangeCorrection, onDel
       {editable && (
         <div className="ielts-annot-hint">💡 Bôi đen một đoạn trong bài để thêm ghi chú lỗi mới</div>
       )}
+      {!editable && canEdit && (
+        <div className="ielts-annot-hint">💡 Bấm đúp vào bài làm (hoặc vào một lỗi đã tô màu) để sửa</div>
+      )}
       {unlocated.length > 0 && (
         <div className="ielts-annot-unlocated">
           <div className="ielts-annot-unlocated-title">📌 Ghi chú khác (không xác định được vị trí trong bài)</div>
@@ -183,7 +223,7 @@ function AnnotatedEssay({ text, corrections, editable, onChangeCorrection, onDel
               <div className="ielts-corr-error">✗ {c.error}</div>
               <div className="ielts-corr-fix">✓ {c.fix}</div>
               {c.explain && <div className="ielts-corr-explain">{c.explain}</div>}
-              {editable && <button type="button" className="ielts-corr-del" onClick={() => onDeleteCorrection(c._idx)}>🗑 Xoá</button>}
+              {editable && <button type="button" className="ielts-corr-del" onClick={() => onDeleteCorrection(c._idx)}>{IC.trash(11)} Xoá</button>}
             </div>
           ))}
         </div>
@@ -211,6 +251,8 @@ export function IeltsGradeModal({ grade, studentName, taskLabel, onClose, editab
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [pendingFocus, setPendingFocus] = useState(null)
+  const [essayFocusIdx, setEssayFocusIdx] = useState(null)
 
   useEffect(() => { setCurrent(grade || {}); setEditing(false) }, [grade])
 
@@ -218,8 +260,10 @@ export function IeltsGradeModal({ grade, studentName, taskLabel, onClose, editab
   const crit = g.criteria || {}
   const meta = CRITERIA_META(g.criterionLabel)
 
-  const startEditing = () => { setDraft(makeDraft(g)); setEditing(true) }
-  const cancelEditing = () => { setDraft(null); setEditing(false) }
+  const startEditing = (focus = null, idx = null) => {
+    setDraft(makeDraft(g)); setEditing(true); setPendingFocus(focus); setEssayFocusIdx(idx)
+  }
+  const cancelEditing = () => { setDraft(null); setEditing(false); setPendingFocus(null); setEssayFocusIdx(null) }
 
   const updateCorrections = (updater) => setDraft(d => ({ ...d, corrections: updater(d.corrections) }))
 
@@ -250,10 +294,10 @@ export function IeltsGradeModal({ grade, studentName, taskLabel, onClose, editab
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-box ielts-modal">
         <div className="modal-header">
-          <h2>🤖 Kết quả chấm AI {taskLabel ? `· ${taskLabel}` : ''}</h2>
+          <h2>{editable ? '🤖 Kết quả chấm AI' : '📝 Kết quả chấm'} {taskLabel ? `· ${taskLabel}` : ''}</h2>
           <div className="ielts-modal-head-actions">
             {editable && g.status === 'done' && !editing && (
-              <button className="mec-btn" onClick={startEditing}>✏️ Sửa</button>
+              <button className="mec-btn" onClick={() => startEditing()}>{IC.pencil()} Sửa</button>
             )}
             <button className="modal-close" onClick={onClose}>✕</button>
           </div>
@@ -261,7 +305,7 @@ export function IeltsGradeModal({ grade, studentName, taskLabel, onClose, editab
 
         <div className="ielts-modal-body">
           {g.status === 'pending' && (
-            <div className="ielts-pending"><span className="fdz-spinner" /> AI đang chấm bài, vui lòng đợi trong giây lát…</div>
+            <div className="ielts-pending"><span className="fdz-spinner" /> {editable ? 'AI đang chấm bài' : 'Đang chấm bài'}, vui lòng đợi trong giây lát…</div>
           )}
           {g.status === 'error' && (
             <div className="cm-error" style={{ marginTop: 0 }}>⚠️ {g.error || 'Chấm bài thất bại.'}</div>
@@ -280,7 +324,7 @@ export function IeltsGradeModal({ grade, studentName, taskLabel, onClose, editab
                 <div className="ielts-overall-info">
                   {studentName && <div className="ielts-student-name">👤 {studentName}</div>}
                   <div className="ielts-meta-row">📝 {g.wordCount ?? '—'} từ · 🕒 Chấm lúc {fmtDt(g.gradedAt)}</div>
-                  {g.editedAt && <div className="ielts-meta-row">✏️ GV sửa lúc {fmtDt(g.editedAt)}</div>}
+                  {g.editedAt && <div className="ielts-meta-row">{IC.pencil(12)} GV sửa lúc {fmtDt(g.editedAt)}</div>}
                 </div>
               </div>
 
@@ -293,55 +337,77 @@ export function IeltsGradeModal({ grade, studentName, taskLabel, onClose, editab
                       <div className="ielts-criterion-head">
                         <span className="ielts-criterion-label">{icon} {label}</span>
                         {editing ? (
-                          <select className="ielts-band-select" value={c.band}
+                          <select className="ielts-band-select" value={c.band} autoFocus={pendingFocus === 'band-' + key}
                             onChange={e => setDraft(d => ({ ...d, criteria: { ...d.criteria, [key]: { ...d.criteria[key], band: parseFloat(e.target.value) } } }))}>
                             {BAND_OPTIONS.map(b => <option key={b} value={b}>{b.toFixed(1)}</option>)}
                           </select>
-                        ) : <BandChip band={c.band} />}
+                        ) : (
+                          <span className={editable ? 'ielts-dbl-editable' : ''}
+                            onDoubleClick={editable ? () => startEditing('band-' + key) : undefined}
+                            title={editable ? 'Bấm đúp để sửa band' : undefined}>
+                            <BandChip band={c.band} />
+                          </span>
+                        )}
                       </div>
                       {editing ? (
-                        <textarea className="ielts-criterion-edit-comment" rows={2} value={c.comment}
+                        <textarea className="ielts-criterion-edit-comment" rows={2} value={c.comment} autoFocus={pendingFocus === 'comment-' + key}
                           onChange={e => setDraft(d => ({ ...d, criteria: { ...d.criteria, [key]: { ...d.criteria[key], comment: e.target.value } } }))}
                           placeholder="Nhận xét tiêu chí..." />
-                      ) : (c.comment && <div className="ielts-criterion-comment">{c.comment}</div>)}
+                      ) : (
+                        (c.comment || editable) && (
+                          <div className={`ielts-criterion-comment ${editable ? 'ielts-dbl-editable' : ''}`}
+                            onDoubleClick={editable ? () => startEditing('comment-' + key) : undefined}>
+                            {c.comment || 'Bấm đúp để thêm nhận xét…'}
+                          </div>
+                        )
+                      )}
                     </div>
                   )
                 })}
               </div>
 
-              {/* AI feedback */}
+              {/* Nhận xét */}
               <div className="ielts-section">
-                <h4 className="ielts-section-title">💬 Nhận xét của AI</h4>
+                <h4 className="ielts-section-title">💬 {editable ? 'Nhận xét của AI' : 'Nhận xét'}</h4>
                 {editing ? (
-                  <textarea className="ielts-edit-textarea" rows={4} value={draft.feedback}
+                  <textarea className="ielts-edit-textarea" rows={4} value={draft.feedback} autoFocus={pendingFocus === 'feedback'}
                     onChange={e => setDraft(d => ({ ...d, feedback: e.target.value }))}
                     placeholder="Nhận xét tổng quan..." />
-                ) : (g.feedback && <div className="ielts-feedback">{g.feedback}</div>)}
+                ) : (
+                  (g.feedback || editable) && (
+                    <div className={`ielts-feedback ${editable ? 'ielts-dbl-editable' : ''}`}
+                      onDoubleClick={editable ? () => startEditing('feedback') : undefined}>
+                      {g.feedback || 'Bấm đúp để thêm nhận xét…'}
+                    </div>
+                  )
+                )}
               </div>
 
               {editing ? (
                 <div className="ielts-two-col">
                   <div className="ielts-section ielts-list-box ielts-list-box--good">
                     <h4 className="ielts-section-title">✅ Điểm mạnh (mỗi dòng 1 ý)</h4>
-                    <textarea className="ielts-edit-textarea" rows={4} value={draft.strengths}
+                    <textarea className="ielts-edit-textarea" rows={4} value={draft.strengths} autoFocus={pendingFocus === 'strengths'}
                       onChange={e => setDraft(d => ({ ...d, strengths: e.target.value }))} />
                   </div>
                   <div className="ielts-section ielts-list-box ielts-list-box--warn">
                     <h4 className="ielts-section-title">🔧 Cần cải thiện (mỗi dòng 1 ý)</h4>
-                    <textarea className="ielts-edit-textarea" rows={4} value={draft.improvements}
+                    <textarea className="ielts-edit-textarea" rows={4} value={draft.improvements} autoFocus={pendingFocus === 'improvements'}
                       onChange={e => setDraft(d => ({ ...d, improvements: e.target.value }))} />
                   </div>
                 </div>
               ) : (
                 <div className="ielts-two-col">
                   {g.strengths?.length > 0 && (
-                    <div className="ielts-section ielts-list-box ielts-list-box--good">
+                    <div className={`ielts-section ielts-list-box ielts-list-box--good ${editable ? 'ielts-dbl-editable' : ''}`}
+                      onDoubleClick={editable ? () => startEditing('strengths') : undefined}>
                       <h4 className="ielts-section-title">✅ Điểm mạnh</h4>
                       <ul>{g.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
                     </div>
                   )}
                   {g.improvements?.length > 0 && (
-                    <div className="ielts-section ielts-list-box ielts-list-box--warn">
+                    <div className={`ielts-section ielts-list-box ielts-list-box--warn ${editable ? 'ielts-dbl-editable' : ''}`}
+                      onDoubleClick={editable ? () => startEditing('improvements') : undefined}>
                       <h4 className="ielts-section-title">🔧 Cần cải thiện</h4>
                       <ul>{g.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul>
                     </div>
@@ -352,7 +418,7 @@ export function IeltsGradeModal({ grade, studentName, taskLabel, onClose, editab
               {/* Đề bài trích xuất (Task 1) */}
               {g.imageDesc && (
                 <details className="ielts-section ielts-details">
-                  <summary className="ielts-section-title">🖼 Đề bài AI trích xuất từ ảnh đính kèm</summary>
+                  <summary className="ielts-section-title">🖼 {editable ? 'Đề bài AI trích xuất từ ảnh đính kèm' : 'Đề bài đã trích xuất từ ảnh đính kèm'}</summary>
                   <pre className="ielts-essay-text">{g.imageDesc}</pre>
                 </details>
               )}
@@ -365,6 +431,9 @@ export function IeltsGradeModal({ grade, studentName, taskLabel, onClose, editab
                     text={g.essayText}
                     corrections={editing ? draft.corrections : (g.corrections || [])}
                     editable={editing}
+                    canEdit={editable}
+                    focusIndex={editing ? essayFocusIdx : null}
+                    onRequestEdit={(idx) => startEditing('essay-annot', idx)}
                     onChangeCorrection={(idx, patch) => updateCorrections(list => list.map((c, i) => i === idx ? { ...c, ...patch } : c))}
                     onDeleteCorrection={(idx) => updateCorrections(list => list.filter((_, i) => i !== idx))}
                     onAddCorrection={(item) => updateCorrections(list => [...list, item])}
@@ -374,9 +443,9 @@ export function IeltsGradeModal({ grade, studentName, taskLabel, onClose, editab
 
               {editing && (
                 <div className="ielts-edit-footer">
-                  <button className="mec-btn" onClick={cancelEditing} disabled={saving}>Huỷ</button>
+                  <button className="mec-btn" onClick={cancelEditing} disabled={saving}>{IC.x()} Huỷ</button>
                   <button className="mec-btn ielts-save-btn" onClick={handleSave} disabled={saving}>
-                    {saving ? <><span className="fdz-spinner" style={{ width: 12, height: 12 }} /> Đang lưu…</> : '💾 Lưu thay đổi'}
+                    {saving ? <><span className="fdz-spinner" style={{ width: 12, height: 12 }} /> Đang lưu…</> : <>{IC.check()} Lưu thay đổi</>}
                   </button>
                 </div>
               )}
@@ -438,7 +507,7 @@ export function IeltsStatsTable({ classId, assignmentId, refreshKey = 0, onViewS
                 <td>{r.wordCount ?? '—'}</td>
                 <td>
                   {onViewStudent && r.status === 'done' && (
-                    <button className="ielts-view-btn" onClick={() => onViewStudent(r.studentId)}>Xem</button>
+                    <button className="ielts-view-btn" onClick={() => onViewStudent(r.studentId)}>{IC.eye(12)} Xem</button>
                   )}
                 </td>
               </tr>
@@ -479,7 +548,7 @@ export function GradeButton({ classId, assignmentId, studentId, hasGrade, onDone
   }
   return (
     <button className="mec-btn ielts-grade-btn" onClick={run} disabled={busy}>
-      {busy ? <><span className="fdz-spinner" style={{ width: 12, height: 12 }} /> Đang chấm…</> : (hasGrade ? '🔄 Chấm lại' : '🤖 Chấm AI')}
+      {busy ? <><span className="fdz-spinner" style={{ width: 12, height: 12 }} /> Đang chấm…</> : (hasGrade ? <>{IC.refresh()} Chấm lại</> : <>{IC.zap()} Chấm AI</>)}
     </button>
   )
 }

@@ -534,7 +534,7 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
       {confirmDel && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && !delBusy && setConfirmDel(null)}>
           <div className="modal-box sub-del-modal">
-            <div className="sub-del-icon">🗑️</div>
+            <div className="sub-del-icon">{IC.trash(32)}</div>
             <h3 className="sub-del-title">Xóa bài làm?</h3>
             <p className="sub-del-text">
               Bạn có muốn xóa bài làm của học sinh{' '}
@@ -545,7 +545,7 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
             <div className="sub-del-actions">
               <button className="mec-btn" disabled={delBusy} onClick={() => setConfirmDel(null)}>Hủy</button>
               <button className="mec-btn mec-btn--delete" disabled={delBusy} onClick={handleDelete}>
-                {delBusy ? '⏳…' : '🗑️ Xóa'}
+                {delBusy ? '⏳…' : <>{IC.trash(14)} Xóa</>}
               </button>
             </div>
           </div>
@@ -592,7 +592,7 @@ function ClassFormModal({ initial, defaultGrade = null, onClose, onSave, loading
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-box" style={{ maxWidth: 480 }}>
         <div className="modal-header">
-          <h2>{initial ? '✏️ Sửa lớp học' : '🏫 Tạo lớp học mới'}</h2>
+          <h2>{initial ? <>{IC.pencil(18)} Sửa lớp học</> : '🏫 Tạo lớp học mới'}</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div style={{ padding: '0 24px 24px' }}>

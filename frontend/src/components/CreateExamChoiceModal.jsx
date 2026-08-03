@@ -1,6 +1,16 @@
 import React, { useState } from 'react'
 import { SUBJECTS } from './SubjectBadge.jsx'
 
+function PencilIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      style={{ flexShrink: 0, verticalAlign: 'middle' }}>
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  )
+}
+
 /* Các môn có thể tạo đề (giống loại hình lớp học) */
 const SUBJECT_CHOICES = ['toan', 'ly', 'hoa', 'anh', 'van']
 
@@ -44,7 +54,7 @@ export default function CreateExamChoiceModal({ onChoice, onClose, initialSubjec
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-box cec-box">
         <div className="modal-header">
-          <h2>✏️ Tạo đề thi mới</h2>
+          <h2><PencilIcon /> Tạo đề thi mới</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 

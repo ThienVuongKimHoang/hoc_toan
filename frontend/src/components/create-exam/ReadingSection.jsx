@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import EditableQuestion, { PassageEditor } from './EditableQuestion.jsx'
+import EditableQuestion, { PassageEditor, PencilIcon, TrashIcon } from './EditableQuestion.jsx'
 import ReadingTakeView, { remapPassageBlanks } from '../ReadingTakeView.jsx'
 import './EditableQuestion.css'
 
@@ -146,7 +146,7 @@ export default function ReadingSection({ questions, grade, pointsPerQ, onChange,
         <button type="button"
           className={`rdg-mode-btn ${mode === 'edit' ? 'active' : ''}`}
           onClick={() => setMode('edit')}>
-          ✏️ Chỉnh sửa
+          <PencilIcon /> Chỉnh sửa
         </button>
         <button type="button"
           className={`rdg-mode-btn ${mode === 'preview' ? 'active' : ''}`}
@@ -186,7 +186,7 @@ export default function ReadingSection({ questions, grade, pointsPerQ, onChange,
               <button type="button" className="rdg-del-passage"
                 onClick={() => removePassage(g.gid, g.items.length)}
                 title="Xoá bài đọc và toàn bộ câu hỏi của nó">
-                🗑 Xoá bài đọc
+                <TrashIcon /> Xoá bài đọc
               </button>
             </div>
 

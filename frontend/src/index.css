@@ -10054,6 +10054,13 @@ button { font-family: inherit; }
 }
 .ielts-save-btn { background: #4f46e5; color: #fff; border-color: #4f46e5; }
 
+/* Gợi ý bấm đúp để sửa (chỉ hiện khi giáo viên có quyền sửa) */
+.ielts-dbl-editable { cursor: pointer; border-radius: 6px; transition: outline-color 0.12s; outline: 1.5px dashed transparent; outline-offset: 3px; }
+.ielts-dbl-editable:hover { outline-color: #a5b4fc; background: rgba(165,180,252,0.08); }
+.ielts-band-view, .ielts-view-btn, .ielts-grade-btn, .ielts-annot-pop-actions button {
+  display: inline-flex; align-items: center; gap: 5px;
+}
+
 /* ═══ IELTS Writing — bảng thống kê điểm ═══ */
 .ielts-panel-stats {
   background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px;

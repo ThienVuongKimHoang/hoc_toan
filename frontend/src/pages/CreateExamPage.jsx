@@ -6,11 +6,21 @@ import ExamPreviewModal from '../components/ExamPreviewModal.jsx'
 import { createExam, updateExam } from '../store/examStore.js'
 import { authHeaders } from '../auth/mockUsers.js'
 
+function PencilIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      style={{ flexShrink: 0, verticalAlign: 'middle' }}>
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  )
+}
+
 /* ── Step configs ── */
 const UPLOAD_STEPS = [
   { id: 'upload',     label: 'Upload',          icon: '📤' },
   { id: 'processing', label: 'AI xử lý',        icon: '🤖' },
-  { id: 'review',     label: 'Xem & Chỉnh sửa', icon: '✏️' },
+  { id: 'review',     label: 'Xem & Chỉnh sửa', icon: <PencilIcon size={14} /> },
 ]
 const UPLOAD_ORDER = ['upload', 'processing', 'review']
 
@@ -161,10 +171,10 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
         <div className="ce-header-inner">
           <div className="ce-page-title">
             <h1>
-              {isEditing ? '✏️ Chỉnh sửa đề thi'
+              {isEditing ? <><PencilIcon /> Chỉnh sửa đề thi</>
                 : isMix   ? '🎲 Phối đề ngẫu nhiên'
                 : isManual ? '✍️ Tạo đề thi thủ công'
-                : '✏️ Tạo đề thi mới'}
+                : <><PencilIcon /> Tạo đề thi mới</>}
             </h1>
             <p>
               {isEditing ? `Đang sửa: ${editingExam.title}`

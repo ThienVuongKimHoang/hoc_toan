@@ -3,6 +3,28 @@ import MathText from '../MathText.jsx'
 import MarkerText, { referencedImageIds } from '../MarkerText.jsx'
 import { DIFFICULTY_LEVELS, getLabelGroups } from '../../data/labels.js'
 import './EditableQuestion.css'
+
+export function PencilIcon({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      style={{ flexShrink: 0, verticalAlign: 'middle' }}>
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  )
+}
+
+export function TrashIcon({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+      style={{ flexShrink: 0, verticalAlign: 'middle' }}>
+      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  )
+}
+
 const PASSAGE_SPLIT_THRESHOLD = 300
 /* ─── Convert plain text / old markers → HTML for display ─── */
 // Detects HTML produced by contenteditable (formatting/structural tags only)
@@ -89,7 +111,7 @@ export function PassageEditor({ value, onChange }) {
         ? <div className="eq-passage-formatted" dangerouslySetInnerHTML={{ __html: html }} />
         : <span className="eq-placeholder">Click để nhập nội dung…</span>
       }
-      <span className="eq-edit-hint">✏️</span>
+      <span className="eq-edit-hint"><PencilIcon /></span>
     </div>
   )
 }
@@ -172,7 +194,7 @@ function MathEditField({ value, onChange, placeholder, multiline = true, images 
       {value
         ? (images ? <MarkerText text={value} images={images} showMissingPlaceholder /> : <MathText text={value} />)
         : <span className="eq-placeholder">{placeholder}</span>}
-      <span className="eq-edit-hint">✏️</span>
+      <span className="eq-edit-hint"><PencilIcon /></span>
     </div>
   )
 }
@@ -1399,7 +1421,7 @@ export default function EditableQuestion({
                 {q.question_text
                   ? <MathText text={q.question_text} />
                   : <span className="eq-placeholder">Click để nhập nội dung câu hỏi…</span>}
-                <span className="eq-edit-hint">✏️</span>
+                <span className="eq-edit-hint"><PencilIcon /></span>
               </div>
             )}
           </div>
