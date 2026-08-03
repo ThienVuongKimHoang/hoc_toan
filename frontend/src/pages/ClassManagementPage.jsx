@@ -28,7 +28,7 @@ import SortableDocList from '../components/SortableDocList.jsx'
 import SaveCaptureModal from '../components/SaveCaptureModal.jsx'
 import { isExerciseDoc, sortDocsByOrder } from '../utils/exerciseDocs.js'
 import { extractYoutubeId, youtubeEmbedUrl, youtubeThumbnail, youtubeWatchUrl } from '../utils/youtube.js'
-import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, GradePicker, SubjectPicker, gradeLabel } from '../components/SubjectBadge.jsx'
+import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, GradePicker, SubjectPicker, gradeLabel, NO_GRADE_SUBJECTS } from '../components/SubjectBadge.jsx'
 import { ROLES } from '../auth/mockUsers.js'
 
 /* Avatar học sinh/giáo viên trong kết quả tìm kiếm: user.avatar có thể là URL ảnh Google
@@ -576,16 +576,23 @@ function ClassFormModal({ initial, defaultGrade = null, onClose, onSave, loading
   const [lowScoreThreshold, setLowScoreThreshold] = useState(initial?.settings?.lowScoreThreshold ?? 50)
   const [err, setErr] = useState('')
 
+  const noGradeSubject = NO_GRADE_SUBJECTS.includes(subject)
+
   const toggleDay = (d) => setScheduleDays(prev =>
     prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => a - b))
 
+  const pickSubject = (s) => {
+    setSubject(s)
+    if (NO_GRADE_SUBJECTS.includes(s)) setGrade(null)   // TOEIC/IELTS không phân theo khối
+  }
+
   const submit = () => {
     if (!name.trim()) { setErr('Vui lòng nhập tên lớp.'); return }
-    if (!grade) { setErr('Vui lòng chọn cấp độ (khối lớp).'); return }
+    if (!noGradeSubject && !grade) { setErr('Vui lòng chọn cấp độ (khối lớp).'); return }
     if (!subject) { setErr('Vui lòng chọn môn học.'); return }
     const schedule = scheduleDays.map(d => ({ dayOfWeek: d, startTime, endTime }))
     const settings = { lowScoreThreshold: Number(lowScoreThreshold) || 50 }
-    onSave({ name: name.trim(), description: desc.trim(), grade, subject, joinPassword: password.trim() || null, schedule, settings })
+    onSave({ name: name.trim(), description: desc.trim(), grade: noGradeSubject ? null : grade, subject, joinPassword: password.trim() || null, schedule, settings })
   }
 
   return (
@@ -601,14 +608,24 @@ function ClassFormModal({ initial, defaultGrade = null, onClose, onSave, loading
             value={name} onChange={e => setName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && submit()} autoFocus />
 
-          <label className="cm-label" style={{ marginTop: 14 }}>Cấp độ (khối lớp) *</label>
-          <GradePicker value={grade} onChange={setGrade} />
+          {!noGradeSubject && (
+            <>
+              <label className="cm-label" style={{ marginTop: 14 }}>Cấp độ (khối lớp) *</label>
+              <GradePicker value={grade} onChange={setGrade} />
+            </>
+          )}
 
           <label className="cm-label" style={{ marginTop: 14 }}>Môn học của lớp * <span style={{ color: '#94a3b8', fontWeight: 400 }}>(mỗi môn là 1 lớp)</span></label>
-          <SubjectPicker value={subject} onChange={setSubject} />
+          <SubjectPicker value={subject} onChange={pickSubject} />
           {subject === 'anh' && (
             <div className="cm-info-note" style={{ marginTop: 8 }}>
               🇬🇧 Môn Tiếng Anh: bài tập nộp file có thể bật <strong>chấm điểm IELTS Writing bằng AI</strong>.
+            </div>
+          )}
+          {noGradeSubject && (
+            <div className="cm-info-note" style={{ marginTop: 8 }}>
+              {SUBJECTS[subject]?.icon} Lớp {SUBJECTS[subject]?.label} không phân theo khối — học sinh mọi khối đều tham gia được.
+              {subject === 'ielts' && <> Bài tập nộp file có thể bật <strong>chấm điểm IELTS Writing bằng AI</strong>.</>}
             </div>
           )}
 
@@ -792,7 +809,7 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
     })
     return () => { alive = false }
   }, [cls.id, teacherId])
-  const isEnglishClass = (subject || cls?.subject) === 'anh'
+  const isEnglishClass = ['anh', 'ielts'].includes(subject || cls?.subject)
   // Ưu tiên đề đúng môn của lớp lên đầu, trong đó đề đúng khối của lớp lên trước —
   // .sort() ổn định nên thứ tự gốc (mới tạo trước) vẫn giữ nguyên trong từng nhóm.
   const targetSubject = subject || cls?.subject || null

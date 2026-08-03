@@ -12,7 +12,7 @@ function PencilIcon({ size = 18 }) {
 }
 
 /* Các môn có thể tạo đề (giống loại hình lớp học) */
-const SUBJECT_CHOICES = ['toan', 'ly', 'hoa', 'anh', 'van']
+const SUBJECT_CHOICES = ['toan', 'ly', 'hoa', 'anh', 'toeic', 'ielts', 'thieunhi', 'ngupap', 'van']
 
 const CHOICES = [
   {

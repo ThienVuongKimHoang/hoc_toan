@@ -21,11 +21,18 @@ export const SUBJECTS = {
   ly: { label: 'Vật lý', icon: imgIcon('/img/ly.jpg') },
   hoa: { label: 'Hóa học', icon: imgIcon('/img/hoa.jpg') },
   anh: { label: 'Tiếng Anh', icon: '🇬🇧' },
+  toeic: { label: 'TOEIC', icon: '🎯' },
+  ielts: { label: 'IELTS', icon: '🌍' },
+  thieunhi: { label: 'Tiếng Anh thiếu nhi', icon: '🧸' },
+  ngupap: { label: 'Ngữ pháp Tiếng Anh', icon: '🔤' },
   van: { label: 'Ngữ văn', icon: '📖' },
   khac: { label: 'Khác', icon: '📚' },
 }
 
-export const SUBJECT_ORDER = ['toan', 'ly', 'hoa', 'anh', 'van', 'khac']
+export const SUBJECT_ORDER = ['toan', 'ly', 'hoa', 'anh', 'toeic', 'ielts', 'thieunhi', 'ngupap', 'van', 'khac']
+
+/** Các môn không phân theo khối — mọi học sinh mọi khối đều tham gia được. */
+export const NO_GRADE_SUBJECTS = ['toeic', 'ielts', 'thieunhi', 'ngupap']
 
 /** Cấp độ (khối lớp) — học sinh chọn khi đăng ký, lớp gắn với một cấp độ.
  *  Giá trị là chuỗi '1'..'12'; nhãn hiển thị "Lớp N". */
