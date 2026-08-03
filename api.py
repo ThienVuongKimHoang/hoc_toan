@@ -2426,6 +2426,28 @@ async def grade_submission_endpoint(cls_id: str, asgn_id: str, student_id: str,
     return {"ok": True, "aiGrade": grade}
 
 
+@app.put("/api/classes/{cls_id}/assignments/{asgn_id}/grade/{student_id}")
+async def edit_ai_grade_endpoint(cls_id: str, asgn_id: str, student_id: str, request: Request,
+                                  caller: dict = Depends(require_auth)):
+    """Giáo viên sửa tay kết quả chấm AI (band, nhận xét, chú thích lỗi trong bài làm)."""
+    cls0 = db.get_class(cls_id)
+    if cls0 is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, caller["id"]):
+        return JSONResponse({"error": "Không có quyền sửa điểm của lớp này"}, status_code=403)
+    asgn = _find_assignment(cls0, asgn_id)
+    if not asgn:
+        return JSONResponse({"error": "Không tìm thấy bài tập"}, status_code=404)
+    sub = next((s for s in asgn.get("submissions", []) if str(s.get("studentId")) == str(student_id)), None)
+    if not sub or (sub.get("aiGrade") or {}).get("status") != "done":
+        return JSONResponse({"error": "Bài này chưa có kết quả chấm AI để sửa"}, status_code=422)
+
+    patch = await request.json()
+    updated = ielts.apply_manual_edit(sub["aiGrade"], patch, caller["id"])
+    _save_ai_grade(cls_id, asgn_id, student_id, updated)
+    return {"ok": True, "aiGrade": updated}
+
+
 @app.get("/api/classes/{cls_id}/assignments/{asgn_id}/grades-summary")
 async def grades_summary_endpoint(cls_id: str, asgn_id: str):
     """Bảng tóm tắt thống kê điểm AI từng học sinh (học sinh & giáo viên đều xem được)."""

@@ -518,7 +518,9 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
       {viewing && <FileViewerModal file={viewing} onClose={() => setViewing(null)} />}
       {viewGrade && (
         <IeltsGradeModal grade={viewGrade.aiGrade} studentName={viewGrade.studentName}
-          taskLabel={taskLabel} onClose={() => setViewGrade(null)} />
+          taskLabel={taskLabel} onClose={() => setViewGrade(null)}
+          editable classId={classId} assignmentId={assignment.id} studentId={viewGrade.studentId}
+          onSaved={(updated) => { setViewGrade(v => v ? { ...v, aiGrade: updated } : v); reload(); setStatsKey(k => k + 1) }} />
       )}
       {gradingSub && data?.examObj && (
         <GradeEssayModal

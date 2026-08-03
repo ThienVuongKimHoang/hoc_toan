@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { getGradesSummary, gradeSubmission } from '../store/classStore.js'
+import React, { useEffect, useRef, useState } from 'react'
+import { getGradesSummary, gradeSubmission, updateAiGrade } from '../store/classStore.js'
 
 /* ─── Helpers ─── */
 export const CRITERIA_META = (criterionLabel) => ([
@@ -8,6 +8,7 @@ export const CRITERIA_META = (criterionLabel) => ([
   ['lexical_resource',   'Lexical Resource',                '📚'],
   ['grammatical_range',  'Grammar Range & Accuracy',        '✏️'],
 ])
+const CRIT_KEYS = ['task_response', 'coherence_cohesion', 'lexical_resource', 'grammatical_range']
 
 export function bandColor(b) {
   if (b == null) return '#94a3b8'
@@ -28,18 +29,234 @@ export function BandChip({ band, size = 'md' }) {
 
 const fmtDt = iso => iso ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
 
+const BAND_OPTIONS = Array.from({ length: 19 }, (_, i) => i * 0.5)
+
+function overallBandFromCriteria(criteria) {
+  const bands = CRIT_KEYS.map(k => criteria?.[k]?.band ?? 0)
+  const avg = bands.reduce((a, b) => a + b, 0) / bands.length
+  return Math.floor(avg * 2 + 0.5) / 2
+}
+
+/* ─── Chú thích lỗi kiểu Google Docs: tô màu trong bài + popover khi bấm ─── */
+export const ANNOT_TYPES = {
+  grammar:   'Ngữ pháp',
+  vocab:     'Từ vựng',
+  coherence: 'Liên kết',
+  task:      'Nội dung',
+}
+
+function rangeToOffsets(container, range) {
+  let start = null, end = null, acc = 0
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+  let node
+  while ((node = walker.nextNode())) {
+    const len = node.nodeValue.length
+    if (node === range.startContainer) start = acc + range.startOffset
+    if (node === range.endContainer) end = acc + range.endOffset
+    acc += len
+  }
+  return { start, end }
+}
+
+function buildSegments(text, corrections, creating) {
+  const located = corrections
+    .map((c, i) => ({ ...c, _idx: i }))
+    .filter(c => c.start != null && c.end != null && c.start < c.end && c.end <= text.length)
+  if (creating) located.push({ ...creating, _idx: 'new', _creating: true })
+  located.sort((a, b) => a.start - b.start)
+
+  const segments = []
+  let cursor = 0
+  for (const c of located) {
+    if (c.start < cursor) continue
+    if (c.start > cursor) segments.push({ kind: 'text', text: text.slice(cursor, c.start) })
+    segments.push({ kind: 'mark', text: text.slice(c.start, c.end), corr: c })
+    cursor = c.end
+  }
+  if (cursor < text.length) segments.push({ kind: 'text', text: text.slice(cursor) })
+  return segments
+}
+
+function AnnotEditPopover({ isNew, quote, fix: initFix = '', explain: initExplain = '', type: initType = 'grammar', onSubmit, onDelete, onCancel }) {
+  const [fix, setFix] = useState(initFix)
+  const [explain, setExplain] = useState(initExplain)
+  const [type, setType] = useState(initType || 'grammar')
+  return (
+    <div className="ielts-annot-popover ielts-annot-popover--edit" onClick={e => e.stopPropagation()} onMouseUp={e => e.stopPropagation()}>
+      <div className="ielts-annot-pop-wrong">✗ {quote}</div>
+      <select className="ielts-annot-pop-type" value={type} onChange={e => setType(e.target.value)}>
+        {Object.entries(ANNOT_TYPES).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+      </select>
+      <input className="ielts-annot-pop-input" value={fix} onChange={e => setFix(e.target.value)}
+        placeholder="Sửa thành..." />
+      <textarea className="ielts-annot-pop-textarea" value={explain} onChange={e => setExplain(e.target.value)}
+        placeholder="Giải thích ngắn (tiếng Việt)..." rows={2} />
+      <div className="ielts-annot-pop-actions">
+        {!isNew && <button type="button" className="ielts-annot-pop-del" onClick={onDelete}>🗑 Xoá</button>}
+        <button type="button" className="ielts-annot-pop-cancel" onClick={onCancel}>Huỷ</button>
+        <button type="button" className="ielts-annot-pop-save" disabled={!fix.trim()}
+          onClick={() => onSubmit({ fix: fix.trim(), explain: explain.trim(), type })}>
+          {isNew ? '+ Thêm' : 'Lưu'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function AnnotatedEssay({ text, corrections, editable, onChangeCorrection, onDeleteCorrection, onAddCorrection }) {
+  const wrapRef = useRef(null)
+  const [activeIdx, setActiveIdx] = useState(null)
+  const [creating, setCreating] = useState(null)
+
+  useEffect(() => {
+    if (activeIdx == null && !creating) return
+    const handler = (e) => {
+      if (e.target.closest('.ielts-annot, .ielts-annot-popover')) return
+      setActiveIdx(null); setCreating(null)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [activeIdx, creating])
+
+  const located = corrections.filter(c => c.start != null && c.end != null)
+  const unlocated = corrections.map((c, i) => ({ ...c, _idx: i })).filter(c => c.start == null || c.end == null)
+
+  const handleMouseUp = () => {
+    if (!editable) return
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return
+    const range = sel.getRangeAt(0)
+    if (!wrapRef.current || !wrapRef.current.contains(range.commonAncestorContainer)) return
+    let { start, end } = rangeToOffsets(wrapRef.current, range)
+    if (start == null || end == null) return
+    if (start > end) [start, end] = [end, start]
+    while (start < end && /\s/.test(text[start])) start++
+    while (end > start && /\s/.test(text[end - 1])) end--
+    if (end - start < 2) return
+    if (located.some(c => start < c.end && c.start < end)) return
+    sel.removeAllRanges()
+    setActiveIdx(null)
+    setCreating({ start, end, quote: text.slice(start, end) })
+  }
+
+  const segments = buildSegments(text, corrections, creating)
+
+  return (
+    <div className={`ielts-essay-wrap ${editable ? 'ielts-essay-wrap--editable' : ''}`} ref={wrapRef} onMouseUp={handleMouseUp}>
+      {segments.map((seg, i) => seg.kind === 'text'
+        ? <React.Fragment key={i}>{seg.text}</React.Fragment>
+        : (
+          <mark key={i}
+            className={`ielts-annot ielts-annot--${seg.corr._creating ? 'pending' : (seg.corr.type || 'grammar')} ${activeIdx === seg.corr._idx ? 'ielts-annot--active' : ''}`}
+            onClick={() => { if (seg.corr._creating) return; setCreating(null); setActiveIdx(p => p === seg.corr._idx ? null : seg.corr._idx) }}>
+            {seg.text}
+            {seg.corr._creating && (
+              <AnnotEditPopover isNew quote={seg.corr.quote}
+                onSubmit={patch => { onAddCorrection({ error: seg.corr.quote, start: seg.corr.start, end: seg.corr.end, ...patch }); setCreating(null) }}
+                onCancel={() => setCreating(null)} />
+            )}
+            {!seg.corr._creating && activeIdx === seg.corr._idx && (
+              editable ? (
+                <AnnotEditPopover quote={seg.corr.error} fix={seg.corr.fix} explain={seg.corr.explain} type={seg.corr.type}
+                  onSubmit={patch => { onChangeCorrection(seg.corr._idx, patch); setActiveIdx(null) }}
+                  onDelete={() => { onDeleteCorrection(seg.corr._idx); setActiveIdx(null) }}
+                  onCancel={() => setActiveIdx(null)} />
+              ) : (
+                <div className="ielts-annot-popover" onClick={e => e.stopPropagation()}>
+                  <div className="ielts-annot-pop-wrong">✗ {seg.corr.error}</div>
+                  <div className="ielts-annot-pop-fix">✓ {seg.corr.fix}</div>
+                  {seg.corr.explain && <div className="ielts-annot-pop-explain">{seg.corr.explain}</div>}
+                </div>
+              )
+            )}
+          </mark>
+        )
+      )}
+      {editable && (
+        <div className="ielts-annot-hint">💡 Bôi đen một đoạn trong bài để thêm ghi chú lỗi mới</div>
+      )}
+      {unlocated.length > 0 && (
+        <div className="ielts-annot-unlocated">
+          <div className="ielts-annot-unlocated-title">📌 Ghi chú khác (không xác định được vị trí trong bài)</div>
+          {unlocated.map(c => (
+            <div key={c._idx} className="ielts-correction">
+              <div className="ielts-corr-error">✗ {c.error}</div>
+              <div className="ielts-corr-fix">✓ {c.fix}</div>
+              {c.explain && <div className="ielts-corr-explain">{c.explain}</div>}
+              {editable && <button type="button" className="ielts-corr-del" onClick={() => onDeleteCorrection(c._idx)}>🗑 Xoá</button>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function makeDraft(g) {
+  return {
+    criteria: CRIT_KEYS.reduce((acc, k) => {
+      acc[k] = { band: g.criteria?.[k]?.band ?? 0, comment: g.criteria?.[k]?.comment || '' }
+      return acc
+    }, {}),
+    feedback: g.feedback || '',
+    strengths: (g.strengths || []).join('\n'),
+    improvements: (g.improvements || []).join('\n'),
+    corrections: (g.corrections || []).map(c => ({ ...c })),
+  }
+}
+
 /* ─── Kết quả chấm chi tiết (học sinh & giáo viên đều xem được) ─── */
-export function IeltsGradeModal({ grade, studentName, taskLabel, onClose }) {
-  const g = grade || {}
+export function IeltsGradeModal({ grade, studentName, taskLabel, onClose, editable = false, classId, assignmentId, studentId, onSaved }) {
+  const [current, setCurrent] = useState(grade || {})
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { setCurrent(grade || {}); setEditing(false) }, [grade])
+
+  const g = current
   const crit = g.criteria || {}
   const meta = CRITERIA_META(g.criterionLabel)
+
+  const startEditing = () => { setDraft(makeDraft(g)); setEditing(true) }
+  const cancelEditing = () => { setDraft(null); setEditing(false) }
+
+  const updateCorrections = (updater) => setDraft(d => ({ ...d, corrections: updater(d.corrections) }))
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const patch = {
+        criteria: draft.criteria,
+        feedback: draft.feedback,
+        strengths: draft.strengths.split('\n').map(s => s.trim()).filter(Boolean),
+        improvements: draft.improvements.split('\n').map(s => s.trim()).filter(Boolean),
+        corrections: draft.corrections,
+      }
+      const res = await updateAiGrade(classId, assignmentId, studentId, patch)
+      setCurrent(res.aiGrade)
+      setEditing(false)
+      onSaved?.(res.aiGrade)
+    } catch (e) {
+      alert(e?.message || 'Lưu chỉnh sửa thất bại')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const liveOverall = editing ? overallBandFromCriteria(draft.criteria) : g.overallBand
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-box ielts-modal">
         <div className="modal-header">
           <h2>🤖 Kết quả chấm AI {taskLabel ? `· ${taskLabel}` : ''}</h2>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <div className="ielts-modal-head-actions">
+            {editable && g.status === 'done' && !editing && (
+              <button className="mec-btn" onClick={startEditing}>✏️ Sửa</button>
+            )}
+            <button className="modal-close" onClick={onClose}>✕</button>
+          </div>
         </div>
 
         <div className="ielts-modal-body">
@@ -54,70 +271,81 @@ export function IeltsGradeModal({ grade, studentName, taskLabel, onClose }) {
             <>
               {/* Overall band */}
               <div className="ielts-overall">
-                <div className="ielts-overall-circle" style={{ borderColor: bandColor(g.overallBand) }}>
-                  <div className="ielts-overall-score" style={{ color: bandColor(g.overallBand) }}>
-                    {g.overallBand?.toFixed(1)}
+                <div className="ielts-overall-circle" style={{ borderColor: bandColor(liveOverall) }}>
+                  <div className="ielts-overall-score" style={{ color: bandColor(liveOverall) }}>
+                    {liveOverall?.toFixed(1)}
                   </div>
                   <div className="ielts-overall-label">Overall Band</div>
                 </div>
                 <div className="ielts-overall-info">
                   {studentName && <div className="ielts-student-name">👤 {studentName}</div>}
                   <div className="ielts-meta-row">📝 {g.wordCount ?? '—'} từ · 🕒 Chấm lúc {fmtDt(g.gradedAt)}</div>
+                  {g.editedAt && <div className="ielts-meta-row">✏️ GV sửa lúc {fmtDt(g.editedAt)}</div>}
                 </div>
               </div>
 
               {/* 4 criteria */}
               <div className="ielts-criteria-grid">
                 {meta.map(([key, label, icon]) => {
-                  const c = crit[key] || {}
+                  const c = editing ? draft.criteria[key] : (crit[key] || {})
                   return (
                     <div key={key} className="ielts-criterion-card">
                       <div className="ielts-criterion-head">
                         <span className="ielts-criterion-label">{icon} {label}</span>
-                        <BandChip band={c.band} />
+                        {editing ? (
+                          <select className="ielts-band-select" value={c.band}
+                            onChange={e => setDraft(d => ({ ...d, criteria: { ...d.criteria, [key]: { ...d.criteria[key], band: parseFloat(e.target.value) } } }))}>
+                            {BAND_OPTIONS.map(b => <option key={b} value={b}>{b.toFixed(1)}</option>)}
+                          </select>
+                        ) : <BandChip band={c.band} />}
                       </div>
-                      {c.comment && <div className="ielts-criterion-comment">{c.comment}</div>}
+                      {editing ? (
+                        <textarea className="ielts-criterion-edit-comment" rows={2} value={c.comment}
+                          onChange={e => setDraft(d => ({ ...d, criteria: { ...d.criteria, [key]: { ...d.criteria[key], comment: e.target.value } } }))}
+                          placeholder="Nhận xét tiêu chí..." />
+                      ) : (c.comment && <div className="ielts-criterion-comment">{c.comment}</div>)}
                     </div>
                   )
                 })}
               </div>
 
               {/* AI feedback */}
-              {g.feedback && (
-                <div className="ielts-section">
-                  <h4 className="ielts-section-title">💬 Nhận xét của AI</h4>
-                  <div className="ielts-feedback">{g.feedback}</div>
-                </div>
-              )}
-
-              <div className="ielts-two-col">
-                {g.strengths?.length > 0 && (
-                  <div className="ielts-section ielts-list-box ielts-list-box--good">
-                    <h4 className="ielts-section-title">✅ Điểm mạnh</h4>
-                    <ul>{g.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
-                  </div>
-                )}
-                {g.improvements?.length > 0 && (
-                  <div className="ielts-section ielts-list-box ielts-list-box--warn">
-                    <h4 className="ielts-section-title">🔧 Cần cải thiện</h4>
-                    <ul>{g.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul>
-                  </div>
-                )}
+              <div className="ielts-section">
+                <h4 className="ielts-section-title">💬 Nhận xét của AI</h4>
+                {editing ? (
+                  <textarea className="ielts-edit-textarea" rows={4} value={draft.feedback}
+                    onChange={e => setDraft(d => ({ ...d, feedback: e.target.value }))}
+                    placeholder="Nhận xét tổng quan..." />
+                ) : (g.feedback && <div className="ielts-feedback">{g.feedback}</div>)}
               </div>
 
-              {/* Corrections */}
-              {g.corrections?.length > 0 && (
-                <div className="ielts-section">
-                  <h4 className="ielts-section-title">🩹 Lỗi tiêu biểu & cách sửa</h4>
-                  <div className="ielts-corrections">
-                    {g.corrections.map((c, i) => (
-                      <div key={i} className="ielts-correction">
-                        <div className="ielts-corr-error">✗ {c.error}</div>
-                        <div className="ielts-corr-fix">✓ {c.fix}</div>
-                        {c.explain && <div className="ielts-corr-explain">{c.explain}</div>}
-                      </div>
-                    ))}
+              {editing ? (
+                <div className="ielts-two-col">
+                  <div className="ielts-section ielts-list-box ielts-list-box--good">
+                    <h4 className="ielts-section-title">✅ Điểm mạnh (mỗi dòng 1 ý)</h4>
+                    <textarea className="ielts-edit-textarea" rows={4} value={draft.strengths}
+                      onChange={e => setDraft(d => ({ ...d, strengths: e.target.value }))} />
                   </div>
+                  <div className="ielts-section ielts-list-box ielts-list-box--warn">
+                    <h4 className="ielts-section-title">🔧 Cần cải thiện (mỗi dòng 1 ý)</h4>
+                    <textarea className="ielts-edit-textarea" rows={4} value={draft.improvements}
+                      onChange={e => setDraft(d => ({ ...d, improvements: e.target.value }))} />
+                  </div>
+                </div>
+              ) : (
+                <div className="ielts-two-col">
+                  {g.strengths?.length > 0 && (
+                    <div className="ielts-section ielts-list-box ielts-list-box--good">
+                      <h4 className="ielts-section-title">✅ Điểm mạnh</h4>
+                      <ul>{g.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                    </div>
+                  )}
+                  {g.improvements?.length > 0 && (
+                    <div className="ielts-section ielts-list-box ielts-list-box--warn">
+                      <h4 className="ielts-section-title">🔧 Cần cải thiện</h4>
+                      <ul>{g.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -129,12 +357,28 @@ export function IeltsGradeModal({ grade, studentName, taskLabel, onClose }) {
                 </details>
               )}
 
-              {/* Bài làm học sinh */}
+              {/* Bài làm học sinh — tô màu lỗi + ghi chú kiểu Google Docs */}
               {g.essayText && (
                 <details className="ielts-section ielts-details" open>
-                  <summary className="ielts-section-title">📄 Bài làm của học sinh ({g.wordCount} từ)</summary>
-                  <pre className="ielts-essay-text">{g.essayText}</pre>
+                  <summary className="ielts-section-title">📄 Bài làm của học sinh ({g.wordCount} từ) — bấm vào đoạn tô màu để xem ghi chú lỗi</summary>
+                  <AnnotatedEssay
+                    text={g.essayText}
+                    corrections={editing ? draft.corrections : (g.corrections || [])}
+                    editable={editing}
+                    onChangeCorrection={(idx, patch) => updateCorrections(list => list.map((c, i) => i === idx ? { ...c, ...patch } : c))}
+                    onDeleteCorrection={(idx) => updateCorrections(list => list.filter((_, i) => i !== idx))}
+                    onAddCorrection={(item) => updateCorrections(list => [...list, item])}
+                  />
                 </details>
+              )}
+
+              {editing && (
+                <div className="ielts-edit-footer">
+                  <button className="mec-btn" onClick={cancelEditing} disabled={saving}>Huỷ</button>
+                  <button className="mec-btn ielts-save-btn" onClick={handleSave} disabled={saving}>
+                    {saving ? <><span className="fdz-spinner" style={{ width: 12, height: 12 }} /> Đang lưu…</> : '💾 Lưu thay đổi'}
+                  </button>
+                </div>
               )}
             </>
           )}

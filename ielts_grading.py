@@ -191,6 +191,77 @@ def _overall_band(bands: list[float]) -> float:
     return math.floor(avg * 2 + 0.5) / 2
 
 
+CORRECTION_TYPES = ("grammar", "vocab", "coherence", "task")
+
+
+def _normalize_ws(s: str) -> str:
+    return re.sub(r"\s+", " ", s.strip())
+
+
+def locate_corrections(essay_text: str, corrections: list[dict]) -> list[dict]:
+    """
+    Gán start/end (offset ký tự trong essay_text) cho từng correction dựa trên
+    trường "error" (trích dẫn nguyên văn từ bài làm). Thử khớp chính xác →
+    không phân biệt hoa/thường → chuẩn hoá khoảng trắng. Bỏ qua vị trí đã
+    dùng để tránh 2 chú thích chồng lấn nhau. Không tìm thấy → start/end = None.
+    Sắp xếp kết quả theo start (None xếp cuối) để khớp thứ tự đọc bài.
+    """
+    occupied: list[tuple[int, int]] = []
+
+    def overlaps(a: int, b: int) -> bool:
+        return any(a < e and s < b for s, e in occupied)
+
+    def find(quote: str) -> Optional[tuple[int, int]]:
+        if not quote:
+            return None
+        for hay, needle, ci in (
+            (essay_text, quote, False),
+            (essay_text.lower(), quote.lower(), True),
+        ):
+            start = 0
+            while True:
+                idx = hay.find(needle, start)
+                if idx == -1:
+                    break
+                end = idx + len(needle)
+                if not overlaps(idx, end):
+                    return idx, end
+                start = idx + 1
+        # Fallback: chuẩn hoá khoảng trắng rồi khớp bằng regex xấp xỉ.
+        norm_needle = re.escape(_normalize_ws(quote))
+        norm_needle = norm_needle.replace(r"\ ", r"\s+")
+        for m in re.finditer(norm_needle, essay_text, re.IGNORECASE):
+            idx, end = m.start(), m.end()
+            if not overlaps(idx, end):
+                return idx, end
+        return None
+
+    out = []
+    for c in corrections:
+        quote = str(c.get("error") or "").strip()
+        start_in, end_in = c.get("start"), c.get("end")
+        pos = None
+        if (isinstance(start_in, int) and isinstance(end_in, int)
+                and 0 <= start_in < end_in <= len(essay_text)
+                and essay_text[start_in:end_in] == quote
+                and not overlaps(start_in, end_in)):
+            pos = (start_in, end_in)          # offset client gửi đã khớp y hệt essay_text → tin dùng thẳng
+        if pos is None:
+            pos = find(quote)
+        item = dict(c)
+        if pos:
+            item["start"], item["end"] = pos
+            occupied.append(pos)
+        else:
+            item["start"], item["end"] = None, None
+        if item.get("type") not in CORRECTION_TYPES:
+            item["type"] = "grammar"
+        out.append(item)
+
+    out.sort(key=lambda c: c["start"] if c["start"] is not None else math.inf)
+    return out
+
+
 def grade_essay(client, task_type: str, question_text: str, image_desc: str, essay_text: str) -> dict:
     """Chấm bài theo band descriptors. Trả về dict kết quả đầy đủ (aiGrade)."""
     criteria_txt = load_criteria(task_type)
@@ -217,7 +288,11 @@ def grade_essay(client, task_type: str, question_text: str, image_desc: str, ess
 - Assign a band (0-9, in 0.5 steps) for each of the 4 criteria. Be strict and realistic like a real examiner; penalize under-length essays and memorized/irrelevant responses per the descriptors.
 - "comment" fields, "feedback", "strengths", "improvements" and "explain" MUST be written in VIETNAMESE (tiếng Việt) so the student understands. Quote English phrases from the essay where relevant.
 - "feedback": nhận xét tổng quan chi tiết 4-8 câu.
-- "corrections": 3-8 lỗi tiêu biểu nhất trong bài (ngữ pháp/từ vựng), mỗi lỗi gồm câu gốc, câu sửa, giải thích ngắn.
+- "corrections": 3-8 lỗi tiêu biểu nhất trong bài. MỖI lỗi gồm:
+  - "error": trích dẫn NGUYÊN VĂN (copy chính xác từng ký tự, không diễn giải lại, không sửa chính tả) một cụm ngắn (2-8 từ) LẤY TỪ ĐÚNG bài luận ở trên chứa lỗi đó — bắt buộc phải tìm thấy y hệt trong bài luận.
+  - "fix": cụm đã sửa đúng, thay thế cho "error".
+  - "explain": giải thích ngắn gọn bằng tiếng Việt tại sao sai.
+  - "type": một trong "grammar" (ngữ pháp), "vocab" (từ vựng/collocation), "coherence" (liên kết/mạch lạc), "task" (nội dung/đề bài).
 
 Return ONLY valid JSON with exactly this structure:
 {{
@@ -230,7 +305,7 @@ Return ONLY valid JSON with exactly this structure:
   "feedback": "...",
   "strengths": ["...", "..."],
   "improvements": ["...", "..."],
-  "corrections": [{{"error": "...", "fix": "...", "explain": "..."}}]
+  "corrections": [{{"error": "...", "fix": "...", "explain": "...", "type": "grammar"}}]
 }}"""
 
     # Model đôi khi sinh JSON lỗi → thử JSON mode trước, lỗi thì thử lại ở plain mode
@@ -274,12 +349,52 @@ Return ONLY valid JSON with exactly this structure:
         "feedback": str(data.get("feedback") or ""),
         "strengths": [str(s) for s in (data.get("strengths") or [])],
         "improvements": [str(s) for s in (data.get("improvements") or [])],
-        "corrections": [
+        "corrections": locate_corrections(essay_text, [
             {"error": str(c.get("error") or ""), "fix": str(c.get("fix") or ""),
-             "explain": str(c.get("explain") or "")}
+             "explain": str(c.get("explain") or ""), "type": str(c.get("type") or "")}
             for c in (data.get("corrections") or []) if isinstance(c, dict)
-        ],
+        ]),
     }
+
+
+def apply_manual_edit(existing: dict, patch: dict, editor_id) -> dict:
+    """
+    Áp bản sửa tay của giáo viên lên một kết quả chấm đã có (status == "done").
+    Dùng lại đúng logic clamp band / tính overallBand / định vị corrections với
+    AI chấm, để hai đường (AI chấm và GV sửa tay) luôn cho ra dữ liệu nhất quán.
+    patch có thể chỉ gồm một phần: criteria, feedback, strengths, improvements, corrections.
+    """
+    essay_text = existing.get("essayText", "")
+
+    crit_in = patch.get("criteria") or {}
+    existing_crit = existing.get("criteria") or {}
+    criteria = {}
+    for key in CRITERIA_KEYS:
+        c = crit_in.get(key) or existing_crit.get(key) or {}
+        criteria[key] = {"band": _clamp_band(c.get("band")), "comment": str(c.get("comment") or "")}
+
+    corrections_in = patch.get("corrections")
+    if corrections_in is None:
+        corrections_in = existing.get("corrections") or []
+    corrections = locate_corrections(essay_text, [
+        {"error": str(c.get("error") or ""), "fix": str(c.get("fix") or ""),
+         "explain": str(c.get("explain") or ""), "type": str(c.get("type") or ""),
+         "start": c.get("start"), "end": c.get("end")}
+        for c in corrections_in if isinstance(c, dict) and str(c.get("error") or "").strip()
+    ])
+
+    updated = dict(existing)
+    updated.update({
+        "criteria": criteria,
+        "overallBand": _overall_band([criteria[k]["band"] for k in CRITERIA_KEYS]),
+        "feedback": str(patch["feedback"]) if patch.get("feedback") is not None else existing.get("feedback", ""),
+        "strengths": [str(s) for s in patch["strengths"]] if patch.get("strengths") is not None else (existing.get("strengths") or []),
+        "improvements": [str(s) for s in patch["improvements"]] if patch.get("improvements") is not None else (existing.get("improvements") or []),
+        "corrections": corrections,
+        "editedBy": editor_id,
+        "editedAt": datetime.now(timezone.utc).isoformat(),
+    })
+    return updated
 
 
 def run_grading(client, assignment: dict, submission: dict, docs_dir: Path) -> dict:

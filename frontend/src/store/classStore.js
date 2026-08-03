@@ -226,6 +226,16 @@ export async function gradeSubmission(classId, assignmentId, studentId) {
   return data
 }
 
+/** Giáo viên sửa tay kết quả chấm AI (band/nhận xét/chú thích lỗi) */
+export async function updateAiGrade(classId, assignmentId, studentId, patch) {
+  const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/grade/${studentId}`, {
+    method: 'PUT', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(patch)
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'Lưu chỉnh sửa thất bại')
+  return data
+}
+
 /** Bảng tóm tắt thống kê điểm AI từng học sinh */
 export async function getGradesSummary(classId, assignmentId) {
   const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/grades-summary`)
