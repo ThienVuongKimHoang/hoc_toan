@@ -13,6 +13,9 @@ export const SUBJECT_BG = {
   toan: '/img/toan.jpg',
   ly: '/img/ly.jpg',
   hoa: '/img/hoa.jpg',
+  toeic: '/img/toeic.webp',
+  ielts: '/img/ielts.webp',
+  thieunhi: '/img/thieu_nhi.jpeg',
 }
 
 /** Loại hình lớp học — dùng chung cho trang giáo viên & học sinh */

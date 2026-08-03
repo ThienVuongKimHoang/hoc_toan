@@ -6944,6 +6944,10 @@ button { font-family: inherit; }
 .cm-subject-card[data-subject="ly"]   { --subj: #7C3AED; }
 .cm-subject-card[data-subject="hoa"]  { --subj: #059669; }
 .cm-subject-card[data-subject="anh"]  { --subj: #E11D48; }
+.cm-subject-card[data-subject="toeic"] { --subj: #EA580C; }
+.cm-subject-card[data-subject="ielts"] { --subj: #0891B2; }
+.cm-subject-card[data-subject="thieunhi"] { --subj: #DB2777; }
+.cm-subject-card[data-subject="ngupap"]   { --subj: #65A30D; }
 .cm-subject-card[data-subject="van"]  { --subj: #D97706; }
 .cm-subject-card[data-subject="khac"] { --subj: #64748B; }
 .cm-subject-card::before {
