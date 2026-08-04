@@ -56,6 +56,7 @@ FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
 
 import database as db
 import ielts_grading as ielts
+import listening_grading as listening
 
 # task_id → {"status": pending|running|done|error, "progress": [...], "result": ..., "error": ...}
 TASKS: dict[str, dict] = {}
@@ -2158,6 +2159,8 @@ async def add_assignment_endpoint(cls_id: str, request: Request, caller: dict = 
         "shuffleQuestions": bool(body.get("shuffleQuestions", False)),  # trộn thứ tự câu hỏi/đáp án theo học sinh
         # IELTS Writing (lớp Tiếng Anh): part 1 ↔ task1, part 2 ↔ task2, None = không chấm AI
         "writingTask": body.get("writingTask") if body.get("writingTask") in ("task1", "task2") else None,
+        # Chấm bài nói (lớp Tiếng Anh): học sinh nộp audio → AI chấm ngữ pháp/từ vựng
+        "listeningTask": bool(body.get("listeningTask")),
         "attachments": body.get("attachments", []),
         "createdAt": _now_iso(), "submissions": [],
     }
@@ -2396,14 +2399,17 @@ def _grade_submission_sync(cls_id: str, asgn_id: str, student_id: str) -> dict:
     asgn = _find_assignment(cls, asgn_id)
     if not asgn:
         return {"status": "error", "error": "Không tìm thấy bài tập."}
-    if not asgn.get("writingTask"):
-        return {"status": "error", "error": "Bài tập này không bật chấm AI (IELTS Writing)."}
+    if not asgn.get("writingTask") and not asgn.get("listeningTask"):
+        return {"status": "error", "error": "Bài tập này không bật chấm AI."}
     sub = next((s for s in asgn.get("submissions", [])
                 if str(s.get("studentId")) == str(student_id)), None)
     if not sub:
         return {"status": "error", "error": "Học sinh chưa nộp bài."}
     try:
-        grade = ielts.run_grading(_get_groq(), asgn, sub, CLASS_DOCS_DIR)
+        if asgn.get("listeningTask"):
+            grade = listening.run_grading(_get_groq(), asgn, sub, CLASS_DOCS_DIR)
+        else:
+            grade = ielts.run_grading(_get_groq(), asgn, sub, CLASS_DOCS_DIR)
     except Exception as e:
         grade = {"status": "error", "error": f"Lỗi khi chấm: {e}", "gradedAt": _now_iso()}
     _save_ai_grade(cls_id, asgn_id, student_id, grade)
@@ -2443,7 +2449,10 @@ async def edit_ai_grade_endpoint(cls_id: str, asgn_id: str, student_id: str, req
         return JSONResponse({"error": "Bài này chưa có kết quả chấm AI để sửa"}, status_code=422)
 
     patch = await request.json()
-    updated = ielts.apply_manual_edit(sub["aiGrade"], patch, caller["id"])
+    if asgn.get("listeningTask"):
+        updated = listening.apply_manual_edit(sub["aiGrade"], patch, caller["id"])
+    else:
+        updated = ielts.apply_manual_edit(sub["aiGrade"], patch, caller["id"])
     _save_ai_grade(cls_id, asgn_id, student_id, updated)
     return {"ok": True, "aiGrade": updated}
 
@@ -2457,6 +2466,8 @@ async def grades_summary_endpoint(cls_id: str, asgn_id: str):
     asgn = _find_assignment(cls, asgn_id)
     if not asgn:
         return JSONResponse({"error": "Không tìm thấy bài tập"}, status_code=404)
+    is_listening = bool(asgn.get("listeningTask"))
+    criteria_keys = listening.CRITERIA_KEYS if is_listening else ielts.CRITERIA_KEYS
     rows, bands = [], []
     for s in asgn.get("submissions", []):
         g = s.get("aiGrade") or {}
@@ -2466,7 +2477,7 @@ async def grades_summary_endpoint(cls_id: str, asgn_id: str):
             "submittedAt": s.get("submittedAt"), "status": g.get("status") or "none",
             "wordCount": g.get("wordCount"), "overallBand": g.get("overallBand"),
         }
-        for k in ielts.CRITERIA_KEYS:
+        for k in criteria_keys:
             row[k] = (crit.get(k) or {}).get("band")
         rows.append(row)
         if g.get("status") == "done" and g.get("overallBand") is not None:
@@ -2478,7 +2489,8 @@ async def grades_summary_endpoint(cls_id: str, asgn_id: str):
         "max": max(bands) if bands else None,
         "min": min(bands) if bands else None,
     }
-    return {"writingTask": asgn.get("writingTask"), "criterionLabel":
+    return {"writingTask": asgn.get("writingTask"), "listeningTask": is_listening,
+            "criterionLabel":
             ("Task Achievement" if asgn.get("writingTask") == "task1" else "Task Response"),
             "rows": rows, "stats": stats}
 

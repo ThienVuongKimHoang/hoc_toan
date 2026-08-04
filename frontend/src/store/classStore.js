@@ -124,7 +124,7 @@ export async function removeCoTeacher(classId, userId) {
   return res.json()
 }
 
-export async function addAssignment(classId, { title, description, subject, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, shuffleQuestions, attachments, writingTask, teacherId }) {
+export async function addAssignment(classId, { title, description, subject, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, shuffleQuestions, attachments, writingTask, listeningTask, teacherId }) {
   const res = await fetch(`${API}/${classId}/assignments`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -137,6 +137,7 @@ export async function addAssignment(classId, { title, description, subject, exam
       lockScreen: !!lockScreen,
       shuffleQuestions: !!shuffleQuestions,
       writingTask: writingTask || null,
+      listeningTask: !!listeningTask,
       attachments: attachments || [],
       teacherId,
     }),

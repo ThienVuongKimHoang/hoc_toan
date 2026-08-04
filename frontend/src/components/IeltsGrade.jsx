@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { getGradesSummary, gradeSubmission, updateAiGrade } from '../store/classStore.js'
 
 /* ─── Helpers ─── */
@@ -98,12 +98,12 @@ function buildSegments(text, corrections, creating) {
   return segments
 }
 
-function AnnotEditPopover({ isNew, quote, fix: initFix = '', explain: initExplain = '', type: initType = 'grammar', onSubmit, onDelete, onCancel }) {
+function AnnotEditPopover({ isNew, quote, fix: initFix = '', explain: initExplain = '', type: initType = 'grammar', style, onSubmit, onDelete, onCancel }) {
   const [fix, setFix] = useState(initFix)
   const [explain, setExplain] = useState(initExplain)
   const [type, setType] = useState(initType || 'grammar')
   return (
-    <div className="ielts-annot-popover ielts-annot-popover--edit" onClick={e => e.stopPropagation()} onMouseUp={e => e.stopPropagation()}>
+    <div className="ielts-annot-popover ielts-annot-popover--edit" style={style} onClick={e => e.stopPropagation()} onMouseUp={e => e.stopPropagation()}>
       <div className="ielts-annot-pop-wrong">✗ {quote}</div>
       <select className="ielts-annot-pop-type" value={type} onChange={e => setType(e.target.value)}>
         {Object.entries(ANNOT_TYPES).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
@@ -124,10 +124,12 @@ function AnnotEditPopover({ isNew, quote, fix: initFix = '', explain: initExplai
   )
 }
 
-function AnnotatedEssay({ text, corrections, editable, canEdit, focusIndex, onRequestEdit, onChangeCorrection, onDeleteCorrection, onAddCorrection }) {
+export function AnnotatedEssay({ text, corrections, editable, canEdit, focusIndex, onRequestEdit, onChangeCorrection, onDeleteCorrection, onAddCorrection }) {
   const wrapRef = useRef(null)
+  const markRefs = useRef({})
   const [activeIdx, setActiveIdx] = useState(null)
   const [creating, setCreating] = useState(null)
+  const [popPos, setPopPos] = useState(null)
 
   useEffect(() => {
     if (activeIdx == null && !creating) return
@@ -166,11 +168,34 @@ function AnnotatedEssay({ text, corrections, editable, canEdit, focusIndex, onRe
 
   const segments = buildSegments(text, corrections, creating)
 
+  // Điểm neo popover (mark có thể xuống dòng giữa chừng — dùng getClientRects()[0]
+  // để lấy đúng fragment dòng đầu, tránh containing-block bị tính lố sang chữ khác
+  // khi popover được đặt bên trong <mark> position:relative theo kiểu cũ).
+  const openKey = creating ? 'new' : activeIdx
+  markRefs.current = {}
+  useLayoutEffect(() => {
+    if (openKey == null || !wrapRef.current) { setPopPos(null); return }
+    const el = markRefs.current[openKey]
+    if (!el) { setPopPos(null); return }
+    const rects = el.getClientRects()
+    const r = rects[0] || el.getBoundingClientRect()
+    const wrapRect = wrapRef.current.getBoundingClientRect()
+    setPopPos({
+      top: r.bottom - wrapRect.top + wrapRef.current.scrollTop,
+      left: r.left - wrapRect.left + wrapRef.current.scrollLeft,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openKey, segments.length])
+
   const handleWrapDoubleClick = (e) => {
     if (editable || !canEdit) return
     if (e.target.closest('.ielts-annot')) return   // mark tự xử lý double-click riêng
     onRequestEdit?.(null)
   }
+
+  const activeSeg = !creating && activeIdx != null
+    ? segments.find(s => s.kind === 'mark' && !s.corr._creating && s.corr._idx === activeIdx)
+    : null
 
   return (
     <div className={`ielts-essay-wrap ${editable ? 'ielts-essay-wrap--editable' : ''}`} ref={wrapRef}
@@ -179,6 +204,7 @@ function AnnotatedEssay({ text, corrections, editable, canEdit, focusIndex, onRe
         ? <React.Fragment key={i}>{seg.text}</React.Fragment>
         : (
           <mark key={i}
+            ref={el => { if (el) markRefs.current[seg.corr._idx] = el }}
             className={`ielts-annot ielts-annot--${seg.corr._creating ? 'pending' : (seg.corr.type || 'grammar')} ${activeIdx === seg.corr._idx ? 'ielts-annot--active' : ''}`}
             onClick={() => { if (seg.corr._creating) return; setCreating(null); setActiveIdx(p => p === seg.corr._idx ? null : seg.corr._idx) }}
             onDoubleClick={(e) => {
@@ -187,26 +213,27 @@ function AnnotatedEssay({ text, corrections, editable, canEdit, focusIndex, onRe
               if (!editable && canEdit) onRequestEdit?.(seg.corr._idx)
             }}>
             {seg.text}
-            {seg.corr._creating && (
-              <AnnotEditPopover isNew quote={seg.corr.quote}
-                onSubmit={patch => { onAddCorrection({ error: seg.corr.quote, start: seg.corr.start, end: seg.corr.end, ...patch }); setCreating(null) }}
-                onCancel={() => setCreating(null)} />
-            )}
-            {!seg.corr._creating && activeIdx === seg.corr._idx && (
-              editable ? (
-                <AnnotEditPopover quote={seg.corr.error} fix={seg.corr.fix} explain={seg.corr.explain} type={seg.corr.type}
-                  onSubmit={patch => { onChangeCorrection(seg.corr._idx, patch); setActiveIdx(null) }}
-                  onDelete={() => { onDeleteCorrection(seg.corr._idx); setActiveIdx(null) }}
-                  onCancel={() => setActiveIdx(null)} />
-              ) : (
-                <div className="ielts-annot-popover" onClick={e => e.stopPropagation()}>
-                  <div className="ielts-annot-pop-wrong">✗ {seg.corr.error}</div>
-                  <div className="ielts-annot-pop-fix">✓ {seg.corr.fix}</div>
-                  {seg.corr.explain && <div className="ielts-annot-pop-explain">{seg.corr.explain}</div>}
-                </div>
-              )
-            )}
           </mark>
+        )
+      )}
+      {creating && popPos && (
+        <AnnotEditPopover isNew quote={creating.quote} style={{ top: popPos.top, left: popPos.left }}
+          onSubmit={patch => { onAddCorrection({ error: creating.quote, start: creating.start, end: creating.end, ...patch }); setCreating(null) }}
+          onCancel={() => setCreating(null)} />
+      )}
+      {activeSeg && popPos && (
+        editable ? (
+          <AnnotEditPopover quote={activeSeg.corr.error} fix={activeSeg.corr.fix} explain={activeSeg.corr.explain} type={activeSeg.corr.type}
+            style={{ top: popPos.top, left: popPos.left }}
+            onSubmit={patch => { onChangeCorrection(activeIdx, patch); setActiveIdx(null) }}
+            onDelete={() => { onDeleteCorrection(activeIdx); setActiveIdx(null) }}
+            onCancel={() => setActiveIdx(null)} />
+        ) : (
+          <div className="ielts-annot-popover" style={{ top: popPos.top, left: popPos.left }} onClick={e => e.stopPropagation()}>
+            <div className="ielts-annot-pop-wrong">✗ {activeSeg.corr.error}</div>
+            <div className="ielts-annot-pop-fix">✓ {activeSeg.corr.fix}</div>
+            {activeSeg.corr.explain && <div className="ielts-annot-pop-explain">{activeSeg.corr.explain}</div>}
+          </div>
         )
       )}
       {editable && (

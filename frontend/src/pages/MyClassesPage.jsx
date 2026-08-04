@@ -3,6 +3,7 @@ import { getClassByCode, getClassesByStudent, getExamWindow, getPendingForStuden
 import { getPracticeInfo } from '../store/examStore.js'
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, gradeLabel } from '../components/SubjectBadge.jsx'
 import { BandChip, IeltsGradeModal, IeltsStatsModal } from '../components/IeltsGrade.jsx'
+import { ListeningGradeModal, ListeningStatsModal } from '../components/ListeningGrade.jsx'
 import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
 import { isExerciseDoc, sortDocsByOrder } from '../utils/exerciseDocs.js'
 import { youtubeEmbedUrl, youtubeThumbnail } from '../utils/youtube.js'
@@ -233,6 +234,12 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
                     Nộp file <strong>.txt / .docx / .pdf</strong> hoặc <strong>ảnh chụp bài viết tay</strong> đều được.
                   </div>
                 )}
+                {assignment.listeningTask && (
+                  <div className="cm-info-note ielts-submit-note" style={{marginBottom:12}}>
+                    🎧 Bài <strong>chấm nói</strong> — hãy nộp file <strong>ghi âm giọng nói</strong> (mp3/wav/m4a…).
+                    AI sẽ chuyển giọng nói thành văn bản rồi chấm <strong>Ngữ pháp</strong> và <strong>Từ vựng</strong> (band 0–9).
+                  </div>
+                )}
                 <label className="cm-label">📂 File bài làm của bạn</label>
                 {files.length > 0 && (
                   <div className="file-chip-list">
@@ -251,11 +258,15 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
                   onClick={() => !uploading && inputRef.current?.click()}
                 >
                   <input ref={inputRef} type="file" multiple style={{display:'none'}}
-                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.png,.jpg,.jpeg,.mp3,.wav,.mp4,.zip,.rar"
+                    accept={assignment.listeningTask
+                      ? '.mp3,.wav,.m4a,.ogg,.webm,.aac'
+                      : '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.png,.jpg,.jpeg,.mp3,.wav,.mp4,.zip,.rar'}
                     onChange={e => processFiles(Array.from(e.target.files))} />
                   {uploading
                     ? <><span className="fdz-spinner"/>Đang upload…</>
-                    : <>{IC.upload(20)}<span>Kéo thả hoặc <u>click để chọn file</u></span><span className="fdz-hint">PDF, Word, ảnh, audio, video, txt, zip…</span></>
+                    : assignment.listeningTask
+                      ? <>{IC.upload(20)}<span>Kéo thả hoặc <u>click để chọn file ghi âm</u></span><span className="fdz-hint">mp3, wav, m4a, ogg…</span></>
+                      : <>{IC.upload(20)}<span>Kéo thả hoặc <u>click để chọn file</u></span><span className="fdz-hint">PDF, Word, ảnh, audio, video, txt, zip…</span></>
                   }
                 </div>
 
@@ -420,7 +431,9 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
   const mySubmission = assignment.submissions?.find(s => String(s.studentId) === String(user.id))
   const isDuePast   = assignment.dueDate && new Date(assignment.dueDate) < new Date()
   const isWriting   = !!assignment.writingTask
-  const taskLabel   = isWriting ? `IELTS Writing ${assignment.writingTask === 'task1' ? 'Task 1' : 'Task 2'}` : null
+  const isListening = !!assignment.listeningTask
+  const taskLabel   = isWriting ? `IELTS Writing ${assignment.writingTask === 'task1' ? 'Task 1' : 'Task 2'}`
+    : isListening ? 'Chấm nói (AI)' : null
   const myGrade     = mySubmission?.aiGrade
 
   return (
@@ -433,6 +446,7 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
             {IC.clock(12)} Hạn: {formatDt(assignment.dueDate)}{isDuePast && ' (Hết hạn)'}
           </span>
           {isWriting && <span className="cm-exam-chip ielts-task-chip">📝 {taskLabel} · Chấm điểm tự động</span>}
+          {isListening && <span className="cm-exam-chip ielts-task-chip">🎧 {taskLabel} · Chấm điểm tự động</span>}
           {assignment.attachments?.length > 0 && <span className="cm-exam-chip">{IC.clip(12)} {assignment.attachments.length} file đính kèm</span>}
         </div>
         {mySubmission && (
@@ -441,7 +455,7 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
             {mySubmission.files?.length > 0 && <span> · {mySubmission.files.length} file</span>}
           </div>
         )}
-        {isWriting && mySubmission && (
+        {(isWriting || isListening) && mySubmission && (
           <div className="ielts-row-actions" style={{marginTop:8}}>
             {myGrade?.status === 'done' && (
               <button className="ielts-band-view" onClick={() => setShowGrade(true)}>
@@ -463,11 +477,18 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
           ? (mySubmission ? '✅ Đã nộp (hết hạn)' : '🔒 Đã hết hạn')
           : (mySubmission ? <>{IC.pencil(14)} Nộp lại</> : '📤 Nộp bài')}
       </button>
-      {showGrade && myGrade && (
+      {showGrade && myGrade && isListening && (
+        <ListeningGradeModal grade={myGrade} studentName={user.name}
+          onClose={() => setShowGrade(false)} />
+      )}
+      {showGrade && myGrade && !isListening && (
         <IeltsGradeModal grade={myGrade} studentName={user.name} taskLabel={taskLabel}
           onClose={() => setShowGrade(false)} />
       )}
-      {showStats && (
+      {showStats && isListening && (
+        <ListeningStatsModal classId={cls.id} assignment={assignment} onClose={() => setShowStats(false)} />
+      )}
+      {showStats && !isListening && (
         <IeltsStatsModal classId={cls.id} assignment={assignment} onClose={() => setShowStats(false)} />
       )}
     </div>
@@ -494,7 +515,7 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
 
   // AI đang chấm bài của mình → tự refresh để hiện kết quả khi chấm xong
   const hasPendingGrade = (localCls.assignments || []).some(a =>
-    a.writingTask && a.submissions?.some(s =>
+    (a.writingTask || a.listeningTask) && a.submissions?.some(s =>
       String(s.studentId) === String(user.id) && s.aiGrade?.status === 'pending'))
   useEffect(() => {
     if (!hasPendingGrade) return
