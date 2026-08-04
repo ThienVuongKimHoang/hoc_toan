@@ -157,8 +157,7 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
   const myMember = (cls.members || []).find(m =>
     String(m.userId) === String(user.id) && (m.subject || primarySubject(cls)) === asgnSubject)
   const speakingLevel = myMember?.speakingLevel === 'on' ? 'on' : 'yeu'
-  const task1Questions = assignment.speaking?.task1Questions || []
-  const task2Questions = assignment.speaking?.task2Questions || []
+  const speakingQuestions = assignment.speaking?.questions || []
   const [docxFile,        setDocxFile]        = useState(null)
   const [audioFile,       setAudioFile]       = useState(null)
   const [uploadingDocx,   setUploadingDocx]   = useState(false)
@@ -255,17 +254,17 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
             ) : isSpeaking ? (
               <>
                 <div className="cm-info-note ielts-submit-note" style={{marginBottom:12}}>
-                  🗣 Bài <strong>IELTS Speaking</strong> — Task 1: nộp file kịch bản (.docx), AI chấm lỗi + đọc mẫu bản đã sửa bằng audio.
+                  🗣 Bài <strong>IELTS Speaking</strong> — trả lời cùng (các) câu hỏi bên dưới. Task 1: nộp file kịch bản (.docx), AI chấm lỗi + đọc mẫu bản đã sửa bằng audio.
                   {speakingLevel === 'on'
-                    ? <> Bạn thuộc nhãn <strong>"Ổn"</strong> nên làm thêm <strong>Task 2</strong>: ghi âm nói, AI đối chiếu với chính file kịch bản để phát hiện chỗ đọc sai.</>
+                    ? <> Bạn thuộc nhãn <strong>"Ổn"</strong> nên làm thêm <strong>Task 2</strong>: ghi âm nói trả lời cùng câu hỏi, AI đối chiếu với chính file kịch bản để phát hiện chỗ đọc sai.</>
                     : <> Bạn thuộc nhãn <strong>"Yếu"</strong> nên chỉ cần làm Task 1.</>}
                 </div>
 
-                {task1Questions.length > 0 && (
+                {speakingQuestions.length > 0 && (
                   <div className="cm-info-note" style={{marginBottom:12}}>
-                    <strong>Câu hỏi Task 1:</strong>
+                    <strong>Câu hỏi:</strong>
                     <ol style={{margin:'6px 0 0 18px', padding:0}}>
-                      {task1Questions.map((q, i) => <li key={i}>{q}</li>)}
+                      {speakingQuestions.map((q, i) => <li key={i}>{q}</li>)}
                     </ol>
                   </div>
                 )}
@@ -291,15 +290,7 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
 
                 {speakingLevel === 'on' && (
                   <>
-                    {task2Questions.length > 0 && (
-                      <div className="cm-info-note" style={{margin:'14px 0 12px'}}>
-                        <strong>Câu hỏi Task 2:</strong>
-                        <ol style={{margin:'6px 0 0 18px', padding:0}}>
-                          {task2Questions.map((q, i) => <li key={i}>{q}</li>)}
-                        </ol>
-                      </div>
-                    )}
-                    <label className="cm-label" style={{marginTop:14}}>🎤 File ghi âm Task 2 *</label>
+                    <label className="cm-label" style={{marginTop:14}}>🎤 File ghi âm Task 2 (trả lời cùng câu hỏi trên) *</label>
                     {audioFile ? (
                       <div className="file-chip-list" style={{marginBottom:8}}>
                         <FileChip file={audioFile} onRemove={() => setAudioFile(null)} onView={setViewing} />

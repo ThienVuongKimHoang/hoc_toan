@@ -173,7 +173,7 @@ def grade_task2_speech(client, questions_text: str, script_text: str, transcript
 
 You are ALSO given the student's WRITTEN SCRIPT (prepared beforehand for Task 1) so you can compare it against the transcript of their actual spoken recording, to spot likely mispronunciation/misreading — places where the transcript differs from the script in a way that suggests the student read a word wrong, NOT just natural paraphrasing or ad-libbing.
 
-=== SPEAKING QUESTION(S) FOR TASK 2 ===
+=== SPEAKING QUESTION(S) GIVEN TO THE STUDENT (same questions answered in both the written script and this spoken recording) ===
 {questions_text or "(not provided)"}
 
 === STUDENT'S WRITTEN SCRIPT (prepared answer) ===
@@ -337,12 +337,12 @@ def run_grading(client, assignment: dict, submission: dict, docs_dir: Path, stud
     if len(script_text.split()) < 15:
         return {"status": "error", "error": "Kịch bản quá ngắn hoặc không đọc được nội dung file .docx.", "gradedAt": now_iso()}
 
+    # Cùng một danh sách câu hỏi dùng cho cả Task 1 (viết) và Task 2 (nói).
     speaking_cfg = assignment.get("speaking") or {}
-    task1_questions = "\n".join(speaking_cfg.get("task1Questions") or [])
-    task2_questions = "\n".join(speaking_cfg.get("task2Questions") or [])
+    questions_text = "\n".join(speaking_cfg.get("questions") or [])
 
     try:
-        task1 = grade_task1_script(client, task1_questions, script_text)
+        task1 = grade_task1_script(client, questions_text, script_text)
     except Exception as e:
         return {"status": "error", "error": f"Lỗi khi chấm Task 1: {e}", "gradedAt": now_iso()}
 
@@ -378,7 +378,7 @@ def run_grading(client, assignment: dict, submission: dict, docs_dir: Path, stud
         return result
 
     try:
-        task2_graded = grade_task2_speech(client, task2_questions, script_text, transcript)
+        task2_graded = grade_task2_speech(client, questions_text, script_text, transcript)
     except Exception as e:
         result["task2"] = {"status": "error", "error": f"Lỗi khi chấm Task 2: {e}"}
         return result

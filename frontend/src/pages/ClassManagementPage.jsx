@@ -873,9 +873,8 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
   const [shuffleQuestions, setShuffleQuestions] = useState(true)  // trộn thứ tự câu hỏi/đáp án theo học sinh
   const [writingTask, setWritingTask] = useState('')        // '' | task1 | task2 (IELTS Writing, lớp Anh)
   const [listeningTask, setListeningTask] = useState(false) // true = chấm bài nói (audio → ngữ pháp/từ vựng, lớp Anh)
-  const [speakingTask, setSpeakingTask] = useState(false)   // true = IELTS Speaking Task1(docx+audio mẫu)+Task2(nói, đối chiếu docx)
-  const [task1Questions, setTask1Questions] = useState([''])
-  const [task2Questions, setTask2Questions] = useState([''])
+  const [speakingTask, setSpeakingTask] = useState(false)   // true = IELTS Speaking: cùng câu hỏi cho Task1(docx+audio mẫu, mọi HS)+Task2(nói, đối chiếu docx, chỉ nhãn "Ổn")
+  const [speakingQuestions, setSpeakingQuestions] = useState([''])
   const [attachments, setAttachments] = useState([])
   const [uploading, setUploading] = useState(false)
   const [viewing, setViewing] = useState(null)
@@ -934,8 +933,8 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
     if (writingTask === 'task1' && attachments.length === 0) {
       setErr('IELTS Writing Task 1 cần đính kèm ảnh đề bài (biểu đồ/bảng/sơ đồ) để AI chấm chính xác.'); return
     }
-    if (speakingTask && task1Questions.every(q => !q.trim())) {
-      setErr('Vui lòng nhập ít nhất 1 câu hỏi cho Task 1.'); return
+    if (speakingTask && speakingQuestions.every(q => !q.trim())) {
+      setErr('Vui lòng nhập ít nhất 1 câu hỏi.'); return
     }
     const iso = new Date(`${dueDate}T${dueTime}`).toISOString()
     onSave({
@@ -944,8 +943,7 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
       listeningTask: speakingTask ? false : listeningTask,
       speakingTask,
       speaking: speakingTask ? {
-        task1Questions: task1Questions.map(q => q.trim()).filter(Boolean),
-        task2Questions: task2Questions.map(q => q.trim()).filter(Boolean),
+        questions: speakingQuestions.map(q => q.trim()).filter(Boolean),
       } : null,
     })
   }
@@ -1125,32 +1123,20 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
                     {speakingTask && (
                       <>
                         <div className="cm-info-note" style={{ marginTop: 8 }}>
-                          🗣 Học sinh nộp 1 file <strong>.docx</strong> (kịch bản trả lời). AI chấm lỗi + viết lại bản hoàn thiện hơn, rồi đọc mẫu bằng audio AI (Task 1).
-                          {' '}Học sinh nhãn <strong>"Ổn"</strong> (gán trong tab Thành viên) làm thêm <strong>Task 2</strong>: ghi âm nói, AI đối chiếu với chính file .docx đã nộp để phát hiện chỗ đọc sai.
-                          {' '}Học sinh nhãn <strong>"Yếu"</strong> chỉ cần làm Task 1.
+                          🗣 Cùng một bộ câu hỏi bên dưới được dùng cho cả 2 hình thức trả lời.
+                          {' '}<strong>Task 1</strong> (mọi học sinh): nộp 1 file <strong>.docx</strong> (kịch bản trả lời) — AI chấm lỗi + viết lại bản hoàn thiện hơn, rồi đọc mẫu bằng audio AI.
+                          {' '}<strong>Task 2</strong> (chỉ học sinh nhãn <strong>"Ổn"</strong>, gán trong tab Thành viên): ghi âm nói trả lời cùng câu hỏi đó, AI đối chiếu với chính file .docx đã nộp để phát hiện chỗ đọc sai.
                         </div>
 
-                        <label className="cm-label" style={{ marginTop: 14 }}>❓ Câu hỏi Task 1 *</label>
-                        {task1Questions.map((q, i) => (
+                        <label className="cm-label" style={{ marginTop: 14 }}>❓ Câu hỏi *</label>
+                        {speakingQuestions.map((q, i) => (
                           <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
                             <input className="cm-input" style={{ flex: 1 }} placeholder={`Câu hỏi ${i + 1}`}
-                              value={q} onChange={e => updateQuestion(setTask1Questions, i, e.target.value)} />
-                            <button type="button" className="mec-btn" onClick={() => removeQuestion(setTask1Questions, i)}>✕</button>
+                              value={q} onChange={e => updateQuestion(setSpeakingQuestions, i, e.target.value)} />
+                            <button type="button" className="mec-btn" onClick={() => removeQuestion(setSpeakingQuestions, i)}>✕</button>
                           </div>
                         ))}
-                        <button type="button" className="mec-btn" onClick={() => addQuestion(setTask1Questions)}>+ Thêm câu hỏi</button>
-
-                        <label className="cm-label" style={{ marginTop: 14 }}>
-                          ❓ Câu hỏi Task 2 <span style={{ color: '#94a3b8', fontWeight: 400 }}>(chỉ học sinh nhãn "Ổn" thấy)</span>
-                        </label>
-                        {task2Questions.map((q, i) => (
-                          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                            <input className="cm-input" style={{ flex: 1 }} placeholder={`Câu hỏi ${i + 1}`}
-                              value={q} onChange={e => updateQuestion(setTask2Questions, i, e.target.value)} />
-                            <button type="button" className="mec-btn" onClick={() => removeQuestion(setTask2Questions, i)}>✕</button>
-                          </div>
-                        ))}
-                        <button type="button" className="mec-btn" onClick={() => addQuestion(setTask2Questions)}>+ Thêm câu hỏi</button>
+                        <button type="button" className="mec-btn" onClick={() => addQuestion(setSpeakingQuestions)}>+ Thêm câu hỏi</button>
                       </>
                     )}
                   </>
@@ -1760,7 +1746,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
             )}
             {a.kind === 'speaking' && (
               <span className="cm-exam-chip ielts-task-chip">
-                🗣 Speaking Task 1{(a.speaking?.task2Questions?.length ?? 0) > 0 ? '+2' : ''} · Chấm AI
+                🗣 IELTS Speaking (Task 1 · +2 nếu nhãn "Ổn") · Chấm AI
               </span>
             )}
             {a.attachments?.length > 0 && <span className="cm-exam-chip">{IC.clip(12)} {a.attachments.length} file</span>}

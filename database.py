@@ -1728,6 +1728,21 @@ def class_attendance_detail(cls_id: str) -> dict:
     return out
 
 
+def delete_class_attendance_for_student(cls_id: str, student_id) -> int:
+    """Xóa toàn bộ lịch sử điểm danh của một học sinh trong một lớp
+    (gọi khi gỡ học sinh khỏi lớp, không còn thuộc lớp qua môn nào khác)."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                DELETE FROM attendance_records
+                WHERE student_id=%s
+                  AND session_id IN (SELECT id FROM attendance_sessions WHERE class_id=%s)
+            """, (str(student_id), cls_id))
+            n = cur.rowcount
+        conn.commit()
+    return n
+
+
 def class_attendance_stats(cls_id: str) -> dict:
     """% chuyên cần từng học sinh trong lớp: {studentId: {total,coMat,vang,tre,phep,rate}}."""
     with _C() as conn:
@@ -1754,6 +1769,26 @@ def class_attendance_stats(cls_id: str) -> dict:
             "rate": round((d["co_mat"] + d["tre"]) / total * 100, 1) if total else None,
         }
     return out
+
+
+def delete_class_submissions_for_student(cls_id: str, student_id, assignment_ids=None) -> int:
+    """Xóa bài nộp đề thi (bảng submissions) của một học sinh trong một lớp
+    (gọi khi gỡ học sinh khỏi lớp). assignment_ids=None → xóa mọi lần giao bài
+    trong lớp; truyền danh sách → chỉ xóa các lần giao bài đó (gỡ theo môn,
+    tránh đụng dữ liệu của môn khác học sinh vẫn còn tham gia)."""
+    q = "DELETE FROM submissions WHERE class_id=%s AND student_id=%s"
+    params = [cls_id, str(student_id)]
+    if assignment_ids is not None:
+        if not assignment_ids:
+            return 0
+        q += " AND assignment_id = ANY(%s)"
+        params.append(list(assignment_ids))
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute(q, params)
+            n = cur.rowcount
+        conn.commit()
+    return n
 
 
 def get_submissions_for_assignment(cls_id: str, asgn_id: str) -> list:

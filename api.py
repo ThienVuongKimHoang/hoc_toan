@@ -2065,13 +2065,17 @@ async def add_member_endpoint(cls_id: str, request: Request, caller: dict = Depe
 async def remove_member_endpoint(cls_id: str, user_id: str, subject: str = None,
                                   caller: dict = Depends(require_auth)):
     """Xoá học sinh khỏi lớp. Có `subject` → chỉ xoá khỏi MÔN đó;
-    không có → xoá khỏi toàn bộ lớp (mọi môn)."""
+    không có → xoá khỏi toàn bộ lớp (mọi môn).
+    Dọn kèm tiến độ trong (các) môn bị xoá: bài nộp đề thi, bài nộp homework/
+    speaking, và — nếu học sinh không còn thuộc lớp qua môn nào khác — lịch sử
+    điểm danh. Tránh để lại tiến độ "mồ côi" sau khi gỡ khỏi lớp."""
     cls0 = db.get_class(cls_id)
     if cls0 is None:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     if not _is_class_teacher(cls0, caller["id"]):
         return JSONResponse({"error": "Không có quyền xóa thành viên khỏi lớp này"}, status_code=403)
     subj = subject or None
+    scope = {}
     def mutate(cls):
         default_subj = cls.get("subject") or None
         def keep(m):
@@ -2084,8 +2088,21 @@ async def remove_member_endpoint(cls_id: str, user_id: str, subject: str = None,
             m_subj = m.get("subject") or default_subj
             return m_subj != subj
         cls["members"] = [m for m in cls.get("members", []) if keep(m)]
+        scope["still_enrolled"] = any(str(m.get("userId")) == user_id for m in cls["members"])
+        scope["asgn_ids"] = []
+        for asgn in cls.get("assignments", []):
+            asgn_subj = asgn.get("subject") or default_subj
+            if subj is not None and asgn_subj != subj:
+                continue   # gỡ theo môn: không đụng dữ liệu của môn khác
+            scope["asgn_ids"].append(asgn.get("id"))
+            asgn["submissions"] = [s for s in asgn.get("submissions", [])
+                                    if str(s.get("studentId")) != user_id]
     cls = db.update_class_atomic(cls_id, mutate)
     if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    db.delete_class_submissions_for_student(
+        cls_id, user_id, assignment_ids=(None if subj is None else scope["asgn_ids"]))
+    if not scope["still_enrolled"]:
+        db.delete_class_attendance_for_student(cls_id, user_id)
     return {"ok": True}
 
 
@@ -2196,10 +2213,11 @@ async def add_assignment_endpoint(cls_id: str, request: Request, caller: dict = 
         "writingTask": None if speaking_task else (body.get("writingTask") if body.get("writingTask") in ("task1", "task2") else None),
         # Chấm bài nói cũ (lớp Tiếng Anh): học sinh nộp audio → AI chấm ngữ pháp/từ vựng
         "listeningTask": False if speaking_task else bool(body.get("listeningTask")),
-        # IELTS Speaking (Task 1: nộp docx được AI sửa + đọc mẫu; Task 2: nói, đối chiếu docx — chỉ học sinh nhãn "on")
+        # IELTS Speaking — CÙNG một danh sách câu hỏi dùng cho cả 2 hình thức trả lời:
+        # Task 1 (nộp docx được AI sửa + đọc mẫu, mọi học sinh) và Task 2 (nói, đối
+        # chiếu docx — chỉ học sinh nhãn "on").
         "speaking": {
-            "task1Questions": [str(q).strip() for q in (speaking_in.get("task1Questions") or []) if str(q).strip()],
-            "task2Questions": [str(q).strip() for q in (speaking_in.get("task2Questions") or []) if str(q).strip()],
+            "questions": [str(q).strip() for q in (speaking_in.get("questions") or []) if str(q).strip()],
         } if speaking_task else None,
         "attachments": body.get("attachments", []),
         "createdAt": _now_iso(), "submissions": [],
