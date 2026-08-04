@@ -159,7 +159,7 @@ function TaskPanel({ task, taskKey, textKey, editable, editing, draft, setDraft,
             <div className="ls-block">
               {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
               <audio controls src={t.audioFile.url} className="ls-audio-player" />
-              <div className="ls-hint">🔊 Audio mẫu do AI đọc bản đã sửa — nghe để luyện phát âm chuẩn</div>
+              <div className="ls-hint">{editable ? '🔊 Audio mẫu do AI đọc bản đã sửa — nghe để luyện phát âm chuẩn' : '🔊 Nghe audio mẫu bản đã sửa để luyện phát âm chuẩn'}</div>
             </div>
           )}
         </div>
@@ -283,7 +283,10 @@ export function SpeakingGradeModal({ grade, studentName, onClose, editable = fal
                 <div className="ielts-overall-info">
                   {studentName && <div className="ielts-student-name">👤 {studentName}</div>}
                   <div className="ielts-meta-row">
-                    🏷️ Nhãn: {g.studentLabel === 'on' ? 'Ổn (Task 1+2)' : 'Yếu (Task 1)'} · 🕒 Chấm lúc {fmtDt(g.gradedAt)}
+                    {editable
+                      ? <>🏷️ Nhãn: {g.studentLabel === 'on' ? 'Ổn (Task 1+2)' : 'Yếu (Task 1)'} · </>
+                      : (g.studentLabel === 'on' && <>🌟 Thành tích tốt (Task 1+2) · </>)}
+                    🕒 Chấm lúc {fmtDt(g.gradedAt)}
                   </div>
                   {g.editedAt && <div className="ielts-meta-row">✏️ GV sửa lúc {fmtDt(g.editedAt)}</div>}
                 </div>
@@ -312,7 +315,9 @@ export function SpeakingGradeModal({ grade, studentName, onClose, editable = fal
                 <div className="cm-error">⚠️ Task 2: {t2.error || 'Chấm thất bại.'}</div>
               )}
               {!t2 && (
-                <div className="ielts-meta-row" style={{ opacity: 0.7 }}>Học sinh thuộc nhãn "Yếu" — chỉ làm Task 1.</div>
+                <div className="ielts-meta-row" style={{ opacity: 0.7 }}>
+                  {editable ? 'Học sinh thuộc nhãn "Yếu" — chỉ làm Task 1.' : 'Bài chỉ có Task 1.'}
+                </div>
               )}
 
               {editingTask && (

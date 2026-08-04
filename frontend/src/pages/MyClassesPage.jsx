@@ -254,10 +254,10 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
             ) : isSpeaking ? (
               <>
                 <div className="cm-info-note ielts-submit-note" style={{marginBottom:12}}>
-                  🗣 Bài <strong>IELTS Speaking</strong> — trả lời cùng (các) câu hỏi bên dưới. Task 1: nộp file kịch bản (.docx), AI chấm lỗi + đọc mẫu bản đã sửa bằng audio.
+                  🗣 Bài <strong>IELTS Speaking</strong> — trả lời cùng (các) câu hỏi bên dưới. Task 1: nộp file kịch bản (.docx) để được chấm lỗi và nghe audio mẫu bản đã sửa.
                   {speakingLevel === 'on'
-                    ? <> Bạn thuộc nhãn <strong>"Ổn"</strong> nên làm thêm <strong>Task 2</strong>: ghi âm nói trả lời cùng câu hỏi, AI đối chiếu với chính file kịch bản để phát hiện chỗ đọc sai.</>
-                    : <> Bạn thuộc nhãn <strong>"Yếu"</strong> nên chỉ cần làm Task 1.</>}
+                    ? <> Bạn có <strong>thành tích tốt</strong> nên làm thêm <strong>Task 2</strong>: ghi âm nói trả lời cùng câu hỏi, đối chiếu với chính file kịch bản để phát hiện chỗ đọc sai.</>
+                    : <> Bạn chỉ cần làm Task 1.</>}
                 </div>
 
                 {speakingQuestions.length > 0 && (
