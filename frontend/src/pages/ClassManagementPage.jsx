@@ -879,6 +879,7 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
   const [uploading, setUploading] = useState(false)
   const [viewing, setViewing] = useState(null)
   const [err, setErr] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const handleUploaded = (files) => setAttachments(prev => [...prev, ...files])
   const removeAttach = (id) => setAttachments(prev => prev.filter(f => f.id !== id))
@@ -904,7 +905,8 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
     if (ex) setDuration(prev => prev || String(ex.settings?.duration || 45))
   }, [exams, presetExamId])
 
-  const submit = () => {
+  const submit = async () => {
+    setErr('')
     if (mode === 'exam') {
       if (!examId) { setErr('Vui lòng chọn đề thi để giao.'); return }
       if (!openDate || !closeDate) { setErr('Vui lòng chọn thời gian mở và đóng.'); return }
@@ -914,17 +916,23 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
       const durMins = parseInt(duration, 10)
       if (!durMins || durMins < 1) { setErr('Vui lòng nhập thời gian làm bài (phút) lớn hơn 0.'); return }
       const ex = exams.find(e => e.id === examId)
-      onSave({
-        title: (title.trim() || ex?.title || 'Đề thi'),
-        description: desc.trim(), examId,
-        openTime: openIso, closeTime: closeIso,
-        dueDate: closeIso, duration: durMins,
-        maxAttempts: maxAttempts ? Math.max(1, parseInt(maxAttempts, 10) || 1) : null,
-        scoreMode,
-        lockScreen,
-        shuffleQuestions,
-        attachments: [],
-      })
+      setSaving(true)
+      try {
+        await onSave({
+          title: (title.trim() || ex?.title || 'Đề thi'),
+          description: desc.trim(), examId,
+          openTime: openIso, closeTime: closeIso,
+          dueDate: closeIso, duration: durMins,
+          maxAttempts: maxAttempts ? Math.max(1, parseInt(maxAttempts, 10) || 1) : null,
+          scoreMode,
+          lockScreen,
+          shuffleQuestions,
+          attachments: [],
+        })
+      } catch (e) {
+        setErr(e.message || 'Giao đề thất bại, vui lòng thử lại.')
+        setSaving(false)
+      }
       return
     }
     // homework
@@ -937,15 +945,21 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
       setErr('Vui lòng nhập ít nhất 1 câu hỏi.'); return
     }
     const iso = new Date(`${dueDate}T${dueTime}`).toISOString()
-    onSave({
-      title: title.trim(), description: desc.trim(), examId: null, dueDate: iso, attachments,
-      writingTask: speakingTask ? null : (writingTask || null),
-      listeningTask: speakingTask ? false : listeningTask,
-      speakingTask,
-      speaking: speakingTask ? {
-        questions: speakingQuestions.map(q => q.trim()).filter(Boolean),
-      } : null,
-    })
+    setSaving(true)
+    try {
+      await onSave({
+        title: title.trim(), description: desc.trim(), examId: null, dueDate: iso, attachments,
+        writingTask: speakingTask ? null : (writingTask || null),
+        listeningTask: speakingTask ? false : listeningTask,
+        speakingTask,
+        speaking: speakingTask ? {
+          questions: speakingQuestions.map(q => q.trim()).filter(Boolean),
+        } : null,
+      })
+    } catch (e) {
+      setErr(e.message || 'Giao bài thất bại, vui lòng thử lại.')
+      setSaving(false)
+    }
   }
 
   const selectedExam = exams.find(e => e.id === examId)
@@ -1161,8 +1175,8 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
             {err && <div className="cm-error">{err}</div>}
             <div className="cm-footer">
               <button className="pm-cancel" onClick={onClose}>Huỷ</button>
-              <button className="btn-primary cm-submit" onClick={submit} disabled={uploading}>
-                {mode === 'exam' ? '📋 Giao đề' : '📝 Giao bài'}
+              <button className="btn-primary cm-submit" onClick={submit} disabled={uploading || saving}>
+                {saving ? 'Đang giao...' : (mode === 'exam' ? '📋 Giao đề' : '📝 Giao bài')}
               </button>
             </div>
           </div>
@@ -2124,7 +2138,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
         <AssignmentModal teacherId={teacherId} cls={cls} subject={subject} mode={asgnTab === 'exam' ? 'exam' : 'homework'}
           presetExamId={assignPresetExam?.id}
           onClose={() => { setShowAssignment(false); setAssignPresetExam(null) }}
-          onSave={(data) => { handleAddAssignment(data); setAssignPresetExam(null) }} />
+          onSave={async (data) => { await handleAddAssignment(data); setAssignPresetExam(null) }} />
       )}
       {viewSubs && (
         <SubmissionsPanel classId={cls.id} assignment={viewSubs} members={subjMembers}

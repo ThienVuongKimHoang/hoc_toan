@@ -1867,8 +1867,19 @@ async def student_pending(caller: dict = Depends(require_auth)):
     subs_cache = {}   # examId -> submissions (tránh query lặp)
     for cls in db.list_classes_by_student(student_id, email):
         cid = cls.get("id")
+        primary = cls.get("subject") or (cls.get("subjects") or [None])[0]
+        # Môn học sinh THỰC SỰ còn đăng ký trong lớp này — lớp có thể dạy nhiều môn,
+        # thành viên cũ chưa gắn subject quy về môn chính. Thiếu lọc này khiến bài tập
+        # của môn học sinh đã rời (vd. sau khi đổi môn/chuyển lớp) vẫn hiện là "sắp đến hạn".
+        enrolled_subjects = {
+            (m.get("subject") or primary) for m in cls.get("members", [])
+            if str(m.get("userId")) == str(student_id)
+        }
         asgns = cls.get("assignments", [])
         for a in asgns:
+            asgn_subject = a.get("subject") or primary
+            if enrolled_subjects and asgn_subject not in enrolled_subjects:
+                continue                                  # bài của môn học sinh không còn học
             close = _parse(a.get("closeTime") or a.get("dueDate"))
             if a.get("examId"):
                 if close and now > close:
@@ -1900,8 +1911,18 @@ async def student_pending(caller: dict = Depends(require_auth)):
                 "openTime": a.get("openTime"),
             })
 
-    items.sort(key=lambda x: x.get("dueDate") or "")
-    return {"count": len(items), "items": items}
+    # Khử trùng phòng khi dữ liệu cũ có bản ghi lặp (vd. lớp từng bị "giao" cùng một
+    # bài 2 lần) — một bài (classId, assignmentId) chỉ nên xuất hiện đúng 1 lần.
+    seen = set()
+    deduped = []
+    for it in items:
+        key = (it["classId"], it["assignmentId"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(it)
+    deduped.sort(key=lambda x: x.get("dueDate") or "")
+    return {"count": len(deduped), "items": deduped}
 
 
 # Must come before /{cls_id} to avoid ambiguity
