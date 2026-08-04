@@ -48,11 +48,30 @@ function makeTaskDraft(t) {
 }
 
 /* Khối hiển thị/sửa chung cho 1 task (band chips, nhận xét, essay chú thích lỗi) */
-function TaskPanel({ task, taskKey, textKey, editable, editing, draft, setDraft, pendingFocus, essayFocusIdx, onStartEdit, updateCorrections }) {
+function TaskPanel({ task, taskKey, textKey, editable, editing, draft, setDraft, pendingFocus, essayFocusIdx, onStartEdit, updateCorrections, originalAudio }) {
   const t = task || {}
   const crit = t.criteria || {}
   const text = t[textKey] || ''
   const liveOverall = editing ? overallBandFromCriteria(draft.criteria) : t.overallBand
+
+  const originalTextBlock = text && (
+    <details className="ielts-section ielts-details">
+      <summary className="ielts-section-title">
+        📄 {taskKey === 'task1' ? 'Kịch bản gốc học sinh nộp' : 'Bản ghi văn bản'} ({t.wordCount} từ) — bấm vào đoạn tô màu để xem ghi chú lỗi
+      </summary>
+      <AnnotatedEssay
+        text={text}
+        corrections={editing ? draft.corrections : (t.corrections || [])}
+        editable={editing}
+        canEdit={editable}
+        focusIndex={editing ? essayFocusIdx : null}
+        onRequestEdit={(idx) => onStartEdit('essay-annot', idx)}
+        onChangeCorrection={(idx, patch) => updateCorrections(list => list.map((c, i) => i === idx ? { ...c, ...patch } : c))}
+        onDeleteCorrection={(idx) => updateCorrections(list => list.filter((_, i) => i !== idx))}
+        onAddCorrection={(item) => updateCorrections(list => [...list, item])}
+      />
+    </details>
+  )
 
   return (
     <div className="ielts-task-panel">
@@ -146,6 +165,15 @@ function TaskPanel({ task, taskKey, textKey, editable, editing, draft, setDraft,
         </div>
       )}
 
+      {taskKey === 'task1' && originalTextBlock}
+
+      {taskKey === 'task1' && originalAudio?.audioUrl && (
+        <details className="ielts-section ielts-details" open>
+          <summary className="ielts-section-title">🎧 File audio gốc — nghe theo dõi bản ghi</summary>
+          <SyncedTranscript audioUrl={originalAudio.audioUrl} transcript={originalAudio.transcript} segments={originalAudio.segments} />
+        </details>
+      )}
+
       {taskKey === 'task1' && (
         <div className="ielts-section">
           <h4 className="ielts-section-title">✨ Bản hoàn thiện hơn</h4>
@@ -165,13 +193,6 @@ function TaskPanel({ task, taskKey, textKey, editable, editing, draft, setDraft,
         </div>
       )}
 
-      {taskKey === 'task2' && t.audioUrl && (
-        <details className="ielts-section ielts-details" open>
-          <summary className="ielts-section-title">🎧 Nghe theo dõi bản ghi</summary>
-          <SyncedTranscript audioUrl={t.audioUrl} transcript={t.transcript} segments={t.segments} />
-        </details>
-      )}
-
       {taskKey === 'task2' && t.pronunciationNotes?.length > 0 && (
         <div className="ielts-section">
           <h4 className="ielts-section-title">🔊 Đối chiếu phát âm (kịch bản vs. lời nói)</h4>
@@ -185,24 +206,7 @@ function TaskPanel({ task, taskKey, textKey, editable, editing, draft, setDraft,
         </div>
       )}
 
-      {text && (
-        <details className="ielts-section ielts-details">
-          <summary className="ielts-section-title">
-            📄 {taskKey === 'task1' ? 'Kịch bản gốc học sinh nộp' : 'Bản ghi văn bản'} ({t.wordCount} từ) — bấm vào đoạn tô màu để xem ghi chú lỗi
-          </summary>
-          <AnnotatedEssay
-            text={text}
-            corrections={editing ? draft.corrections : (t.corrections || [])}
-            editable={editing}
-            canEdit={editable}
-            focusIndex={editing ? essayFocusIdx : null}
-            onRequestEdit={(idx) => onStartEdit('essay-annot', idx)}
-            onChangeCorrection={(idx, patch) => updateCorrections(list => list.map((c, i) => i === idx ? { ...c, ...patch } : c))}
-            onDeleteCorrection={(idx) => updateCorrections(list => list.filter((_, i) => i !== idx))}
-            onAddCorrection={(item) => updateCorrections(list => [...list, item])}
-          />
-        </details>
-      )}
+      {taskKey === 'task2' && originalTextBlock}
     </div>
   )
 }
@@ -298,7 +302,8 @@ export function SpeakingGradeModal({ grade, studentName, onClose, editable = fal
                   editing={editingTask === 'task1'} draft={editingTask === 'task1' ? draft : null}
                   setDraft={setDraft} pendingFocus={pendingFocus} essayFocusIdx={essayFocusIdx}
                   onStartEdit={(focus, idx) => startEditing('task1', focus, idx)}
-                  updateCorrections={updateCorrections} />
+                  updateCorrections={updateCorrections}
+                  originalAudio={t2 && t2.status === 'done' ? t2 : null} />
               </details>
 
               {t2 && t2.status === 'done' && (
