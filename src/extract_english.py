@@ -47,6 +47,10 @@ ENGLISH_TOTAL_QUESTIONS = 40
 
 VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
 TEXT_MODEL   = "llama-3.3-70b-versatile"
+# Model dự phòng khi TEXT_MODEL hết quota TPD/TPM: mỗi model có bucket rate-limit riêng trên Groq,
+# nên xoay model (không chỉ xoay key) mới né được giới hạn token/ngày dùng chung giữa các key cùng org.
+TEXT_MODEL_FALLBACKS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"]
+_REASONING_MODELS = ("openai/gpt-oss",)  # các model này hỗ trợ reasoning_effort để giảm token suy luận thừa
 MIN_TEXT_CHARS = 150  # dưới ngưỡng này → coi là PDF scan, dùng Vision fallback
 
 # ---------------------------------------------------------------------------
@@ -187,32 +191,36 @@ def _describe_image(client: Groq, img_b64: str, mime: str, fallback_clients: lis
 def _call_groq_text(client: Groq, prompt: str,
                     max_tokens: int = MAX_TOKENS_DEFAULT,
                     fallback_clients: list = None) -> str:
-    """Gọi Groq text-only model với fallback key khi rate limit."""
+    """Gọi Groq text-only model, xoay key rồi xoay model dự phòng khi rate limit."""
     all_clients = [client] + (fallback_clients or [])
-    for attempt in range(len(all_clients) * 2):
-        cur = all_clients[attempt % len(all_clients)]
-        try:
-            resp = cur.chat.completions.create(
-                model=TEXT_MODEL,
+    all_models = [TEXT_MODEL] + TEXT_MODEL_FALLBACKS
+    last_err = None
+    for round_ in range(2):  # vòng 2: chờ rồi thử lại 1 lần nếu mọi model/key đều hết quota
+        for model in all_models:
+            kwargs = dict(
+                model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
                 temperature=0.1,
             )
-            raw = resp.choices[0].message.content.strip()
-            return extract_json_from_text(raw)
-        except Exception as e:
-            err = str(e)
-            if "429" in err or "rate_limit" in err.lower():
-                if attempt + 1 < len(all_clients):
-                    print(f"\n  [RATE LIMIT text] Chuyển sang key {attempt+2}...", end=" ", flush=True)
-                    continue
-                wait_match = re.search(r"try again in (\d+)m([\d.]+)s", err)
-                wait_secs = int(wait_match.group(1)) * 60 + float(wait_match.group(2)) + 5 if wait_match else 65
-                print(f"\n  [RATE LIMIT text] Chờ {min(wait_secs, 90):.0f}s...", end=" ", flush=True)
-                time.sleep(min(wait_secs, 90))
-                continue
-            raise
-    raise RuntimeError("Rate limit: text model thất bại sau tất cả keys.")
+            if model.startswith(_REASONING_MODELS):
+                kwargs["reasoning_effort"] = "low"
+            for key_idx, cur in enumerate(all_clients):
+                try:
+                    resp = cur.chat.completions.create(**kwargs)
+                    raw = resp.choices[0].message.content.strip()
+                    return extract_json_from_text(raw)
+                except Exception as e:
+                    err = str(e)
+                    last_err = e
+                    if "429" in err or "rate_limit" in err.lower():
+                        print(f"\n  [RATE LIMIT text] {model} key {key_idx+1} hết quota...", end=" ", flush=True)
+                        continue
+                    raise
+        if round_ == 0:
+            print("\n  [RATE LIMIT text] Hết mọi model/key, chờ 65s rồi thử lại...", end=" ", flush=True)
+            time.sleep(65)
+    raise RuntimeError(f"Rate limit: text model thất bại sau tất cả model/key. Lỗi cuối: {last_err}")
 
 
 # ---------------------------------------------------------------------------

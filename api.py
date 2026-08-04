@@ -3368,6 +3368,10 @@ _GEN_SECTION_PROMPTS = {
 
 _GEN_VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
 _GEN_TEXT_MODEL   = "llama-3.3-70b-versatile"
+# Model dự phòng khi _GEN_TEXT_MODEL hết quota: mỗi model có bucket rate-limit riêng trên Groq,
+# nên xoay model mới né được giới hạn token/ngày dùng chung giữa các key cùng org.
+_GEN_TEXT_MODEL_FALLBACKS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"]
+_GEN_REASONING_MODELS = ("openai/gpt-oss",)
 
 
 @app.post("/api/generate-questions")
@@ -3419,30 +3423,34 @@ async def generate_questions_api(request: Request):
                      "text": f"{sys_prompt}\n\nYêu cầu cụ thể: {prompt}"},
                 ],
             }]
-            model = _GEN_VISION_MODEL
+            models = [_GEN_VISION_MODEL]
         else:
             # Text path
             messages = [
                 {"role": "system", "content": sys_prompt},
                 {"role": "user",   "content": prompt},
             ]
-            model = _GEN_TEXT_MODEL
+            models = [_GEN_TEXT_MODEL] + _GEN_TEXT_MODEL_FALLBACKS
 
-        # Xoay vòng qua các key dự phòng nếu key hiện tại bị rate-limit (429)
+        # Xoay vòng qua key dự phòng, rồi model dự phòng, khi bị rate-limit (429)
         resp = None
         last_err = None
-        for key in keys:
-            try:
-                resp = Groq(api_key=key).chat.completions.create(
-                    model=model, messages=messages, max_tokens=4096, temperature=0.7,
-                )
+        for model in models:
+            extra = {"reasoning_effort": "low"} if model.startswith(_GEN_REASONING_MODELS) else {}
+            for key in keys:
+                try:
+                    resp = Groq(api_key=key).chat.completions.create(
+                        model=model, messages=messages, max_tokens=4096, temperature=0.7, **extra,
+                    )
+                    break
+                except Exception as e:
+                    last_err = e
+                    err_str = str(e)
+                    if "429" in err_str or "rate_limit" in err_str.lower():
+                        continue
+                    raise
+            if resp is not None:
                 break
-            except Exception as e:
-                last_err = e
-                err_str = str(e)
-                if "429" in err_str or "rate_limit" in err_str.lower():
-                    continue
-                raise
         if resp is None:
             raise last_err
 
