@@ -40,7 +40,13 @@ export const NO_GRADE_SUBJECTS = ['toeic', 'ielts', 'thieunhi', 'ngupap']
 /** Cấp độ (khối lớp) — học sinh chọn khi đăng ký, lớp gắn với một cấp độ.
  *  Giá trị là chuỗi '6'..'12' (THCS-THPT); nhãn hiển thị "Lớp N". */
 export const GRADES = Array.from({ length: 7 }, (_, i) => String(i + 6))
-export const gradeLabel = (g) => (g ? `Lớp ${g}` : '')
+
+/** Cấp độ dùng riêng cho hồ sơ học sinh (đăng ký, admin sửa khối): có thêm lựa
+ *  chọn "Khác" cho học sinh ngoài lớp 6-12 (người lớn học IELTS/TOEIC, tiểu học...).
+ *  Không dùng cho form tạo lớp hay khối của đề thi — những nơi đó vẫn dùng GRADES. */
+export const STUDENT_GRADES = [...GRADES, 'khac']
+
+export const gradeLabel = (g) => (g === 'khac' ? 'Khác' : g ? `Lớp ${g}` : '')
 
 /** Badge cấp độ (pill xám) — dùng cạnh tên lớp/thẻ học sinh. */
 export function GradeBadge({ grade, size = 'md' }) {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { login, register, ROLE_META, ROLES } from '../auth/mockUsers.js'
-import { GRADES, gradeLabel } from '../components/SubjectBadge.jsx'
+import { STUDENT_GRADES, gradeLabel } from '../components/SubjectBadge.jsx'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 function GoogleLogo() {
   return (
@@ -81,7 +81,7 @@ function CompleteProfileModal({ user, onDone }) {
                 onChange={e => { setGrade(e.target.value); setError('') }}
                 style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none', font: 'inherit', color: 'inherit' }}>
                 <option value="">— Chọn cấp độ —</option>
-                {GRADES.map(g => <option key={g} value={g}>{gradeLabel(g)}</option>)}
+                {STUDENT_GRADES.map(g => <option key={g} value={g}>{gradeLabel(g)}</option>)}
               </select>
             </div>
           </div>
@@ -298,7 +298,7 @@ function RegisterForm({ onLogin }) {
             onChange={e => { setGrade(e.target.value); setError('') }}
             style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none', font: 'inherit', color: 'inherit' }}>
             <option value="">— Chọn cấp độ —</option>
-            {GRADES.map(g => <option key={g} value={g}>{gradeLabel(g)}</option>)}
+            {STUDENT_GRADES.map(g => <option key={g} value={g}>{gradeLabel(g)}</option>)}
           </select>
         </div>
       </div>

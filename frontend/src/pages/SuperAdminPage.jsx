@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ROLE_META, authHeaders } from '../auth/mockUsers.js'
 import { getAllExams } from '../store/examStore.js'
-import { GRADES, gradeLabel } from '../components/SubjectBadge.jsx'
+import { STUDENT_GRADES, gradeLabel } from '../components/SubjectBadge.jsx'
 import SiteContentTab from './SiteContentTab.jsx'
 import ReportsTab from './ReportsTab.jsx'
 
@@ -413,7 +413,7 @@ function EditRoleModal({ user, onSave, onClose }) {
         <div className="sa-field-label">Khối (cấp độ lớp)</div>
         <select className="sa-grade-select" value={grade} onChange={e => setGrade(e.target.value)}>
           <option value="">— Chưa đặt khối —</option>
-          {GRADES.map(g => <option key={g} value={g}>{gradeLabel(g)}</option>)}
+          {STUDENT_GRADES.map(g => <option key={g} value={g}>{gradeLabel(g)}</option>)}
         </select>
         <p className="sa-field-hint">Dùng cho học sinh — quyết định lớp học sinh có thể tham gia.</p>
         <div className="sa-modal-footer">
