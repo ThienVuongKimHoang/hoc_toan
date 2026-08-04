@@ -285,13 +285,13 @@ def grade_essay(client, task_type: str, question_text: str, image_desc: str, ess
 {essay_text}
 
 === INSTRUCTIONS ===
-- Assign a band (0-9, in 0.5 steps) for each of the 4 criteria. Be strict and realistic like a real examiner; penalize under-length essays and memorized/irrelevant responses per the descriptors.
+- Assign a band (0-9, in 0.5 steps) for each of the 4 criteria. Be strict and realistic like a real examiner; penalize under-length essays and memorized/irrelevant responses per the descriptors. KHÔNG hạ band chỉ vì một cách diễn đạt tuy khác nhưng vẫn đúng ngữ pháp và đúng nghĩa — chỉ hạ band khi thực sự có lỗi hoặc hạn chế theo đúng band descriptors.
 - "comment" fields, "feedback", "strengths", "improvements" and "explain" MUST be written in VIETNAMESE (tiếng Việt) so the student understands. Quote English phrases from the essay where relevant.
 - "feedback": nhận xét tổng quan chi tiết 4-8 câu.
-- "corrections": 3-8 lỗi tiêu biểu nhất trong bài. MỖI lỗi gồm:
+- "corrections": liệt kê TẤT CẢ lỗi THỰC SỰ SAI trong bài — không ép số lượng tối thiểu lẫn tối đa (có thể là mảng rỗng [] nếu bài không còn lỗi rõ ràng, có thể nhiều hơn nếu bài thực sự có nhiều lỗi). TUYỆT ĐỐI KHÔNG bịa ra lỗi hoặc bắt bẻ một cách diễn đạt ĐÚNG NGỮ PHÁP và ĐÚNG NGHĨA chỉ để có correction — một từ/cụm vẫn đúng và tự nhiên dù có thể viết cách khác thì KHÔNG phải là lỗi. Với Task 1: các từ mô tả xu hướng số liệu (gradual/sharp/slight/dramatic/steady...) CHỈ bị coi là lỗi nếu SAI LỆCH so với số liệu/biểu đồ trong "VISUAL DATA IN THE TASK" ở trên, không phải vì có từ khác "hay hơn". MỖI lỗi thực sự sai gồm:
   - "error": trích dẫn NGUYÊN VĂN (copy chính xác từng ký tự, không diễn giải lại, không sửa chính tả) một cụm ngắn (2-8 từ) LẤY TỪ ĐÚNG bài luận ở trên chứa lỗi đó — bắt buộc phải tìm thấy y hệt trong bài luận.
   - "fix": cụm đã sửa đúng, thay thế cho "error".
-  - "explain": giải thích ngắn gọn bằng tiếng Việt tại sao sai.
+  - "explain": giải thích ngắn gọn bằng tiếng Việt tại sao sai — phải chỉ rõ cái sai cụ thể (ngữ pháp/nghĩa/số liệu), không viết chung chung kiểu "dùng từ không chính xác" mà không nói rõ vì sao.
   - "type": một trong "grammar" (ngữ pháp), "vocab" (từ vựng/collocation), "coherence" (liên kết/mạch lạc), "task" (nội dung/đề bài).
 
 Return ONLY valid JSON with exactly this structure:

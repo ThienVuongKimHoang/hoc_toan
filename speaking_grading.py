@@ -15,6 +15,7 @@ và listening_grading.py (đọc docx, resolve path, JSON parsing, clamp/roundin
 viết lại.
 """
 
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +45,13 @@ _TTS_MAX_CHARS = 4000   # giới hạn an toàn độ dài input cho TTS
 CRITERIA_KEYS = ["grammar", "vocabulary"]
 
 _DOCX_EXT = ".docx"
+
+
+def _normalize_for_compare(text: str) -> str:
+    """Hạ chữ thường, bỏ dấu câu/khoảng trắng thừa — để so sánh script vs transcript
+    chỉ dựa trên TỪ NGỮ, bỏ qua khác biệt hoa/thường và dấu câu do STT tự sinh."""
+    text = re.sub(r"[^\w\s']", "", (text or "").lower())
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _pick_docx_file(files: list) -> Optional[dict]:
@@ -192,10 +200,11 @@ You are ALSO given the student's WRITTEN SCRIPT (prepared beforehand for Task 1)
   - "fix": cụm đã sửa đúng.
   - "explain": giải thích ngắn gọn bằng tiếng Việt.
   - "type": "grammar" hoặc "vocab".
-- "pronunciationNotes": tối đa 8 mục — những chỗ transcript khác với script theo cách gợi ý học sinh đọc/phát âm SAI (KHÔNG tính khác biệt do học sinh diễn đạt lại tự nhiên bằng từ đồng nghĩa). MỖI mục gồm:
+- "pronunciationNotes": tối đa 8 mục — những chỗ transcript khác với script theo cách gợi ý học sinh đọc/phát âm SAI. TRƯỚC KHI so sánh, coi như đã hạ hết về chữ thường và bỏ hết dấu câu (dấu chấm, phẩy...) ở CẢ HAI bên — script là văn bản viết tay còn transcript do speech-to-text tự sinh, nên khác biệt CHỈ về hoa/thường đầu câu hoặc dấu câu KHÔNG phải là lỗi phát âm, TUYỆT ĐỐI không liệt kê. Cũng KHÔNG tính khác biệt do học sinh diễn đạt lại tự nhiên bằng từ đồng nghĩa. Chỉ liệt kê khi TỪ NGỮ thực sự khác nhau (từ bị đọc sai, bỏ sót, thêm vào, hoặc nghe nhầm thành từ khác). MỖI mục gồm:
   - "script": cụm tương ứng trong kịch bản viết.
   - "spoken": cụm tương ứng đã nhận dạng được trong transcript.
-  - "note": giải thích ngắn bằng tiếng Việt vì sao nghi ngờ đọc/phát âm sai.
+  - "note": giải thích ngắn gọn bằng tiếng Việt vì sao nghi ngờ đọc/phát âm sai — phải chỉ ra rõ TỪ NÀO khác, không được viện lý do hoa/thường hay dấu câu.
+  Nếu "script" và "spoken" của một mục giống hệt nhau (sau khi bỏ qua hoa/thường và dấu câu) thì KHÔNG được thêm mục đó. Nếu không tìm thấy khác biệt từ ngữ thực sự nào trong toàn bài, trả về mảng rỗng [] — TUYỆT ĐỐI không tạo mục chỉ để nói "không có lỗi" hay tương tự.
 
 Return ONLY valid JSON with exactly this structure:
 {{
@@ -249,6 +258,7 @@ Return ONLY valid JSON with exactly this structure:
             {"script": str(n.get("script") or ""), "spoken": str(n.get("spoken") or ""),
              "note": str(n.get("note") or "")}
             for n in (data.get("pronunciationNotes") or []) if isinstance(n, dict)
+            and _normalize_for_compare(n.get("script")) != _normalize_for_compare(n.get("spoken"))
         ],
     }
 
