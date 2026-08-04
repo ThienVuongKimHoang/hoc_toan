@@ -106,6 +106,19 @@ export async function removeMemberFromClass(classId, userId, subject = null) {
   return res.json()
 }
 
+/** Gán/sửa nhãn phân loại học sinh (vd. speakingLevel: 'yeu' | 'on' | null cho IELTS Speaking). */
+export async function updateMemberLabel(classId, userId, speakingLevel, subject = null) {
+  const qs = subject ? `?subject=${encodeURIComponent(subject)}` : ''
+  const res = await fetch(`${API}/${classId}/members/${userId}${qs}`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ speakingLevel: speakingLevel || null }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'Cập nhật nhãn học sinh thất bại')
+  return data
+}
+
 /** Thêm giáo viên phụ (co-teacher) vào lớp — chỉ super_admin dùng. */
 export async function addCoTeacher(classId, teacher) {
   const res = await fetch(`${API}/${classId}/co-teachers`, {
@@ -124,7 +137,7 @@ export async function removeCoTeacher(classId, userId) {
   return res.json()
 }
 
-export async function addAssignment(classId, { title, description, subject, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, shuffleQuestions, attachments, writingTask, listeningTask, teacherId }) {
+export async function addAssignment(classId, { title, description, subject, examId, dueDate, openTime, closeTime, duration, maxAttempts, scoreMode, lockScreen, shuffleQuestions, attachments, writingTask, listeningTask, speakingTask, speaking, teacherId }) {
   const res = await fetch(`${API}/${classId}/assignments`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -138,6 +151,8 @@ export async function addAssignment(classId, { title, description, subject, exam
       shuffleQuestions: !!shuffleQuestions,
       writingTask: writingTask || null,
       listeningTask: !!listeningTask,
+      speakingTask: !!speakingTask,
+      speaking: speaking || null,
       attachments: attachments || [],
       teacherId,
     }),

@@ -11,7 +11,7 @@ import {
   deleteAssignmentSubmission,
   deleteClass, getAllClasses, getClassById, getClassesByTeacher, getSubmissions,
   joinUrl, removeAssignment, removeCoTeacher, removeDocument, removeMemberFromClass,
-  searchStudents, searchTeachers, updateClassInfo, updateDocument, uploadFile,
+  searchStudents, searchTeachers, updateClassInfo, updateDocument, updateMemberLabel, uploadFile,
 } from '../store/classStore.js'
 import {
   getAttendanceHistory, getAttendanceSession, getClassProgress, submitAttendance,
@@ -72,6 +72,7 @@ const GRADE_ACCENTS = ['#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#
 const gradeAccent = (g) => (g === '__none__' ? '#94A3B8' : GRADE_ACCENTS[(Number(g) || 0) % GRADE_ACCENTS.length])
 import { BandChip, GradeButton, IeltsGradeModal, IeltsStatsTable } from '../components/IeltsGrade.jsx'
 import { ListeningGradeModal, ListeningStatsTable } from '../components/ListeningGrade.jsx'
+import { SpeakingGradeModal, SpeakingStatsTable } from '../components/SpeakingGrade.jsx'
 import GradeEssayModal from '../components/GradeEssayModal.jsx'
 
 /* ─── SVG icons ─── */
@@ -260,8 +261,9 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
   const isExam = !!assignment.examId
   const isWriting = !!assignment.writingTask
   const isListening = !!assignment.listeningTask
+  const isSpeaking = assignment.kind === 'speaking'
   const taskLabel = isWriting ? `IELTS Writing ${assignment.writingTask === 'task1' ? 'Task 1' : 'Task 2'}`
-    : isListening ? 'Chấm nói (AI)' : null
+    : isListening ? 'Chấm nói (AI)' : isSpeaking ? 'IELTS Speaking' : null
 
   const reload = useCallback(() => {
     if (isExam) {
@@ -380,10 +382,16 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
                 {assignment.maxAttempts ? ` · Tối đa ${assignment.maxAttempts} lần` : ' · Không giới hạn số lần'}
               </div>
             )}
-            {(isWriting || isListening) && (
+            {(isWriting || isListening || isSpeaking) && (
               <div className="ielts-panel-stats">
                 <h4 className="sub-section-title" style={{ marginTop: 0 }}>📊 Bảng điểm {taskLabel} (AI chấm)</h4>
-                {isListening ? (
+                {isSpeaking ? (
+                  <SpeakingStatsTable classId={classId} assignmentId={assignment.id} refreshKey={statsKey}
+                    onViewStudent={sid => {
+                      const s = (data?.submissions || []).find(x => String(x.studentId) === String(sid))
+                      if (s?.aiGrade) setViewGrade(s)
+                    }} />
+                ) : isListening ? (
                   <ListeningStatsTable classId={classId} assignmentId={assignment.id} refreshKey={statsKey}
                     onViewStudent={sid => {
                       const s = (data?.submissions || []).find(x => String(x.studentId) === String(sid))
@@ -449,7 +457,7 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
                         </div>
                       )}
                     </div>
-                    {(isWriting || isListening) ? (
+                    {(isWriting || isListening || isSpeaking) ? (
                       <div className="ielts-row-actions">
                         {s.aiGrade?.status === 'done' && (
                           <button className="ielts-band-view" title="Xem kết quả chấm AI"
@@ -527,13 +535,19 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
         </div>
       </div>
       {viewing && <FileViewerModal file={viewing} onClose={() => setViewing(null)} />}
-      {viewGrade && isListening && (
+      {viewGrade && isSpeaking && (
+        <SpeakingGradeModal grade={viewGrade.aiGrade} studentName={viewGrade.studentName}
+          onClose={() => setViewGrade(null)}
+          editable classId={classId} assignmentId={assignment.id} studentId={viewGrade.studentId}
+          onSaved={(updated) => { setViewGrade(v => v ? { ...v, aiGrade: updated } : v); reload(); setStatsKey(k => k + 1) }} />
+      )}
+      {viewGrade && !isSpeaking && isListening && (
         <ListeningGradeModal grade={viewGrade.aiGrade} studentName={viewGrade.studentName}
           onClose={() => setViewGrade(null)}
           editable classId={classId} assignmentId={assignment.id} studentId={viewGrade.studentId}
           onSaved={(updated) => { setViewGrade(v => v ? { ...v, aiGrade: updated } : v); reload(); setStatsKey(k => k + 1) }} />
       )}
-      {viewGrade && !isListening && (
+      {viewGrade && !isSpeaking && !isListening && (
         <IeltsGradeModal grade={viewGrade.aiGrade} studentName={viewGrade.studentName}
           taskLabel={taskLabel} onClose={() => setViewGrade(null)}
           editable classId={classId} assignmentId={assignment.id} studentId={viewGrade.studentId}
@@ -859,6 +873,9 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
   const [shuffleQuestions, setShuffleQuestions] = useState(true)  // trộn thứ tự câu hỏi/đáp án theo học sinh
   const [writingTask, setWritingTask] = useState('')        // '' | task1 | task2 (IELTS Writing, lớp Anh)
   const [listeningTask, setListeningTask] = useState(false) // true = chấm bài nói (audio → ngữ pháp/từ vựng, lớp Anh)
+  const [speakingTask, setSpeakingTask] = useState(false)   // true = IELTS Speaking Task1(docx+audio mẫu)+Task2(nói, đối chiếu docx)
+  const [task1Questions, setTask1Questions] = useState([''])
+  const [task2Questions, setTask2Questions] = useState([''])
   const [attachments, setAttachments] = useState([])
   const [uploading, setUploading] = useState(false)
   const [viewing, setViewing] = useState(null)
@@ -866,6 +883,10 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
 
   const handleUploaded = (files) => setAttachments(prev => [...prev, ...files])
   const removeAttach = (id) => setAttachments(prev => prev.filter(f => f.id !== id))
+
+  const updateQuestion = (setter, idx, value) => setter(prev => prev.map((q, i) => i === idx ? value : q))
+  const addQuestion = (setter) => setter(prev => [...prev, ''])
+  const removeQuestion = (setter, idx) => setter(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
 
   const pickExam = (id) => {
     setExamId(id)
@@ -913,8 +934,20 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
     if (writingTask === 'task1' && attachments.length === 0) {
       setErr('IELTS Writing Task 1 cần đính kèm ảnh đề bài (biểu đồ/bảng/sơ đồ) để AI chấm chính xác.'); return
     }
+    if (speakingTask && task1Questions.every(q => !q.trim())) {
+      setErr('Vui lòng nhập ít nhất 1 câu hỏi cho Task 1.'); return
+    }
     const iso = new Date(`${dueDate}T${dueTime}`).toISOString()
-    onSave({ title: title.trim(), description: desc.trim(), examId: null, dueDate: iso, attachments, writingTask: writingTask || null, listeningTask })
+    onSave({
+      title: title.trim(), description: desc.trim(), examId: null, dueDate: iso, attachments,
+      writingTask: speakingTask ? null : (writingTask || null),
+      listeningTask: speakingTask ? false : listeningTask,
+      speakingTask,
+      speaking: speakingTask ? {
+        task1Questions: task1Questions.map(q => q.trim()).filter(Boolean),
+        task2Questions: task2Questions.map(q => q.trim()).filter(Boolean),
+      } : null,
+    })
   }
 
   const selectedExam = exams.find(e => e.id === examId)
@@ -1064,14 +1097,17 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
                     <div className="wt-picker">
                       {[['', '✍️ Không chấm AI'], ['task1', '📊 Part 1 · Writing Task 1'], ['task2', '📝 Part 2 · Writing Task 2']].map(([v, l]) => (
                         <button key={v} type="button"
-                          className={`wt-pick ${!listeningTask && writingTask === v ? 'wt-pick--active' : ''}`}
-                          onClick={() => { setWritingTask(v); setListeningTask(false) }}>{l}</button>
+                          className={`wt-pick ${!listeningTask && !speakingTask && writingTask === v ? 'wt-pick--active' : ''}`}
+                          onClick={() => { setWritingTask(v); setListeningTask(false); setSpeakingTask(false) }}>{l}</button>
                       ))}
                       <button type="button"
                         className={`wt-pick ${listeningTask ? 'wt-pick--active' : ''}`}
-                        onClick={() => { setListeningTask(true); setWritingTask('') }}>🎧 Nói · Chấm ngữ pháp/từ vựng</button>
+                        onClick={() => { setListeningTask(true); setWritingTask(''); setSpeakingTask(false) }}>🎧 Nói · Chấm ngữ pháp/từ vựng</button>
+                      <button type="button"
+                        className={`wt-pick ${speakingTask ? 'wt-pick--active' : ''}`}
+                        onClick={() => { setSpeakingTask(true); setWritingTask(''); setListeningTask(false) }}>🗣 Speaking (Task 1+2, phân loại Yếu/Ổn)</button>
                     </div>
-                    {writingTask && !listeningTask && (
+                    {writingTask && !listeningTask && !speakingTask && (
                       <div className="cm-info-note" style={{ marginTop: 8 }}>
                         {writingTask === 'task1'
                           ? <>📊 <strong>Task 1</strong>: AI chấm theo band descriptors Task 1. Hãy <strong>đính kèm ảnh đề bài</strong> (biểu đồ/bảng/sơ đồ) bên dưới — AI sẽ trích xuất hình ảnh đề để chấm chính xác.</>
@@ -1085,6 +1121,37 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
                         thành văn bản rồi chấm 2 tiêu chí <strong>Ngữ pháp</strong> và <strong>Từ vựng</strong> (band 0–9).
                         {' '}Sau khi học sinh nộp, bạn bấm <strong>🤖 Chấm AI</strong> trong phần bài nộp để chấm từng bài.
                       </div>
+                    )}
+                    {speakingTask && (
+                      <>
+                        <div className="cm-info-note" style={{ marginTop: 8 }}>
+                          🗣 Học sinh nộp 1 file <strong>.docx</strong> (kịch bản trả lời). AI chấm lỗi + viết lại bản hoàn thiện hơn, rồi đọc mẫu bằng audio AI (Task 1).
+                          {' '}Học sinh nhãn <strong>"Ổn"</strong> (gán trong tab Thành viên) làm thêm <strong>Task 2</strong>: ghi âm nói, AI đối chiếu với chính file .docx đã nộp để phát hiện chỗ đọc sai.
+                          {' '}Học sinh nhãn <strong>"Yếu"</strong> chỉ cần làm Task 1.
+                        </div>
+
+                        <label className="cm-label" style={{ marginTop: 14 }}>❓ Câu hỏi Task 1 *</label>
+                        {task1Questions.map((q, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                            <input className="cm-input" style={{ flex: 1 }} placeholder={`Câu hỏi ${i + 1}`}
+                              value={q} onChange={e => updateQuestion(setTask1Questions, i, e.target.value)} />
+                            <button type="button" className="mec-btn" onClick={() => removeQuestion(setTask1Questions, i)}>✕</button>
+                          </div>
+                        ))}
+                        <button type="button" className="mec-btn" onClick={() => addQuestion(setTask1Questions)}>+ Thêm câu hỏi</button>
+
+                        <label className="cm-label" style={{ marginTop: 14 }}>
+                          ❓ Câu hỏi Task 2 <span style={{ color: '#94a3b8', fontWeight: 400 }}>(chỉ học sinh nhãn "Ổn" thấy)</span>
+                        </label>
+                        {task2Questions.map((q, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                            <input className="cm-input" style={{ flex: 1 }} placeholder={`Câu hỏi ${i + 1}`}
+                              value={q} onChange={e => updateQuestion(setTask2Questions, i, e.target.value)} />
+                            <button type="button" className="mec-btn" onClick={() => removeQuestion(setTask2Questions, i)}>✕</button>
+                          </div>
+                        ))}
+                        <button type="button" className="mec-btn" onClick={() => addQuestion(setTask2Questions)}>+ Thêm câu hỏi</button>
+                      </>
                     )}
                   </>
                 )}
@@ -1543,6 +1610,13 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
       refresh()
     } catch (err) { alert(err.message) }
   }
+  /* Nhãn phân loại IELTS Speaking (Yếu/Ổn) — quyết định học sinh chỉ làm Task 1 hay Task 1+2 */
+  const handleUpdateMemberLabel = async (userId, speakingLevel) => {
+    try {
+      await updateMemberLabel(cls.id, userId, speakingLevel, subject)
+      refresh()
+    } catch (err) { alert(err.message) }
+  }
 
   /* Giáo viên phụ trách (co-teacher) — chỉ super_admin thao tác */
   const handleAddCoTeacher = async (teacher) => {
@@ -1684,6 +1758,11 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
                 🎧 Chấm nói · Chấm AI
               </span>
             )}
+            {a.kind === 'speaking' && (
+              <span className="cm-exam-chip ielts-task-chip">
+                🗣 Speaking Task 1{(a.speaking?.task2Questions?.length ?? 0) > 0 ? '+2' : ''} · Chấm AI
+              </span>
+            )}
             {a.attachments?.length > 0 && <span className="cm-exam-chip">{IC.clip(12)} {a.attachments.length} file</span>}
           </div>
           {a.attachments?.length > 0 && (
@@ -1807,6 +1886,16 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
                       <div className="cm-member-email">{m.email}</div>
                     </div>
                     <div className="cm-member-added">Thêm: {formatDt(m.addedAt)}</div>
+                    {['anh', 'ielts'].includes(subject) && (
+                      <select className="cm-input cm-select" style={{ width: 110 }}
+                        value={m.speakingLevel || ''}
+                        title="Nhãn phân loại IELTS Speaking — Yếu: chỉ Task 1, Ổn: Task 1+2"
+                        onChange={e => handleUpdateMemberLabel(m.userId, e.target.value || null)}>
+                        <option value="">— Nhãn —</option>
+                        <option value="yeu">Yếu (Task 1)</option>
+                        <option value="on">Ổn (Task 1+2)</option>
+                      </select>
+                    )}
                     <button className="cm-remove-btn" onClick={() => handleRemoveMember(m.userId)}>{IC.x(14)}</button>
                   </div>
                 ))}

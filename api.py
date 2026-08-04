@@ -57,6 +57,7 @@ FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
 import database as db
 import ielts_grading as ielts
 import listening_grading as listening
+import speaking_grading as speaking
 
 # task_id → {"status": pending|running|done|error, "progress": [...], "result": ..., "error": ...}
 TASKS: dict[str, dict] = {}
@@ -1893,7 +1894,7 @@ async def student_pending(caller: dict = Depends(require_auth)):
             items.append({
                 "classId": cid, "className": cls.get("name", ""),
                 "assignmentId": a.get("id"), "title": a.get("title", ""),
-                "kind": "exam" if a.get("examId") else "homework",
+                "kind": a.get("kind") or ("exam" if a.get("examId") else "homework"),
                 "examId": a.get("examId"),
                 "dueDate": a.get("closeTime") or a.get("dueDate"),
                 "openTime": a.get("openTime"),
@@ -2072,15 +2073,47 @@ async def remove_member_endpoint(cls_id: str, user_id: str, subject: str = None,
         return JSONResponse({"error": "Không có quyền xóa thành viên khỏi lớp này"}, status_code=403)
     subj = subject or None
     def mutate(cls):
+        default_subj = cls.get("subject") or None
         def keep(m):
             if str(m.get("userId")) != user_id:
                 return True
             if subj is None:
                 return False   # xoá khỏi mọi môn
-            return (m.get("subject") or None) != subj
+            # Thành viên thêm trước khi có tính năng gắn môn (không có "subject")
+            # được coi là thuộc môn mặc định của lớp, tránh bị kẹt không xoá được.
+            m_subj = m.get("subject") or default_subj
+            return m_subj != subj
         cls["members"] = [m for m in cls.get("members", []) if keep(m)]
     cls = db.update_class_atomic(cls_id, mutate)
     if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    return {"ok": True}
+
+
+@app.patch("/api/classes/{cls_id}/members/{user_id}")
+async def update_member_endpoint(cls_id: str, user_id: str, request: Request, subject: str = None,
+                                  caller: dict = Depends(require_auth)):
+    """Giáo viên gán/sửa nhãn phân loại học sinh (vd. speakingLevel: 'yeu'|'on' cho IELTS Speaking)."""
+    body = await request.json()
+    cls0 = db.get_class(cls_id)
+    if cls0 is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, caller["id"]):
+        return JSONResponse({"error": "Không có quyền sửa thành viên của lớp này"}, status_code=403)
+    subj = subject or None
+    err = {}
+    def mutate(cls):
+        primary = cls.get("subject") or (cls.get("subjects") or [None])[0]
+        target_subj = subj or primary
+        target = next((m for m in cls.get("members", [])
+                       if str(m.get("userId")) == user_id and (m.get("subject") or primary) == target_subj), None)
+        if not target:
+            err["msg"] = "Không tìm thấy học sinh trong lớp"
+            return False
+        if "speakingLevel" in body:
+            target["speakingLevel"] = body.get("speakingLevel") if body.get("speakingLevel") in ("yeu", "on") else None
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if err: return JSONResponse({"error": err["msg"]}, status_code=404)
     return {"ok": True}
 
 
@@ -2142,6 +2175,8 @@ async def add_assignment_endpoint(cls_id: str, request: Request, caller: dict = 
     except (TypeError, ValueError):
         max_attempts = None
     score_mode = body.get("scoreMode") if body.get("scoreMode") in ("highest", "average", "latest") else "highest"
+    speaking_task = bool(body.get("speakingTask"))
+    speaking_in = body.get("speaking") or {}
     asgn = {
         "id": _cls_id(), "title": body.get("title", ""),
         "description": body.get("description", ""),
@@ -2149,7 +2184,7 @@ async def add_assignment_endpoint(cls_id: str, request: Request, caller: dict = 
         # dueDate giữ cho tương thích cũ; với đề thi nó = closeTime
         "dueDate": close_time or body.get("dueDate"),
         "examId": exam_id,
-        "kind": "exam" if exam_id else "homework",
+        "kind": "exam" if exam_id else ("speaking" if speaking_task else "homework"),
         "openTime": open_time,
         "closeTime": close_time,
         "duration": body.get("duration"),
@@ -2158,9 +2193,14 @@ async def add_assignment_endpoint(cls_id: str, request: Request, caller: dict = 
         "lockScreen": bool(body.get("lockScreen", False)),   # khóa màn hình chống gian lận
         "shuffleQuestions": bool(body.get("shuffleQuestions", False)),  # trộn thứ tự câu hỏi/đáp án theo học sinh
         # IELTS Writing (lớp Tiếng Anh): part 1 ↔ task1, part 2 ↔ task2, None = không chấm AI
-        "writingTask": body.get("writingTask") if body.get("writingTask") in ("task1", "task2") else None,
-        # Chấm bài nói (lớp Tiếng Anh): học sinh nộp audio → AI chấm ngữ pháp/từ vựng
-        "listeningTask": bool(body.get("listeningTask")),
+        "writingTask": None if speaking_task else (body.get("writingTask") if body.get("writingTask") in ("task1", "task2") else None),
+        # Chấm bài nói cũ (lớp Tiếng Anh): học sinh nộp audio → AI chấm ngữ pháp/từ vựng
+        "listeningTask": False if speaking_task else bool(body.get("listeningTask")),
+        # IELTS Speaking (Task 1: nộp docx được AI sửa + đọc mẫu; Task 2: nói, đối chiếu docx — chỉ học sinh nhãn "on")
+        "speaking": {
+            "task1Questions": [str(q).strip() for q in (speaking_in.get("task1Questions") or []) if str(q).strip()],
+            "task2Questions": [str(q).strip() for q in (speaking_in.get("task2Questions") or []) if str(q).strip()],
+        } if speaking_task else None,
         "attachments": body.get("attachments", []),
         "createdAt": _now_iso(), "submissions": [],
     }
@@ -2377,6 +2417,16 @@ def _find_assignment(cls: dict, asgn_id: str):
     return next((a for a in cls.get("assignments", []) if a.get("id") == asgn_id), None)
 
 
+def _student_speaking_label(cls: dict, student_id, subject) -> str:
+    """Nhãn phân loại IELTS Speaking của học sinh trong lớp: 'yeu' (mặc định) | 'on'."""
+    primary = cls.get("subject") or (cls.get("subjects") or [None])[0]
+    target_subj = subject or primary
+    for m in cls.get("members", []):
+        if str(m.get("userId")) == str(student_id) and (m.get("subject") or primary) == target_subj:
+            return m.get("speakingLevel") if m.get("speakingLevel") in ("yeu", "on") else "yeu"
+    return "yeu"
+
+
 def _save_ai_grade(cls_id: str, asgn_id: str, student_id: str, grade: dict) -> None:
     """Ghi kết quả chấm vào submission (khóa dòng để không ghi đè bài nộp song song)."""
     def mutate(cls):
@@ -2399,7 +2449,8 @@ def _grade_submission_sync(cls_id: str, asgn_id: str, student_id: str) -> dict:
     asgn = _find_assignment(cls, asgn_id)
     if not asgn:
         return {"status": "error", "error": "Không tìm thấy bài tập."}
-    if not asgn.get("writingTask") and not asgn.get("listeningTask"):
+    is_speaking = asgn.get("kind") == "speaking"
+    if not asgn.get("writingTask") and not asgn.get("listeningTask") and not is_speaking:
         return {"status": "error", "error": "Bài tập này không bật chấm AI."}
     sub = next((s for s in asgn.get("submissions", [])
                 if str(s.get("studentId")) == str(student_id)), None)
@@ -2408,6 +2459,9 @@ def _grade_submission_sync(cls_id: str, asgn_id: str, student_id: str) -> dict:
     try:
         if asgn.get("listeningTask"):
             grade = listening.run_grading(_get_groq(), asgn, sub, CLASS_DOCS_DIR)
+        elif is_speaking:
+            label = _student_speaking_label(cls, student_id, asgn.get("subject"))
+            grade = speaking.run_grading(_get_groq(), asgn, sub, CLASS_DOCS_DIR, label)
         else:
             grade = ielts.run_grading(_get_groq(), asgn, sub, CLASS_DOCS_DIR)
     except Exception as e:
@@ -2451,6 +2505,8 @@ async def edit_ai_grade_endpoint(cls_id: str, asgn_id: str, student_id: str, req
     patch = await request.json()
     if asgn.get("listeningTask"):
         updated = listening.apply_manual_edit(sub["aiGrade"], patch, caller["id"])
+    elif asgn.get("kind") == "speaking":
+        updated = speaking.apply_manual_edit(sub["aiGrade"], patch, caller["id"])
     else:
         updated = ielts.apply_manual_edit(sub["aiGrade"], patch, caller["id"])
     _save_ai_grade(cls_id, asgn_id, student_id, updated)
@@ -2466,6 +2522,32 @@ async def grades_summary_endpoint(cls_id: str, asgn_id: str):
     asgn = _find_assignment(cls, asgn_id)
     if not asgn:
         return JSONResponse({"error": "Không tìm thấy bài tập"}, status_code=404)
+
+    if asgn.get("kind") == "speaking":
+        rows, bands = [], []
+        for s in asgn.get("submissions", []):
+            g = s.get("aiGrade") or {}
+            t1 = g.get("task1") or {}
+            t2 = g.get("task2")
+            rows.append({
+                "studentId": s.get("studentId"), "studentName": s.get("studentName", ""),
+                "submittedAt": s.get("submittedAt"), "status": g.get("status") or "none",
+                "studentLabel": g.get("studentLabel"),
+                "task1Band": t1.get("overallBand"),
+                "task2Band": (t2 or {}).get("overallBand") if t2 else None,
+                "overallBand": g.get("overallBand"),
+            })
+            if g.get("status") == "done" and g.get("overallBand") is not None:
+                bands.append(g["overallBand"])
+        rows.sort(key=lambda r: (-(r["overallBand"] or -1), r["studentName"]))
+        stats = {
+            "graded": len(bands), "total": len(rows),
+            "avg": round(sum(bands) / len(bands), 2) if bands else None,
+            "max": max(bands) if bands else None,
+            "min": min(bands) if bands else None,
+        }
+        return {"kind": "speaking", "rows": rows, "stats": stats}
+
     is_listening = bool(asgn.get("listeningTask"))
     criteria_keys = listening.CRITERIA_KEYS if is_listening else ielts.CRITERIA_KEYS
     rows, bands = [], []

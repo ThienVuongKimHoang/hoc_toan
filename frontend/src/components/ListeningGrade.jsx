@@ -46,7 +46,7 @@ function buildSyncSegments(transcript, segments) {
 }
 
 /* ─── Audio player đồng bộ highlight theo transcript (kiểu karaoke) ─── */
-function SyncedTranscript({ audioUrl, transcript, segments }) {
+export function SyncedTranscript({ audioUrl, transcript, segments }) {
   const audioRef = useRef(null)
   const [activeIdx, setActiveIdx] = useState(null)
 

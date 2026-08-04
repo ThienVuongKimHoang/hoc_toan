@@ -4,6 +4,7 @@ import { getPracticeInfo } from '../store/examStore.js'
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, gradeLabel } from '../components/SubjectBadge.jsx'
 import { BandChip, IeltsGradeModal, IeltsStatsModal } from '../components/IeltsGrade.jsx'
 import { ListeningGradeModal, ListeningStatsModal } from '../components/ListeningGrade.jsx'
+import { SpeakingGradeModal, SpeakingStatsModal } from '../components/SpeakingGrade.jsx'
 import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
 import { isExerciseDoc, sortDocsByOrder } from '../utils/exerciseDocs.js'
 import { youtubeEmbedUrl, youtubeThumbnail } from '../utils/youtube.js'
@@ -150,6 +151,28 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
   const [err,        setErr]        = useState('')
   const inputRef = useRef(null)
 
+  // IELTS Speaking: Task 1 (kịch bản .docx, bắt buộc) + Task 2 (ghi âm, chỉ nhãn "Ổn")
+  const isSpeaking = assignment.kind === 'speaking'
+  const asgnSubject = assignment.subject || primarySubject(cls)
+  const myMember = (cls.members || []).find(m =>
+    String(m.userId) === String(user.id) && (m.subject || primarySubject(cls)) === asgnSubject)
+  const speakingLevel = myMember?.speakingLevel === 'on' ? 'on' : 'yeu'
+  const task1Questions = assignment.speaking?.task1Questions || []
+  const task2Questions = assignment.speaking?.task2Questions || []
+  const [docxFile,        setDocxFile]        = useState(null)
+  const [audioFile,       setAudioFile]       = useState(null)
+  const [uploadingDocx,   setUploadingDocx]   = useState(false)
+  const [uploadingAudio,  setUploadingAudio]  = useState(false)
+  const docxInputRef = useRef(null)
+  const audioInputRef = useRef(null)
+
+  const uploadSingle = async (file, setFile, setBusy) => {
+    if (!file) return
+    setBusy(true)
+    try { setFile(await uploadFile(file)) } catch (e) { setErr(e.message || 'Upload thất bại') }
+    finally { setBusy(false) }
+  }
+
   const processFiles = async (rawFiles) => {
     if (!rawFiles.length) return
     setUploading(true)
@@ -167,13 +190,17 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
   }
 
   const handleSubmit = async () => {
-    if (!assignment.examId && files.length === 0) {
+    if (isSpeaking) {
+      if (!docxFile) { setErr('Vui lòng nộp file kịch bản (.docx) cho Task 1.'); return }
+      if (speakingLevel === 'on' && !audioFile) { setErr('Vui lòng nộp file ghi âm cho Task 2.'); return }
+    } else if (!assignment.examId && files.length === 0) {
       setErr('Vui lòng nộp ít nhất một file.'); return
     }
     setSubmitting(true)
     try {
+      const submitFiles = isSpeaking ? [docxFile, audioFile].filter(Boolean) : files
       await submitAssignment(cls.id, assignment.id, {
-        studentId: user.id, studentName: user.name, files, note,
+        studentId: user.id, studentName: user.name, files: submitFiles, note,
       })
       onSubmitted()
     } catch (e) { setErr(e.message) }
@@ -225,6 +252,82 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
                   {IC.play(14)} Làm bài thi
                 </a>
               </div>
+            ) : isSpeaking ? (
+              <>
+                <div className="cm-info-note ielts-submit-note" style={{marginBottom:12}}>
+                  🗣 Bài <strong>IELTS Speaking</strong> — Task 1: nộp file kịch bản (.docx), AI chấm lỗi + đọc mẫu bản đã sửa bằng audio.
+                  {speakingLevel === 'on'
+                    ? <> Bạn thuộc nhãn <strong>"Ổn"</strong> nên làm thêm <strong>Task 2</strong>: ghi âm nói, AI đối chiếu với chính file kịch bản để phát hiện chỗ đọc sai.</>
+                    : <> Bạn thuộc nhãn <strong>"Yếu"</strong> nên chỉ cần làm Task 1.</>}
+                </div>
+
+                {task1Questions.length > 0 && (
+                  <div className="cm-info-note" style={{marginBottom:12}}>
+                    <strong>Câu hỏi Task 1:</strong>
+                    <ol style={{margin:'6px 0 0 18px', padding:0}}>
+                      {task1Questions.map((q, i) => <li key={i}>{q}</li>)}
+                    </ol>
+                  </div>
+                )}
+                <label className="cm-label">📄 File kịch bản Task 1 (.docx) *</label>
+                {docxFile ? (
+                  <div className="file-chip-list" style={{marginBottom:8}}>
+                    <FileChip file={docxFile} onRemove={() => setDocxFile(null)} onView={setViewing} />
+                  </div>
+                ) : (
+                  <div
+                    className={`file-dropzone ${uploadingDocx ? 'file-dropzone--uploading' : ''}`}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); uploadSingle(e.dataTransfer.files?.[0], setDocxFile, setUploadingDocx) }}
+                    onClick={() => !uploadingDocx && docxInputRef.current?.click()}
+                  >
+                    <input ref={docxInputRef} type="file" style={{display:'none'}} accept=".docx"
+                      onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; uploadSingle(f, setDocxFile, setUploadingDocx) }} />
+                    {uploadingDocx
+                      ? <><span className="fdz-spinner"/>Đang upload…</>
+                      : <>{IC.upload(20)}<span>Kéo thả hoặc <u>click để chọn file .docx</u></span><span className="fdz-hint">Chỉ hỗ trợ .docx</span></>}
+                  </div>
+                )}
+
+                {speakingLevel === 'on' && (
+                  <>
+                    {task2Questions.length > 0 && (
+                      <div className="cm-info-note" style={{margin:'14px 0 12px'}}>
+                        <strong>Câu hỏi Task 2:</strong>
+                        <ol style={{margin:'6px 0 0 18px', padding:0}}>
+                          {task2Questions.map((q, i) => <li key={i}>{q}</li>)}
+                        </ol>
+                      </div>
+                    )}
+                    <label className="cm-label" style={{marginTop:14}}>🎤 File ghi âm Task 2 *</label>
+                    {audioFile ? (
+                      <div className="file-chip-list" style={{marginBottom:8}}>
+                        <FileChip file={audioFile} onRemove={() => setAudioFile(null)} onView={setViewing} />
+                      </div>
+                    ) : (
+                      <div
+                        className={`file-dropzone ${uploadingAudio ? 'file-dropzone--uploading' : ''}`}
+                        onDragOver={e => e.preventDefault()}
+                        onDrop={e => { e.preventDefault(); uploadSingle(e.dataTransfer.files?.[0], setAudioFile, setUploadingAudio) }}
+                        onClick={() => !uploadingAudio && audioInputRef.current?.click()}
+                      >
+                        <input ref={audioInputRef} type="file" style={{display:'none'}} accept=".mp3,.wav,.m4a,.ogg,.webm,.aac"
+                          onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; uploadSingle(f, setAudioFile, setUploadingAudio) }} />
+                        {uploadingAudio
+                          ? <><span className="fdz-spinner"/>Đang upload…</>
+                          : <>{IC.upload(20)}<span>Kéo thả hoặc <u>click để chọn file ghi âm</u></span><span className="fdz-hint">mp3, wav, m4a, ogg…</span></>}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <label className="cm-label" style={{marginTop:14}}>
+                  Ghi chú <span style={{color:'#94a3b8',fontWeight:400}}>(tuỳ chọn)</span>
+                </label>
+                <textarea className="cm-input cm-textarea" rows={2}
+                  placeholder="Ghi chú cho giáo viên…"
+                  value={note} onChange={e => setNote(e.target.value)} />
+              </>
             ) : (
               <>
                 {assignment.writingTask && (
@@ -284,7 +387,7 @@ function SubmitModal({ cls, assignment, user, onClose, onSubmitted }) {
               <div className="cm-footer">
                 <button className="pm-cancel" onClick={onClose}>Huỷ</button>
                 <button className="btn-primary cm-submit" onClick={handleSubmit}
-                  disabled={submitting || uploading}>
+                  disabled={submitting || uploading || uploadingDocx || uploadingAudio}>
                   {submitting ? '⏳ Đang nộp…' : '📤 Nộp bài'}
                 </button>
               </div>
@@ -432,8 +535,9 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
   const isDuePast   = assignment.dueDate && new Date(assignment.dueDate) < new Date()
   const isWriting   = !!assignment.writingTask
   const isListening = !!assignment.listeningTask
+  const isSpeaking  = assignment.kind === 'speaking'
   const taskLabel   = isWriting ? `IELTS Writing ${assignment.writingTask === 'task1' ? 'Task 1' : 'Task 2'}`
-    : isListening ? 'Chấm nói (AI)' : null
+    : isListening ? 'Chấm nói (AI)' : isSpeaking ? 'IELTS Speaking' : null
   const myGrade     = mySubmission?.aiGrade
 
   return (
@@ -447,6 +551,7 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
           </span>
           {isWriting && <span className="cm-exam-chip ielts-task-chip">📝 {taskLabel} · Chấm điểm tự động</span>}
           {isListening && <span className="cm-exam-chip ielts-task-chip">🎧 {taskLabel} · Chấm điểm tự động</span>}
+          {isSpeaking && <span className="cm-exam-chip ielts-task-chip">🗣 {taskLabel} · Chấm điểm tự động</span>}
           {assignment.attachments?.length > 0 && <span className="cm-exam-chip">{IC.clip(12)} {assignment.attachments.length} file đính kèm</span>}
         </div>
         {mySubmission && (
@@ -455,7 +560,7 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
             {mySubmission.files?.length > 0 && <span> · {mySubmission.files.length} file</span>}
           </div>
         )}
-        {(isWriting || isListening) && mySubmission && (
+        {(isWriting || isListening || isSpeaking) && mySubmission && (
           <div className="ielts-row-actions" style={{marginTop:8}}>
             {myGrade?.status === 'done' && (
               <button className="ielts-band-view" onClick={() => setShowGrade(true)}>
@@ -477,18 +582,25 @@ function AssignmentCard({ assignment, cls, user, onSubmit }) {
           ? (mySubmission ? '✅ Đã nộp (hết hạn)' : '🔒 Đã hết hạn')
           : (mySubmission ? <>{IC.pencil(14)} Nộp lại</> : '📤 Nộp bài')}
       </button>
-      {showGrade && myGrade && isListening && (
+      {showGrade && myGrade && isSpeaking && (
+        <SpeakingGradeModal grade={myGrade} studentName={user.name}
+          onClose={() => setShowGrade(false)} />
+      )}
+      {showGrade && myGrade && !isSpeaking && isListening && (
         <ListeningGradeModal grade={myGrade} studentName={user.name}
           onClose={() => setShowGrade(false)} />
       )}
-      {showGrade && myGrade && !isListening && (
+      {showGrade && myGrade && !isSpeaking && !isListening && (
         <IeltsGradeModal grade={myGrade} studentName={user.name} taskLabel={taskLabel}
           onClose={() => setShowGrade(false)} />
       )}
-      {showStats && isListening && (
+      {showStats && isSpeaking && (
+        <SpeakingStatsModal classId={cls.id} assignment={assignment} onClose={() => setShowStats(false)} />
+      )}
+      {showStats && !isSpeaking && isListening && (
         <ListeningStatsModal classId={cls.id} assignment={assignment} onClose={() => setShowStats(false)} />
       )}
-      {showStats && !isListening && (
+      {showStats && !isSpeaking && !isListening && (
         <IeltsStatsModal classId={cls.id} assignment={assignment} onClose={() => setShowStats(false)} />
       )}
     </div>
@@ -515,7 +627,7 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
 
   // AI đang chấm bài của mình → tự refresh để hiện kết quả khi chấm xong
   const hasPendingGrade = (localCls.assignments || []).some(a =>
-    (a.writingTask || a.listeningTask) && a.submissions?.some(s =>
+    (a.writingTask || a.listeningTask || a.kind === 'speaking') && a.submissions?.some(s =>
       String(s.studentId) === String(user.id) && s.aiGrade?.status === 'pending'))
   useEffect(() => {
     if (!hasPendingGrade) return
