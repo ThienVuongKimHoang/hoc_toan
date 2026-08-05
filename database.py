@@ -252,8 +252,10 @@ CREATE TABLE IF NOT EXISTS banned_ips (
     banned_at  TIMESTAMPTZ  DEFAULT NOW()
 );
 
--- Nhãn chủ đề do giáo viên trở lên tự thêm, dùng chung toàn hệ thống
--- (bổ sung cho danh sách nhãn cứng SUBJECT_TOPIC_LISTS trong api.py)
+-- Nhãn chủ đề (Toán/Lý/Hóa), dùng chung toàn hệ thống — nguồn duy nhất cho cả
+-- dropdown chọn chủ đề (frontend) lẫn Groq phân loại (api.py _topic_list_for).
+-- Seed lần đầu từ topic_seed.json (_migrate_seed_topics), sau đó giáo viên trở
+-- lên sửa/xoá/thêm trực tiếp qua /api/topics/custom.
 CREATE TABLE IF NOT EXISTS custom_topics (
     id          SERIAL PRIMARY KEY,
     subject     VARCHAR(20)  NOT NULL,
@@ -313,6 +315,7 @@ def init_db():
     _migrate_config()
     _migrate_password_hashes()
     _migrate_exam_class_id()
+    _migrate_seed_topics()
     _ensure_super_admin()
 
 
@@ -538,6 +541,29 @@ def _migrate_config():
         except Exception as e:
             conn.rollback()
             print(f"[DB] migrate_config error: {e}")
+
+
+def _migrate_seed_topics():
+    """Nạp nhãn chủ đề gốc (Toán/Lý/Hóa, trước đây là mảng cứng trong code) vào
+    custom_topics. Idempotent nhờ UNIQUE(subject,grade,topic) + ON CONFLICT DO NOTHING —
+    chạy lại mỗi lần khởi động không sao, kể cả khi topic_seed.json có thêm dòng mới."""
+    f = _BASE / "topic_seed.json"
+    if not f.exists():
+        return
+    try:
+        rows = json.loads(f.read_text(encoding="utf-8"))
+        with _C() as conn:
+            with conn.cursor() as cur:
+                for r in rows:
+                    cur.execute("""
+                        INSERT INTO custom_topics (subject, grade, group_name, topic)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (subject, grade, topic) DO NOTHING
+                    """, (r["subject"], r["grade"], r.get("group", ""), r["topic"]))
+            conn.commit()
+    except Exception as e:
+        print(f"[DB] migrate_seed_topics error: {e}")
+
 
 def _ensure_super_admin() -> None:
     """Tạo tài khoản super_admin mặc định nếu chưa có ai có role này.
@@ -1248,6 +1274,37 @@ def add_custom_topic(subject: str, grade: str, topic: str, group_name: str = "",
                 RETURNING id, subject, grade, group_name, topic, created_by, created_at
             """, (subject, grade, group_name or "", topic, created_by))
             r = dict(cur.fetchone())
+        conn.commit()
+    return {
+        "id":        r["id"],
+        "subject":   r["subject"],
+        "grade":     r["grade"],
+        "group":     r["group_name"] or "",
+        "topic":     r["topic"],
+        "createdBy": r["created_by"],
+        "createdAt": r["created_at"].isoformat() if r["created_at"] else None,
+    }
+
+
+def update_custom_topic(topic_id: int, topic: str = None, group_name: str = None) -> dict:
+    sets, params = [], []
+    if topic is not None:
+        sets.append("topic=%s"); params.append(topic)
+    if group_name is not None:
+        sets.append("group_name=%s"); params.append(group_name)
+    if not sets:
+        return None
+    params.append(topic_id)
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(f"""
+                UPDATE custom_topics SET {", ".join(sets)} WHERE id=%s
+                RETURNING id, subject, grade, group_name, topic, created_by, created_at
+            """, params)
+            row = cur.fetchone()
+            if not row:
+                return None
+            r = dict(row)
         conn.commit()
     return {
         "id":        r["id"],

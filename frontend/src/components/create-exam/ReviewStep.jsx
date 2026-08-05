@@ -4,7 +4,7 @@ import ReadingSection from './ReadingSection.jsx'
 import MixExamModal from '../MixExamModal.jsx'
 import { SUBJECTS, GRADES } from '../SubjectBadge.jsx'
 import { subjectHasLabels } from '../../data/labels.js'
-import { authHeaders } from '../../auth/mockUsers.js'
+import { fetchTopicGroups } from '../../store/topicStore.js'
 
 function isUnanswered(q, sec) {
   if (sec === 'PHẦN I' || sec === 'TIẾNG ANH' || sec === 'READING') return q.answer === null || q.answer === undefined
@@ -158,15 +158,12 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
   const [toasts, setToasts]         = useState([])
   const jumpIdxRef = useRef(0)
 
-  /* Nhãn chủ đề do giáo viên trở lên tự thêm (bổ sung danh sách cứng trong labels.js) */
-  const [customTopics, setCustomTopics] = useState([])
+  /* Nhãn chủ đề (nhóm + tên) cho môn + cấp học hiện tại, dùng cho dropdown chọn chủ đề */
+  const [topicGroups, setTopicGroups] = useState([])
   useEffect(() => {
-    if (!subjectHasLabels(subject)) { setCustomTopics([]); return }
+    if (!subjectHasLabels(subject)) { setTopicGroups([]); return }
     let cancelled = false
-    fetch(`/api/topics/custom?subject=${subject}&grade=${grade}`, { headers: authHeaders() })
-      .then(r => r.ok ? r.json() : { topics: [] })
-      .then(data => { if (!cancelled) setCustomTopics(data.topics || []) })
-      .catch(() => { if (!cancelled) setCustomTopics([]) })
+    fetchTopicGroups(subject, grade).then(groups => { if (!cancelled) setTopicGroups(groups) })
     return () => { cancelled = true }
   }, [subject, grade])
 
@@ -580,7 +577,7 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
                       index={idx}
                       subject={subject}
                       grade={grade}
-                      customTopics={customTopics}
+                      topicGroups={topicGroups}
                       pointsPerQ={sections[activeSection]?.points_per_q}
                       onUpdate={updated => updateQuestion(activeSection, idx, updated)}
                       onDelete={() => deleteQuestion(activeSection, idx)}

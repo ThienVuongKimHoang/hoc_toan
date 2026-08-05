@@ -3589,168 +3589,18 @@ app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
 app.mount("/class-docs", StaticFiles(directory=str(CLASS_DOCS_DIR)), name="class-docs")
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
-THPT_TOPIC_LIST = [
-    'Tập xác định','Tính đơn điệu','Cực trị','Giá trị lớn nhất, nhỏ nhất','Tiệm cận',
-    'Đồ thị hàm số','Tương giao đồ thị','Bài toán thực tế về hàm số',
-    'Hàm mũ, hàm logarit','Phương trình mũ','Phương trình logarit',
-    'Bất phương trình mũ','Bất phương trình logarit','Ứng dụng tăng trưởng, lãi kép',
-    'Nguyên hàm','Tích phân','Diện tích hình phẳng','Thể tích khối tròn xoay','Ứng dụng thực tế',
-    'Phép toán số phức','Môđun','Biểu diễn hình học','Phương trình số phức',
-    'Dãy số','Cấp số cộng','Cấp số nhân','Tổng cấp số',
-    'Quy tắc đếm','Hoán vị','Chỉnh hợp','Tổ hợp','Nhị thức Newton',
-    'Xác suất cổ điển','Xác suất có điều kiện',
-    'Thu thập và xử lý dữ liệu','Bảng tần số','Biểu đồ','Trung bình','Trung vị',
-    'Tứ phân vị','Độ lệch chuẩn','Phương sai',
-    'Vector','Phép cộng, trừ','Tích vô hướng','Góc giữa hai vector','Ứng dụng vector',
-    'Quan hệ song song','Quan hệ vuông góc','Góc','Khoảng cách',
-    'Khối đa diện','Hình chóp','Hình lăng trụ','Thể tích',
-    'Điểm','Đường thẳng','Mặt phẳng','Mặt cầu','Vị trí tương đối',
-    'Phương trình bậc nhất','Phương trình bậc hai','Hệ phương trình','Phương trình quy về bậc hai',
-    'Bất phương trình','Hệ bất phương trình','Bất đẳng thức cơ bản','Ứng dụng bất đẳng thức',
-]
-THCS_TOPIC_LIST = [
-    'Phép tính','Lũy thừa','Chia hết','Ước và bội','Số nguyên tố','ƯCLN, BCNN',
-    'Giá trị tuyệt đối','So sánh','Ứng dụng',
-    'Rút gọn','Quy đồng','Các phép tính','Tỉ số',
-    'Số vô tỉ','Căn bậc hai','Biến đổi căn thức','Căn bậc ba',
-    'Đơn thức','Đa thức','Thu gọn','Giá trị biểu thức',
-    'Hằng đẳng thức đáng nhớ','Phân tích đa thức thành nhân tử','Biến đổi',
-    'Phương trình bậc nhất một ẩn','Phương trình tích',
-    'Phương trình chứa ẩn ở mẫu','Giải bài toán bằng cách lập phương trình',
-    'Hệ phương trình bậc nhất hai ẩn','Phương pháp thế','Phương pháp cộng','Bài toán thực tế',
-    'Bất phương trình bậc nhất','Biểu diễn nghiệm','Giải bài toán',
-    'Đại lượng tỉ lệ thuận','Đại lượng tỉ lệ nghịch','Hàm số','Đồ thị hàm số','Hàm số bậc nhất',
-    'Thu thập dữ liệu','Bảng thống kê','Trung bình cộng','Mốt',
-    'Xác suất thực nghiệm','Xác suất đơn giản',
-    'Hai góc đối đỉnh','Hai đường thẳng song song','Góc tạo bởi cát tuyến','Góc trong tam giác',
-    'Các trường hợp bằng nhau','Tam giác cân','Tam giác đều','Tam giác vuông',
-    'Đường trung tuyến','Đường cao','Đường phân giác','Đường trung trực',
-    'Hình thang','Hình bình hành','Hình chữ nhật','Hình thoi','Hình vuông',
-    'Dây cung','Tiếp tuyến','Góc ở tâm','Góc nội tiếp','Cung','Tứ giác nội tiếp',
-    'Tam giác đồng dạng','Định lý Thales','Hệ quả Thales',
-    'Bất đẳng thức tam giác','Quan hệ cạnh – góc','Đường trung bình',
-    'Hình hộp chữ nhật','Hình lập phương','Hình lăng trụ đứng',
-    'Hình trụ','Hình nón','Hình cầu',
-    'Hình chữ nhật','Hình bình hành','Hình tròn','Hình quạt',
-    'Đường thẳng vuông góc','Song song','Góc giữa các đường',
-    'Chuyển động','Năng suất','Công việc','Lãi suất','Hình học thực tế','Thống kê thực tế',
-]
-
-# ── VẬT LÝ ──────────────────────────────────────────────────────────────────────
-LY_THPT_TOPIC_LIST = [
-    'Chuyển động thẳng','Chuyển động biến đổi đều','Chuyển động rơi tự do',
-    'Chuyển động tròn đều','Đồ thị chuyển động',
-    'Ba định luật Newton','Các loại lực','Lực ma sát','Lực đàn hồi',
-    'Lực hấp dẫn','Lực hướng tâm','Cân bằng lực',
-    'Công','Công suất','Động năng','Thế năng','Cơ năng',
-    'Định luật bảo toàn năng lượng','Hiệu suất',
-    'Động lượng','Xung lượng','Va chạm','Định luật bảo toàn động lượng',
-    'Dao động điều hòa','Con lắc lò xo','Con lắc đơn','Pha dao động',
-    'Năng lượng dao động','Dao động tắt dần','Dao động cưỡng bức','Cộng hưởng',
-    'Sóng cơ','Bước sóng','Tần số','Giao thoa','Sóng dừng','Sóng âm','Hiệu ứng Doppler',
-    'Nội năng','Chất khí','Phương trình trạng thái','Các quá trình nhiệt',
-    'Nguyên lý nhiệt động lực học',
-    'Điện tích','Định luật Coulomb','Điện trường','Cường độ điện trường',
-    'Điện thế','Hiệu điện thế','Tụ điện',
-    'Dòng điện','Định luật Ohm','Ghép điện trở','Suất điện động',
-    'Công của dòng điện','Công suất điện',
-    'Nam châm','Từ trường','Cảm ứng từ','Lực từ','Lực Lorentz',
-    'Từ thông','Định luật Faraday','Định luật Lenz','Suất điện động cảm ứng',
-    'Mạch RLC','Cộng hưởng điện','Công suất AC','Hệ số công suất',
-    'Máy biến áp','Truyền tải điện năng',
-    'Phản xạ','Khúc xạ','Thấu kính','Mắt','Dụng cụ quang',
-    'Giao thoa ánh sáng','Nhiễu xạ','Tán sắc',
-    'Photon','Hiệu ứng quang điện','Quang phổ','Laser',
-    'Cấu tạo hạt nhân','Độ hụt khối','Năng lượng liên kết','Phóng xạ',
-    'Phản ứng hạt nhân','Phân hạch','Nhiệt hạch',
-    'Sai số','Đồ thị','Thí nghiệm','Phân tích kết quả',
-]
-LY_THCS_TOPIC_LIST = [
-    'Đơn vị đo (SI)','Đo chiều dài','Đo khối lượng','Đo thời gian',
-    'Đo nhiệt độ','Sai số đo','Dụng cụ đo',
-    'Chuyển động và đứng yên','Quãng đường','Tốc độ','Vận tốc','Đồ thị chuyển động (cơ bản)',
-    'Khái niệm lực','Biểu diễn lực','Hợp lực','Cân bằng lực',
-    'Lực ma sát','Lực đàn hồi','Trọng lực','Áp suất',
-    'Công cơ học','Công suất','Cơ năng','Động năng','Thế năng',
-    'Chuyển hóa năng lượng','Hiệu suất',
-    'Nhiệt năng','Nhiệt lượng','Dẫn nhiệt','Đối lưu','Bức xạ nhiệt',
-    'Nở vì nhiệt','Sự nóng chảy','Sự đông đặc','Bay hơi','Ngưng tụ','Sôi',
-    'Nguồn âm','Độ cao của âm','Độ to của âm','Môi trường truyền âm',
-    'Phản xạ âm','Chống ô nhiễm tiếng ồn',
-    'Nguồn sáng','Tia sáng','Bóng tối','Nhật thực, nguyệt thực',
-    'Phản xạ ánh sáng','Gương phẳng','Gương cầu lồi','Gương cầu lõm',
-    'Khúc xạ ánh sáng','Thấu kính hội tụ','Thấu kính phân kỳ','Mắt','Kính lúp',
-    'Điện tích','Dòng điện','Nguồn điện','Mạch điện','Cường độ dòng điện',
-    'Hiệu điện thế','Điện trở','Định luật Ôm (mức cơ bản)','Công suất điện',
-    'Điện năng','An toàn điện',
-    'Nam châm','Từ trường','Đường sức từ','Từ trường của dòng điện','Nam châm điện',
-    'Cảm ứng điện từ (giới thiệu)','Máy phát điện','Động cơ điện','Máy biến áp (giới thiệu)',
-    'Các dạng năng lượng','Năng lượng tái tạo','Tiết kiệm năng lượng',
-]
-
-# ── HÓA HỌC ─────────────────────────────────────────────────────────────────────
-HOA_THPT_TOPIC_LIST = [
-    'Thành phần nguyên tử','Đồng vị','Cấu hình electron','Electron hóa trị','Số oxi hóa',
-    'Ô nguyên tố','Chu kỳ','Nhóm','Quy luật biến đổi','Bán kính nguyên tử',
-    'Độ âm điện','Năng lượng ion hóa',
-    'Liên kết ion','Liên kết cộng hóa trị','Liên kết kim loại',
-    'Liên kết hiđro','Lewis','Hình học phân tử',
-    'Phản ứng oxi hóa – khử','Cân bằng phương trình','Nhiệt hóa học','Entanpi (mức cơ bản)',
-    'Tốc độ phản ứng','Các yếu tố ảnh hưởng','Cân bằng hóa học','Nguyên lý Le Chatelier',
-    'Chất điện li','Axit','Bazơ','Muối','pH','Thủy phân muối','Chuẩn độ axit – bazơ',
-    'Pin điện','Điện phân','Ăn mòn kim loại','Bảo vệ kim loại',
-    'Tính chất vật lí','Tính chất hóa học','Dãy hoạt động hóa học','Điều chế kim loại',
-    'Hợp kim','Kim loại kiềm','Kim loại kiềm thổ','Nhôm','Sắt','Crom',
-    'Halogen','Oxi','Lưu huỳnh','Nitơ','Photpho','Cacbon','Silic','Một số hợp chất quan trọng',
-    'Đặc điểm hợp chất hữu cơ','Đồng đẳng','Đồng phân','Danh pháp','Công thức cấu tạo',
-    'Ankan','Anken','Ankin','Aren (Benzen)',
-    'Dẫn xuất halogen','Ancol','Phenol','Andehit','Xeton','Axit cacboxylic','Este',
-    'Amin','Amino axit','Peptit','Protein',
-    'Glucozơ','Fructozơ','Saccarozơ','Tinh bột','Xenlulozơ',
-    'Trùng hợp','Trùng ngưng','Chất dẻo','Cao su','Tơ',
-    'Phân bón','Hóa học môi trường','Hóa học xanh','Vật liệu mới','Năng lượng',
-    'Mol','Hiệu suất phản ứng','Nồng độ dung dịch','Bảo toàn khối lượng',
-    'Bảo toàn nguyên tố','Bảo toàn electron','Bài toán hỗn hợp','Bài toán khí','Bài toán dung dịch',
-]
-HOA_THCS_TOPIC_LIST = [
-    'Chất','Tính chất của chất','Chất tinh khiết','Hỗn hợp','Tách chất',
-    'Hiện tượng vật lí','Hiện tượng hóa học',
-    'Nguyên tử','Cấu tạo nguyên tử','Nguyên tố hóa học','Ký hiệu hóa học',
-    'Nguyên tử khối','Phân tử','Phân tử khối',
-    'Hóa trị','Lập công thức hóa học','Tính theo công thức hóa học','Ý nghĩa của công thức hóa học',
-    'Phương trình hóa học','Cân bằng phương trình','Định luật bảo toàn khối lượng',
-    'Các loại phản ứng hóa học',
-    'Mol','Khối lượng mol','Thể tích mol chất khí',
-    'Chuyển đổi giữa mol – khối lượng – thể tích','Tính theo phương trình hóa học',
-    'Tính chất của oxi','Điều chế oxi','Không khí','Ozon','Sự cháy','Sự oxi hóa',
-    'Hiđro','Điều chế hiđro','Phản ứng oxi hóa – khử (mức cơ bản)','Nước','Vai trò của nước',
-    'Dung môi','Chất tan','Độ tan','Nồng độ phần trăm','Nồng độ mol','Pha chế dung dịch',
-    'Axit','Bazơ','Muối','Thang pH','Chỉ thị màu','Phản ứng trung hòa','Phản ứng trao đổi',
-    'Tính chất vật lí','Tính chất hóa học','Dãy hoạt động hóa học','Điều chế kim loại',
-    'Hợp kim','Ăn mòn kim loại',
-    'Tính chất của phi kim','Clo','Cacbon','Silic','Một số hợp chất quan trọng',
-    'Hợp chất hữu cơ','Metan','Etilen','Axetilen','Benzen','Nhiên liệu',
-]
-
-# Tra cứu danh sách chủ đề theo môn + cấp học, kèm tên môn hiển thị trong prompt.
-SUBJECT_TOPIC_LISTS = {
-    'toan': {'thpt': THPT_TOPIC_LIST,     'thcs': THCS_TOPIC_LIST,     'name': 'toán'},
-    'ly':   {'thpt': LY_THPT_TOPIC_LIST,  'thcs': LY_THCS_TOPIC_LIST,  'name': 'vật lí'},
-    'hoa':  {'thpt': HOA_THPT_TOPIC_LIST, 'thcs': HOA_THCS_TOPIC_LIST, 'name': 'hóa học'},
-}
+SUBJECT_NAMES = {'toan': 'toán', 'ly': 'vật lí', 'hoa': 'hóa học'}
 
 
 def _topic_list_for(subject: str, grade: str):
     """(danh sách chủ đề, tên môn) cho phân loại. Mặc định về Toán khi môn lạ.
 
-    Gộp thêm nhãn do giáo viên trở lên tự thêm (bảng custom_topics) vào danh sách
-    cứng, để Groq (tự động lẫn thủ công) có thể chọn cả nhãn tự thêm."""
-    conf = SUBJECT_TOPIC_LISTS.get(subject) or SUBJECT_TOPIC_LISTS['toan']
-    topics = conf['thcs'] if grade == 'thcs' else conf['thpt']
-    custom = [c["topic"] for c in db.list_custom_topics(subject, grade)]
-    if custom:
-        topics = topics + [t for t in custom if t not in topics]
-    return topics, conf['name']
+    Toàn bộ nhãn chủ đề (kể cả nhãn "gốc" trước đây hardcode trong code) sống
+    trong bảng custom_topics — seed 1 lần từ topic_seed.json, sau đó giáo viên
+    trở lên sửa/xoá/thêm trực tiếp qua /api/topics/custom."""
+    name = SUBJECT_NAMES.get(subject, SUBJECT_NAMES['toan'])
+    topics = [c["topic"] for c in db.list_custom_topics(subject, grade)]
+    return topics, name
 
 
 _GROQ_CLIENT_CACHE = None
@@ -3816,7 +3666,7 @@ Trả về JSON ĐÚNG ĐỊNH DẠNG, không giải thích thêm:
 
 @app.get("/api/topics/custom")
 async def list_custom_topics(subject: str = None, grade: str = None, caller: dict = Depends(require_teacher)):
-    """Danh sách nhãn chủ đề do giáo viên trở lên tự thêm (dùng chung toàn hệ thống)."""
+    """Toàn bộ nhãn chủ đề cho môn + cấp học (dùng chung toàn hệ thống)."""
     return {"topics": db.list_custom_topics(subject, grade)}
 
 
@@ -3836,9 +3686,25 @@ async def add_custom_topic(request: Request, caller: dict = Depends(require_teac
     return {"ok": True, "topic": created}
 
 
+@app.put("/api/topics/custom/{topic_id}")
+async def update_custom_topic(topic_id: int, request: Request, caller: dict = Depends(require_teacher)):
+    """Giáo viên trở lên sửa tên/nhóm 1 nhãn chủ đề (dùng chung, không giới hạn theo người tạo)."""
+    body = await request.json()
+    topic = body.get("topic")
+    group = body.get("group")
+    if topic is not None:
+        topic = topic.strip()
+        if not topic:
+            return JSONResponse({"error": "Tên chủ đề không được để trống."}, status_code=400)
+    updated = db.update_custom_topic(topic_id, topic=topic, group_name=group)
+    if not updated:
+        return JSONResponse({"error": "Không tìm thấy nhãn chủ đề."}, status_code=404)
+    return {"ok": True, "topic": updated}
+
+
 @app.delete("/api/topics/custom/{topic_id}")
 async def delete_custom_topic(topic_id: int, caller: dict = Depends(require_teacher)):
-    """Giáo viên trở lên xoá 1 nhãn chủ đề tự thêm (dùng chung, không giới hạn theo người tạo)."""
+    """Giáo viên trở lên xoá 1 nhãn chủ đề (dùng chung, không giới hạn theo người tạo)."""
     if not db.delete_custom_topic(topic_id):
         return JSONResponse({"error": "Không tìm thấy nhãn chủ đề."}, status_code=404)
     return {"ok": True}

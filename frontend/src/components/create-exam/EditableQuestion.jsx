@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import MathText from '../MathText.jsx'
 import MarkerText, { referencedImageIds } from '../MarkerText.jsx'
-import { DIFFICULTY_LEVELS, getLabelGroups } from '../../data/labels.js'
+import { DIFFICULTY_LEVELS } from '../../data/labels.js'
 import './EditableQuestion.css'
 
 export function PencilIcon({ size = 12 }) {
@@ -491,12 +491,9 @@ function TopicDropdown({ groups, value, onChange, onClose }) {
   )
 }
 
-function LabelRow({ q, subject, grade, customTopics = [], onChange, onAutoClassify, classifying }) {
+function LabelRow({ q, groups = [], onChange, onAutoClassify, classifying }) {
   const [topicOpen, setTopicOpen] = useState(false)
   const [hoveredDiff, setHoveredDiff] = useState(null)
-  const groups = customTopics.length > 0
-    ? [...getLabelGroups(subject, grade), { group: 'Tự thêm', topics: customTopics.map(t => t.topic) }]
-    : getLabelGroups(subject, grade)
   const hasTopics = groups.length > 0
   const activeDiff = DIFFICULTY_LEVELS.find(d => d.id === (hoveredDiff ?? q.level_label))
 
@@ -800,7 +797,7 @@ const SECTION_COLOR = {
 
 export default function EditableQuestion({
   q, index, pointsPerQ, onUpdate, onDelete, onReportSubmit, highlight,
-  subject = 'toan', grade = 'thpt', customTopics = [],
+  subject = 'toan', grade = 'thpt', topicGroups = [],
   readingMode = false, clozeMode = false,
 }) {
   const [editingText, setEditingText] = useState(() => hasSuspiciousLatex(q.question_text))
@@ -1212,9 +1209,7 @@ export default function EditableQuestion({
       {!readingMode && (
         <LabelRow
           q={q}
-          subject={subject}
-          grade={grade}
-          customTopics={customTopics}
+          groups={topicGroups}
           onChange={onUpdate}
           onAutoClassify={autoClassify}
           classifying={classifying}

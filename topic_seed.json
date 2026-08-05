@@ -1,0 +1,3134 @@
+[
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm số và ứng dụng",
+    "topic": "Tập xác định"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm số và ứng dụng",
+    "topic": "Tính đơn điệu"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm số và ứng dụng",
+    "topic": "Cực trị"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm số và ứng dụng",
+    "topic": "Giá trị lớn nhất, nhỏ nhất"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm số và ứng dụng",
+    "topic": "Tiệm cận"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm số và ứng dụng",
+    "topic": "Đồ thị hàm số"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm số và ứng dụng",
+    "topic": "Tương giao đồ thị"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm số và ứng dụng",
+    "topic": "Bài toán thực tế về hàm số"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm mũ – Hàm logarit",
+    "topic": "Hàm mũ, hàm logarit"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm mũ – Hàm logarit",
+    "topic": "Phương trình mũ"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm mũ – Hàm logarit",
+    "topic": "Phương trình logarit"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm mũ – Hàm logarit",
+    "topic": "Bất phương trình mũ"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm mũ – Hàm logarit",
+    "topic": "Bất phương trình logarit"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hàm mũ – Hàm logarit",
+    "topic": "Ứng dụng tăng trưởng, lãi kép"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Nguyên hàm – Tích phân",
+    "topic": "Nguyên hàm"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Nguyên hàm – Tích phân",
+    "topic": "Tích phân"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Nguyên hàm – Tích phân",
+    "topic": "Diện tích hình phẳng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Nguyên hàm – Tích phân",
+    "topic": "Thể tích khối tròn xoay"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Nguyên hàm – Tích phân",
+    "topic": "Ứng dụng thực tế"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Số phức",
+    "topic": "Phép toán số phức"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Số phức",
+    "topic": "Môđun"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Số phức",
+    "topic": "Biểu diễn hình học"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Số phức",
+    "topic": "Phương trình số phức"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Dãy số – Cấp số",
+    "topic": "Dãy số"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Dãy số – Cấp số",
+    "topic": "Cấp số cộng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Dãy số – Cấp số",
+    "topic": "Cấp số nhân"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Dãy số – Cấp số",
+    "topic": "Tổng cấp số"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Tổ hợp – Xác suất",
+    "topic": "Quy tắc đếm"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Tổ hợp – Xác suất",
+    "topic": "Hoán vị"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Tổ hợp – Xác suất",
+    "topic": "Chỉnh hợp"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Tổ hợp – Xác suất",
+    "topic": "Tổ hợp"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Tổ hợp – Xác suất",
+    "topic": "Nhị thức Newton"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Tổ hợp – Xác suất",
+    "topic": "Xác suất cổ điển"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Tổ hợp – Xác suất",
+    "topic": "Xác suất có điều kiện"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Thống kê",
+    "topic": "Thu thập và xử lý dữ liệu"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Thống kê",
+    "topic": "Bảng tần số"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Thống kê",
+    "topic": "Biểu đồ"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Thống kê",
+    "topic": "Trung bình"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Thống kê",
+    "topic": "Trung vị"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Thống kê",
+    "topic": "Tứ phân vị"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Thống kê",
+    "topic": "Độ lệch chuẩn"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Thống kê",
+    "topic": "Phương sai"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Vector",
+    "topic": "Vector"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Vector",
+    "topic": "Phép cộng, trừ"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Vector",
+    "topic": "Tích vô hướng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Vector",
+    "topic": "Góc giữa hai vector"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Vector",
+    "topic": "Ứng dụng vector"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học không gian",
+    "topic": "Quan hệ song song"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học không gian",
+    "topic": "Quan hệ vuông góc"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học không gian",
+    "topic": "Góc"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học không gian",
+    "topic": "Khoảng cách"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học không gian",
+    "topic": "Khối đa diện"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học không gian",
+    "topic": "Hình chóp"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học không gian",
+    "topic": "Hình lăng trụ"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học không gian",
+    "topic": "Thể tích"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học Oxyz",
+    "topic": "Điểm"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học Oxyz",
+    "topic": "Vector"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học Oxyz",
+    "topic": "Đường thẳng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học Oxyz",
+    "topic": "Mặt phẳng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học Oxyz",
+    "topic": "Mặt cầu"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học Oxyz",
+    "topic": "Khoảng cách"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học Oxyz",
+    "topic": "Góc"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Hình học Oxyz",
+    "topic": "Vị trí tương đối"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Phương trình và hệ phương trình",
+    "topic": "Phương trình bậc nhất"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Phương trình và hệ phương trình",
+    "topic": "Phương trình bậc hai"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Phương trình và hệ phương trình",
+    "topic": "Hệ phương trình"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Phương trình và hệ phương trình",
+    "topic": "Phương trình quy về bậc hai"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Bất phương trình và bất đẳng thức",
+    "topic": "Bất phương trình"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Bất phương trình và bất đẳng thức",
+    "topic": "Hệ bất phương trình"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Bất phương trình và bất đẳng thức",
+    "topic": "Bất đẳng thức cơ bản"
+  },
+  {
+    "subject": "toan",
+    "grade": "thpt",
+    "group": "Bất phương trình và bất đẳng thức",
+    "topic": "Ứng dụng bất đẳng thức"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số tự nhiên",
+    "topic": "Phép tính"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số tự nhiên",
+    "topic": "Lũy thừa"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số tự nhiên",
+    "topic": "Chia hết"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số tự nhiên",
+    "topic": "Ước và bội"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số tự nhiên",
+    "topic": "Số nguyên tố"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số tự nhiên",
+    "topic": "ƯCLN, BCNN"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số nguyên",
+    "topic": "Phép tính"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số nguyên",
+    "topic": "Giá trị tuyệt đối"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số nguyên",
+    "topic": "So sánh"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số nguyên",
+    "topic": "Ứng dụng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phân số và số hữu tỉ",
+    "topic": "Rút gọn"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phân số và số hữu tỉ",
+    "topic": "Quy đồng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phân số và số hữu tỉ",
+    "topic": "Các phép tính"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phân số và số hữu tỉ",
+    "topic": "So sánh"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phân số và số hữu tỉ",
+    "topic": "Tỉ số"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số thực và căn bậc hai",
+    "topic": "Số vô tỉ"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số thực và căn bậc hai",
+    "topic": "Căn bậc hai"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số thực và căn bậc hai",
+    "topic": "Biến đổi căn thức"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Số thực và căn bậc hai",
+    "topic": "Căn bậc ba"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Biểu thức đại số",
+    "topic": "Đơn thức"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Biểu thức đại số",
+    "topic": "Đa thức"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Biểu thức đại số",
+    "topic": "Thu gọn"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Biểu thức đại số",
+    "topic": "Giá trị biểu thức"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Biểu thức đại số",
+    "topic": "Hằng đẳng thức đáng nhớ"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Biểu thức đại số",
+    "topic": "Phân tích đa thức thành nhân tử"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phân thức đại số",
+    "topic": "Rút gọn"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phân thức đại số",
+    "topic": "Quy đồng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phân thức đại số",
+    "topic": "Các phép tính"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phân thức đại số",
+    "topic": "Biến đổi"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phương trình",
+    "topic": "Phương trình bậc nhất một ẩn"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phương trình",
+    "topic": "Phương trình tích"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phương trình",
+    "topic": "Phương trình chứa ẩn ở mẫu"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Phương trình",
+    "topic": "Giải bài toán bằng cách lập phương trình"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hệ phương trình",
+    "topic": "Hệ phương trình bậc nhất hai ẩn"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hệ phương trình",
+    "topic": "Phương pháp thế"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hệ phương trình",
+    "topic": "Phương pháp cộng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hệ phương trình",
+    "topic": "Bài toán thực tế"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Bất phương trình",
+    "topic": "Bất phương trình bậc nhất"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Bất phương trình",
+    "topic": "Biểu diễn nghiệm"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Bất phương trình",
+    "topic": "Giải bài toán"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hàm số và đồ thị",
+    "topic": "Đại lượng tỉ lệ thuận"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hàm số và đồ thị",
+    "topic": "Đại lượng tỉ lệ nghịch"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hàm số và đồ thị",
+    "topic": "Hàm số"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hàm số và đồ thị",
+    "topic": "Đồ thị hàm số"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hàm số và đồ thị",
+    "topic": "Hàm số bậc nhất"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Thống kê và xác suất",
+    "topic": "Thu thập dữ liệu"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Thống kê và xác suất",
+    "topic": "Bảng thống kê"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Thống kê và xác suất",
+    "topic": "Biểu đồ"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Thống kê và xác suất",
+    "topic": "Trung bình cộng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Thống kê và xác suất",
+    "topic": "Trung vị"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Thống kê và xác suất",
+    "topic": "Mốt"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Thống kê và xác suất",
+    "topic": "Xác suất thực nghiệm"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Thống kê và xác suất",
+    "topic": "Xác suất đơn giản"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Góc",
+    "topic": "Góc"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Góc",
+    "topic": "Hai góc đối đỉnh"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Góc",
+    "topic": "Hai đường thẳng song song"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Góc",
+    "topic": "Góc tạo bởi cát tuyến"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Góc",
+    "topic": "Góc trong tam giác"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tam giác",
+    "topic": "Các trường hợp bằng nhau"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tam giác",
+    "topic": "Tam giác cân"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tam giác",
+    "topic": "Tam giác đều"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tam giác",
+    "topic": "Tam giác vuông"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tam giác",
+    "topic": "Đường trung tuyến"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tam giác",
+    "topic": "Đường cao"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tam giác",
+    "topic": "Đường phân giác"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tam giác",
+    "topic": "Đường trung trực"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tứ giác",
+    "topic": "Hình thang"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tứ giác",
+    "topic": "Hình bình hành"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tứ giác",
+    "topic": "Hình chữ nhật"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tứ giác",
+    "topic": "Hình thoi"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Tứ giác",
+    "topic": "Hình vuông"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Đường tròn",
+    "topic": "Dây cung"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Đường tròn",
+    "topic": "Tiếp tuyến"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Đường tròn",
+    "topic": "Góc ở tâm"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Đường tròn",
+    "topic": "Góc nội tiếp"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Đường tròn",
+    "topic": "Cung"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Đường tròn",
+    "topic": "Tứ giác nội tiếp"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Đồng dạng",
+    "topic": "Tam giác đồng dạng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Đồng dạng",
+    "topic": "Định lý Thales"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Đồng dạng",
+    "topic": "Hệ quả Thales"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Đồng dạng",
+    "topic": "Ứng dụng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Quan hệ trong tam giác",
+    "topic": "Bất đẳng thức tam giác"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Quan hệ trong tam giác",
+    "topic": "Quan hệ cạnh – góc"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Quan hệ trong tam giác",
+    "topic": "Đường trung bình"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hình học không gian (THCS)",
+    "topic": "Hình hộp chữ nhật"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hình học không gian (THCS)",
+    "topic": "Hình lập phương"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hình học không gian (THCS)",
+    "topic": "Hình lăng trụ đứng"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hình học không gian (THCS)",
+    "topic": "Hình chóp"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hình học không gian (THCS)",
+    "topic": "Hình trụ"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hình học không gian (THCS)",
+    "topic": "Hình nón"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Hình học không gian (THCS)",
+    "topic": "Hình cầu"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Diện tích và chu vi",
+    "topic": "Tam giác"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Diện tích và chu vi",
+    "topic": "Hình chữ nhật"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Diện tích và chu vi",
+    "topic": "Hình vuông"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Diện tích và chu vi",
+    "topic": "Hình bình hành"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Diện tích và chu vi",
+    "topic": "Hình thang"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Diện tích và chu vi",
+    "topic": "Hình tròn"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Diện tích và chu vi",
+    "topic": "Hình quạt"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Quan hệ vuông góc và song song",
+    "topic": "Đường thẳng vuông góc"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Quan hệ vuông góc và song song",
+    "topic": "Song song"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Quan hệ vuông góc và song song",
+    "topic": "Khoảng cách"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Quan hệ vuông góc và song song",
+    "topic": "Góc giữa các đường"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Bài toán thực tế",
+    "topic": "Chuyển động"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Bài toán thực tế",
+    "topic": "Năng suất"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Bài toán thực tế",
+    "topic": "Công việc"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Bài toán thực tế",
+    "topic": "Tỉ lệ"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Bài toán thực tế",
+    "topic": "Lãi suất"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Bài toán thực tế",
+    "topic": "Hình học thực tế"
+  },
+  {
+    "subject": "toan",
+    "grade": "thcs",
+    "group": "Bài toán thực tế",
+    "topic": "Thống kê thực tế"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động học",
+    "topic": "Chuyển động thẳng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động học",
+    "topic": "Chuyển động biến đổi đều"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động học",
+    "topic": "Chuyển động rơi tự do"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động học",
+    "topic": "Chuyển động tròn đều"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động học",
+    "topic": "Đồ thị chuyển động"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động lực học",
+    "topic": "Ba định luật Newton"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động lực học",
+    "topic": "Các loại lực"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động lực học",
+    "topic": "Lực ma sát"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động lực học",
+    "topic": "Lực đàn hồi"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động lực học",
+    "topic": "Lực hấp dẫn"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động lực học",
+    "topic": "Lực hướng tâm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động lực học",
+    "topic": "Cân bằng lực"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Công – Năng lượng",
+    "topic": "Công"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Công – Năng lượng",
+    "topic": "Công suất"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Công – Năng lượng",
+    "topic": "Động năng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Công – Năng lượng",
+    "topic": "Thế năng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Công – Năng lượng",
+    "topic": "Cơ năng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Công – Năng lượng",
+    "topic": "Định luật bảo toàn năng lượng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Công – Năng lượng",
+    "topic": "Hiệu suất"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động lượng",
+    "topic": "Động lượng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động lượng",
+    "topic": "Xung lượng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động lượng",
+    "topic": "Va chạm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Động lượng",
+    "topic": "Định luật bảo toàn động lượng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dao động",
+    "topic": "Dao động điều hòa"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dao động",
+    "topic": "Con lắc lò xo"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dao động",
+    "topic": "Con lắc đơn"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dao động",
+    "topic": "Pha dao động"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dao động",
+    "topic": "Năng lượng dao động"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dao động",
+    "topic": "Dao động tắt dần"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dao động",
+    "topic": "Dao động cưỡng bức"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dao động",
+    "topic": "Cộng hưởng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Sóng cơ",
+    "topic": "Sóng cơ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Sóng cơ",
+    "topic": "Bước sóng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Sóng cơ",
+    "topic": "Tần số"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Sóng cơ",
+    "topic": "Giao thoa"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Sóng cơ",
+    "topic": "Sóng dừng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Sóng cơ",
+    "topic": "Sóng âm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Sóng cơ",
+    "topic": "Hiệu ứng Doppler"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Nhiệt học",
+    "topic": "Nội năng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Nhiệt học",
+    "topic": "Chất khí"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Nhiệt học",
+    "topic": "Phương trình trạng thái"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Nhiệt học",
+    "topic": "Các quá trình nhiệt"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Nhiệt học",
+    "topic": "Nguyên lý nhiệt động lực học"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Điện trường",
+    "topic": "Điện tích"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Điện trường",
+    "topic": "Định luật Coulomb"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Điện trường",
+    "topic": "Điện trường"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Điện trường",
+    "topic": "Cường độ điện trường"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Điện trường",
+    "topic": "Điện thế"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Điện trường",
+    "topic": "Hiệu điện thế"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Điện trường",
+    "topic": "Tụ điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện một chiều",
+    "topic": "Dòng điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện một chiều",
+    "topic": "Định luật Ohm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện một chiều",
+    "topic": "Ghép điện trở"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện một chiều",
+    "topic": "Suất điện động"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện một chiều",
+    "topic": "Công của dòng điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện một chiều",
+    "topic": "Công suất điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Từ trường",
+    "topic": "Nam châm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Từ trường",
+    "topic": "Từ trường"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Từ trường",
+    "topic": "Cảm ứng từ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Từ trường",
+    "topic": "Lực từ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Từ trường",
+    "topic": "Lực Lorentz"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Cảm ứng điện từ",
+    "topic": "Từ thông"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Cảm ứng điện từ",
+    "topic": "Định luật Faraday"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Cảm ứng điện từ",
+    "topic": "Định luật Lenz"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Cảm ứng điện từ",
+    "topic": "Suất điện động cảm ứng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện xoay chiều",
+    "topic": "Mạch RLC"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện xoay chiều",
+    "topic": "Cộng hưởng điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện xoay chiều",
+    "topic": "Công suất AC"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện xoay chiều",
+    "topic": "Hệ số công suất"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện xoay chiều",
+    "topic": "Máy biến áp"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Dòng điện xoay chiều",
+    "topic": "Truyền tải điện năng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Quang học",
+    "topic": "Phản xạ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Quang học",
+    "topic": "Khúc xạ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Quang học",
+    "topic": "Thấu kính"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Quang học",
+    "topic": "Mắt"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Quang học",
+    "topic": "Dụng cụ quang"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Quang học",
+    "topic": "Giao thoa ánh sáng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Quang học",
+    "topic": "Nhiễu xạ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Quang học",
+    "topic": "Tán sắc"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Lượng tử ánh sáng",
+    "topic": "Photon"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Lượng tử ánh sáng",
+    "topic": "Hiệu ứng quang điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Lượng tử ánh sáng",
+    "topic": "Quang phổ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Lượng tử ánh sáng",
+    "topic": "Laser"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Vật lý hạt nhân",
+    "topic": "Cấu tạo hạt nhân"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Vật lý hạt nhân",
+    "topic": "Độ hụt khối"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Vật lý hạt nhân",
+    "topic": "Năng lượng liên kết"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Vật lý hạt nhân",
+    "topic": "Phóng xạ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Vật lý hạt nhân",
+    "topic": "Phản ứng hạt nhân"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Vật lý hạt nhân",
+    "topic": "Phân hạch"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Vật lý hạt nhân",
+    "topic": "Nhiệt hạch"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Thực hành và xử lý số liệu",
+    "topic": "Sai số"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Thực hành và xử lý số liệu",
+    "topic": "Đồ thị"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Thực hành và xử lý số liệu",
+    "topic": "Thí nghiệm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thpt",
+    "group": "Thực hành và xử lý số liệu",
+    "topic": "Phân tích kết quả"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Đo lường",
+    "topic": "Đơn vị đo (SI)"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Đo lường",
+    "topic": "Đo chiều dài"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Đo lường",
+    "topic": "Đo khối lượng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Đo lường",
+    "topic": "Đo thời gian"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Đo lường",
+    "topic": "Đo nhiệt độ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Đo lường",
+    "topic": "Sai số đo"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Đo lường",
+    "topic": "Dụng cụ đo"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Chuyển động",
+    "topic": "Chuyển động và đứng yên"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Chuyển động",
+    "topic": "Quãng đường"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Chuyển động",
+    "topic": "Tốc độ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Chuyển động",
+    "topic": "Vận tốc"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Chuyển động",
+    "topic": "Đồ thị chuyển động (cơ bản)"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Lực",
+    "topic": "Khái niệm lực"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Lực",
+    "topic": "Biểu diễn lực"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Lực",
+    "topic": "Hợp lực"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Lực",
+    "topic": "Cân bằng lực"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Lực",
+    "topic": "Lực ma sát"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Lực",
+    "topic": "Lực đàn hồi"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Lực",
+    "topic": "Trọng lực"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Lực",
+    "topic": "Áp suất"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Công và năng lượng",
+    "topic": "Công cơ học"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Công và năng lượng",
+    "topic": "Công suất"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Công và năng lượng",
+    "topic": "Cơ năng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Công và năng lượng",
+    "topic": "Động năng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Công và năng lượng",
+    "topic": "Thế năng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Công và năng lượng",
+    "topic": "Chuyển hóa năng lượng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Công và năng lượng",
+    "topic": "Hiệu suất"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Nhiệt học",
+    "topic": "Nhiệt năng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Nhiệt học",
+    "topic": "Nhiệt lượng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Nhiệt học",
+    "topic": "Dẫn nhiệt"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Nhiệt học",
+    "topic": "Đối lưu"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Nhiệt học",
+    "topic": "Bức xạ nhiệt"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Nhiệt học",
+    "topic": "Nở vì nhiệt"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Nhiệt học",
+    "topic": "Sự nóng chảy"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Nhiệt học",
+    "topic": "Sự đông đặc"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Nhiệt học",
+    "topic": "Bay hơi"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Nhiệt học",
+    "topic": "Ngưng tụ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Nhiệt học",
+    "topic": "Sôi"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Âm học",
+    "topic": "Nguồn âm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Âm học",
+    "topic": "Độ cao của âm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Âm học",
+    "topic": "Độ to của âm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Âm học",
+    "topic": "Môi trường truyền âm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Âm học",
+    "topic": "Phản xạ âm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Âm học",
+    "topic": "Chống ô nhiễm tiếng ồn"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Nguồn sáng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Tia sáng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Bóng tối"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Nhật thực, nguyệt thực"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Phản xạ ánh sáng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Gương phẳng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Gương cầu lồi"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Gương cầu lõm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Khúc xạ ánh sáng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Thấu kính hội tụ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Thấu kính phân kỳ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Mắt"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Quang học",
+    "topic": "Kính lúp"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện học",
+    "topic": "Điện tích"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện học",
+    "topic": "Dòng điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện học",
+    "topic": "Nguồn điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện học",
+    "topic": "Mạch điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện học",
+    "topic": "Cường độ dòng điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện học",
+    "topic": "Hiệu điện thế"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện học",
+    "topic": "Điện trở"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện học",
+    "topic": "Định luật Ôm (mức cơ bản)"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện học",
+    "topic": "Công suất điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện học",
+    "topic": "Điện năng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện học",
+    "topic": "An toàn điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Từ học",
+    "topic": "Nam châm"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Từ học",
+    "topic": "Từ trường"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Từ học",
+    "topic": "Đường sức từ"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Từ học",
+    "topic": "Từ trường của dòng điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Từ học",
+    "topic": "Nam châm điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện từ học",
+    "topic": "Cảm ứng điện từ (giới thiệu)"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện từ học",
+    "topic": "Máy phát điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện từ học",
+    "topic": "Động cơ điện"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Điện từ học",
+    "topic": "Máy biến áp (giới thiệu)"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Năng lượng và ứng dụng",
+    "topic": "Các dạng năng lượng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Năng lượng và ứng dụng",
+    "topic": "Chuyển hóa năng lượng"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Năng lượng và ứng dụng",
+    "topic": "Năng lượng tái tạo"
+  },
+  {
+    "subject": "ly",
+    "grade": "thcs",
+    "group": "Năng lượng và ứng dụng",
+    "topic": "Tiết kiệm năng lượng"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Cấu tạo nguyên tử",
+    "topic": "Thành phần nguyên tử"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Cấu tạo nguyên tử",
+    "topic": "Đồng vị"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Cấu tạo nguyên tử",
+    "topic": "Cấu hình electron"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Cấu tạo nguyên tử",
+    "topic": "Electron hóa trị"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Cấu tạo nguyên tử",
+    "topic": "Số oxi hóa"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Bảng tuần hoàn các nguyên tố hóa học",
+    "topic": "Ô nguyên tố"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Bảng tuần hoàn các nguyên tố hóa học",
+    "topic": "Chu kỳ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Bảng tuần hoàn các nguyên tố hóa học",
+    "topic": "Nhóm"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Bảng tuần hoàn các nguyên tố hóa học",
+    "topic": "Quy luật biến đổi"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Bảng tuần hoàn các nguyên tố hóa học",
+    "topic": "Bán kính nguyên tử"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Bảng tuần hoàn các nguyên tố hóa học",
+    "topic": "Độ âm điện"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Bảng tuần hoàn các nguyên tố hóa học",
+    "topic": "Năng lượng ion hóa"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Liên kết hóa học",
+    "topic": "Liên kết ion"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Liên kết hóa học",
+    "topic": "Liên kết cộng hóa trị"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Liên kết hóa học",
+    "topic": "Liên kết kim loại"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Liên kết hóa học",
+    "topic": "Liên kết hiđro"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Liên kết hóa học",
+    "topic": "Lewis"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Liên kết hóa học",
+    "topic": "Hình học phân tử"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phản ứng hóa học",
+    "topic": "Phản ứng oxi hóa – khử"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phản ứng hóa học",
+    "topic": "Cân bằng phương trình"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phản ứng hóa học",
+    "topic": "Nhiệt hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phản ứng hóa học",
+    "topic": "Entanpi (mức cơ bản)"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tốc độ phản ứng và cân bằng hóa học",
+    "topic": "Tốc độ phản ứng"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tốc độ phản ứng và cân bằng hóa học",
+    "topic": "Các yếu tố ảnh hưởng"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tốc độ phản ứng và cân bằng hóa học",
+    "topic": "Cân bằng hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tốc độ phản ứng và cân bằng hóa học",
+    "topic": "Nguyên lý Le Chatelier"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dung dịch và điện li",
+    "topic": "Chất điện li"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dung dịch và điện li",
+    "topic": "Axit"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dung dịch và điện li",
+    "topic": "Bazơ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dung dịch và điện li",
+    "topic": "Muối"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dung dịch và điện li",
+    "topic": "pH"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dung dịch và điện li",
+    "topic": "Thủy phân muối"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dung dịch và điện li",
+    "topic": "Chuẩn độ axit – bazơ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Điện hóa học",
+    "topic": "Pin điện"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Điện hóa học",
+    "topic": "Điện phân"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Điện hóa học",
+    "topic": "Ăn mòn kim loại"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Điện hóa học",
+    "topic": "Bảo vệ kim loại"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Kim loại",
+    "topic": "Tính chất vật lí"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Kim loại",
+    "topic": "Tính chất hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Kim loại",
+    "topic": "Dãy hoạt động hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Kim loại",
+    "topic": "Điều chế kim loại"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Kim loại",
+    "topic": "Hợp kim"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Kim loại",
+    "topic": "Kim loại kiềm"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Kim loại",
+    "topic": "Kim loại kiềm thổ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Kim loại",
+    "topic": "Nhôm"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Kim loại",
+    "topic": "Sắt"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Kim loại",
+    "topic": "Crom"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phi kim",
+    "topic": "Halogen"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phi kim",
+    "topic": "Oxi"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phi kim",
+    "topic": "Lưu huỳnh"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phi kim",
+    "topic": "Nitơ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phi kim",
+    "topic": "Photpho"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phi kim",
+    "topic": "Cacbon"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phi kim",
+    "topic": "Silic"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Phi kim",
+    "topic": "Một số hợp chất quan trọng"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Đại cương hóa học hữu cơ",
+    "topic": "Đặc điểm hợp chất hữu cơ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Đại cương hóa học hữu cơ",
+    "topic": "Đồng đẳng"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Đại cương hóa học hữu cơ",
+    "topic": "Đồng phân"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Đại cương hóa học hữu cơ",
+    "topic": "Danh pháp"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Đại cương hóa học hữu cơ",
+    "topic": "Công thức cấu tạo"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hiđrocacbon",
+    "topic": "Ankan"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hiđrocacbon",
+    "topic": "Anken"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hiđrocacbon",
+    "topic": "Ankin"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hiđrocacbon",
+    "topic": "Aren (Benzen)"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dẫn xuất hiđrocacbon",
+    "topic": "Dẫn xuất halogen"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dẫn xuất hiđrocacbon",
+    "topic": "Ancol"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dẫn xuất hiđrocacbon",
+    "topic": "Phenol"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dẫn xuất hiđrocacbon",
+    "topic": "Andehit"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dẫn xuất hiđrocacbon",
+    "topic": "Xeton"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dẫn xuất hiđrocacbon",
+    "topic": "Axit cacboxylic"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Dẫn xuất hiđrocacbon",
+    "topic": "Este"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hợp chất chứa nitơ",
+    "topic": "Amin"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hợp chất chứa nitơ",
+    "topic": "Amino axit"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hợp chất chứa nitơ",
+    "topic": "Peptit"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hợp chất chứa nitơ",
+    "topic": "Protein"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Carbohydrate",
+    "topic": "Glucozơ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Carbohydrate",
+    "topic": "Fructozơ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Carbohydrate",
+    "topic": "Saccarozơ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Carbohydrate",
+    "topic": "Tinh bột"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Carbohydrate",
+    "topic": "Xenlulozơ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Polime",
+    "topic": "Trùng hợp"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Polime",
+    "topic": "Trùng ngưng"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Polime",
+    "topic": "Chất dẻo"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Polime",
+    "topic": "Cao su"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Polime",
+    "topic": "Tơ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hóa học và đời sống",
+    "topic": "Phân bón"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hóa học và đời sống",
+    "topic": "Hóa học môi trường"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hóa học và đời sống",
+    "topic": "Hóa học xanh"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hóa học và đời sống",
+    "topic": "Vật liệu mới"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Hóa học và đời sống",
+    "topic": "Năng lượng"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tính toán hóa học",
+    "topic": "Mol"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tính toán hóa học",
+    "topic": "Hiệu suất phản ứng"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tính toán hóa học",
+    "topic": "Nồng độ dung dịch"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tính toán hóa học",
+    "topic": "Bảo toàn khối lượng"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tính toán hóa học",
+    "topic": "Bảo toàn nguyên tố"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tính toán hóa học",
+    "topic": "Bảo toàn electron"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tính toán hóa học",
+    "topic": "Bài toán hỗn hợp"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tính toán hóa học",
+    "topic": "Bài toán khí"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thpt",
+    "group": "Tính toán hóa học",
+    "topic": "Bài toán dung dịch"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Chất và sự biến đổi của chất",
+    "topic": "Chất"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Chất và sự biến đổi của chất",
+    "topic": "Tính chất của chất"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Chất và sự biến đổi của chất",
+    "topic": "Chất tinh khiết"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Chất và sự biến đổi của chất",
+    "topic": "Hỗn hợp"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Chất và sự biến đổi của chất",
+    "topic": "Tách chất"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Chất và sự biến đổi của chất",
+    "topic": "Hiện tượng vật lí"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Chất và sự biến đổi của chất",
+    "topic": "Hiện tượng hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Nguyên tử và nguyên tố hóa học",
+    "topic": "Nguyên tử"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Nguyên tử và nguyên tố hóa học",
+    "topic": "Cấu tạo nguyên tử"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Nguyên tử và nguyên tố hóa học",
+    "topic": "Nguyên tố hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Nguyên tử và nguyên tố hóa học",
+    "topic": "Ký hiệu hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Nguyên tử và nguyên tố hóa học",
+    "topic": "Nguyên tử khối"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Nguyên tử và nguyên tố hóa học",
+    "topic": "Phân tử"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Nguyên tử và nguyên tố hóa học",
+    "topic": "Phân tử khối"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Công thức hóa học",
+    "topic": "Hóa trị"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Công thức hóa học",
+    "topic": "Lập công thức hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Công thức hóa học",
+    "topic": "Tính theo công thức hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Công thức hóa học",
+    "topic": "Ý nghĩa của công thức hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Phản ứng hóa học",
+    "topic": "Phương trình hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Phản ứng hóa học",
+    "topic": "Cân bằng phương trình"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Phản ứng hóa học",
+    "topic": "Định luật bảo toàn khối lượng"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Phản ứng hóa học",
+    "topic": "Các loại phản ứng hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Mol và tính toán hóa học",
+    "topic": "Mol"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Mol và tính toán hóa học",
+    "topic": "Khối lượng mol"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Mol và tính toán hóa học",
+    "topic": "Thể tích mol chất khí"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Mol và tính toán hóa học",
+    "topic": "Chuyển đổi giữa mol – khối lượng – thể tích"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Mol và tính toán hóa học",
+    "topic": "Tính theo phương trình hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Oxi – Không khí",
+    "topic": "Tính chất của oxi"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Oxi – Không khí",
+    "topic": "Điều chế oxi"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Oxi – Không khí",
+    "topic": "Không khí"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Oxi – Không khí",
+    "topic": "Ozon"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Oxi – Không khí",
+    "topic": "Sự cháy"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Oxi – Không khí",
+    "topic": "Sự oxi hóa"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Hiđro và nước",
+    "topic": "Hiđro"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Hiđro và nước",
+    "topic": "Điều chế hiđro"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Hiđro và nước",
+    "topic": "Phản ứng oxi hóa – khử (mức cơ bản)"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Hiđro và nước",
+    "topic": "Nước"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Hiđro và nước",
+    "topic": "Vai trò của nước"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Dung dịch",
+    "topic": "Dung môi"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Dung dịch",
+    "topic": "Chất tan"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Dung dịch",
+    "topic": "Độ tan"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Dung dịch",
+    "topic": "Nồng độ phần trăm"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Dung dịch",
+    "topic": "Nồng độ mol"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Dung dịch",
+    "topic": "Pha chế dung dịch"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Axit – Bazơ – Muối",
+    "topic": "Axit"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Axit – Bazơ – Muối",
+    "topic": "Bazơ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Axit – Bazơ – Muối",
+    "topic": "Muối"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Axit – Bazơ – Muối",
+    "topic": "Thang pH"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Axit – Bazơ – Muối",
+    "topic": "Chỉ thị màu"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Axit – Bazơ – Muối",
+    "topic": "Phản ứng trung hòa"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Axit – Bazơ – Muối",
+    "topic": "Phản ứng trao đổi"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Kim loại",
+    "topic": "Tính chất vật lí"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Kim loại",
+    "topic": "Tính chất hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Kim loại",
+    "topic": "Dãy hoạt động hóa học"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Kim loại",
+    "topic": "Điều chế kim loại"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Kim loại",
+    "topic": "Hợp kim"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Kim loại",
+    "topic": "Ăn mòn kim loại"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Phi kim",
+    "topic": "Tính chất của phi kim"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Phi kim",
+    "topic": "Clo"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Phi kim",
+    "topic": "Cacbon"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Phi kim",
+    "topic": "Silic"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Phi kim",
+    "topic": "Một số hợp chất quan trọng"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Hóa học hữu cơ",
+    "topic": "Hợp chất hữu cơ"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Hóa học hữu cơ",
+    "topic": "Metan"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Hóa học hữu cơ",
+    "topic": "Etilen"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Hóa học hữu cơ",
+    "topic": "Axetilen"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Hóa học hữu cơ",
+    "topic": "Benzen"
+  },
+  {
+    "subject": "hoa",
+    "grade": "thcs",
+    "group": "Hóa học hữu cơ",
+    "topic": "Nhiên liệu"
+  }
+]

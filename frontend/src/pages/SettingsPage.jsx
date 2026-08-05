@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { authHeaders } from '../auth/mockUsers.js'
 import { SUBJECTS } from '../components/SubjectBadge.jsx'
-import { getLabelGroups } from '../data/labels.js'
 
 function IcExam(size = 18) {
   return (
@@ -17,23 +16,67 @@ function IcExam(size = 18) {
 
 const TOPIC_SUBJECTS = ['toan', 'ly', 'hoa']
 
+/* ── 1 dòng nhãn: xem / sửa inline / xoá ── */
+function TopicRow({ t, onSave, onDelete }) {
+  const [editing, setEditing] = useState(false)
+  const [group, setGroup]     = useState(t.group)
+  const [topic, setTopic]     = useState(t.topic)
+  const [saving, setSaving]   = useState(false)
+
+  const cancel = () => { setGroup(t.group); setTopic(t.topic); setEditing(false) }
+
+  const save = async () => {
+    if (!topic.trim()) return
+    setSaving(true)
+    await onSave(t.id, { group: group.trim(), topic: topic.trim() })
+    setSaving(false)
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <tr>
+        <td><input className="sa-config-input" value={group} onChange={e => setGroup(e.target.value)} /></td>
+        <td><input className="sa-config-input" value={topic} onChange={e => setTopic(e.target.value)} /></td>
+        <td style={{ whiteSpace: 'nowrap' }}>
+          <button className="sa-btn sa-btn--primary" disabled={saving} onClick={save}>
+            {saving ? 'Đang lưu…' : 'Lưu'}
+          </button>{' '}
+          <button className="sa-btn sa-btn--ghost" onClick={cancel} disabled={saving}>Hủy</button>
+        </td>
+      </tr>
+    )
+  }
+
+  return (
+    <tr>
+      <td>{t.group || '—'}</td>
+      <td>{t.topic}</td>
+      <td style={{ whiteSpace: 'nowrap' }}>
+        <button className="sa-btn sa-btn--ghost" onClick={() => setEditing(true)}>Sửa</button>{' '}
+        <button className="sa-btn sa-btn--ghost" onClick={() => onDelete(t.id)}>Xoá</button>
+      </td>
+    </tr>
+  )
+}
+
 /* ═══════════════════════════════════════════ MỤC: ĐỀ THI (nhãn chủ đề) ══ */
 function ExamTopicsTab() {
-  const [subject, setSubject]         = useState('toan')
-  const [grade, setGrade]             = useState('thpt')
-  const [customTopics, setCustomTopics] = useState([])
-  const [loading, setLoading]         = useState(true)
-  const [newGroup, setNewGroup]       = useState('')
-  const [newTopic, setNewTopic]       = useState('')
-  const [saving, setSaving]           = useState(false)
-  const [err, setErr]                 = useState('')
+  const [subject, setSubject]   = useState('toan')
+  const [grade, setGrade]       = useState('thpt')
+  const [topics, setTopics]     = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [newGroup, setNewGroup] = useState('')
+  const [newTopic, setNewTopic] = useState('')
+  const [saving, setSaving]     = useState(false)
+  const [err, setErr]           = useState('')
 
   const load = () => {
     setLoading(true)
     fetch(`/api/topics/custom?subject=${subject}&grade=${grade}`, { headers: authHeaders() })
       .then(r => r.ok ? r.json() : { topics: [] })
-      .then(data => setCustomTopics(data.topics || []))
-      .catch(() => setCustomTopics([]))
+      .then(data => setTopics(data.topics || []))
+      .catch(() => setTopics([]))
       .finally(() => setLoading(false))
   }
 
@@ -59,12 +102,22 @@ function ExamTopicsTab() {
     setSaving(false)
   }
 
-  const handleDelete = async (id) => {
-    setCustomTopics(prev => prev.filter(t => t.id !== id))
-    await fetch(`/api/topics/custom/${id}`, { method: 'DELETE', headers: authHeaders() }).catch(() => {})
+  const handleSave = async (id, { group, topic }) => {
+    const res = await fetch(`/api/topics/custom/${id}`, {
+      method: 'PUT',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ group, topic }),
+    }).catch(() => null)
+    if (res?.ok) {
+      const data = await res.json()
+      setTopics(prev => prev.map(t => t.id === id ? data.topic : t))
+    }
   }
 
-  const groups = getLabelGroups(subject, grade)
+  const handleDelete = async (id) => {
+    setTopics(prev => prev.filter(t => t.id !== id))
+    await fetch(`/api/topics/custom/${id}`, { method: 'DELETE', headers: authHeaders() }).catch(() => {})
+  }
 
   return (
     <div className="sa-config">
@@ -106,48 +159,31 @@ function ExamTopicsTab() {
         </form>
         {err && <div style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: 8 }}>⚠️ {err}</div>}
         <div className="sa-config-hint">
-          Nhãn tự thêm dùng chung cho toàn hệ thống — mọi giáo viên khi trích/tạo đề đều chọn được,
+          Nhãn dùng chung cho toàn hệ thống — mọi giáo viên khi trích/tạo đề đều chọn được,
           kể cả AI khi tự động phân loại chủ đề lúc trích PDF.
         </div>
       </div>
 
       <div className="sa-config-card">
         <div className="sa-config-title">
-          Nhãn tự thêm ({SUBJECTS[subject]?.label} · {grade === 'thpt' ? 'THPT' : 'THCS'})
+          Nhãn chủ đề ({SUBJECTS[subject]?.label} · {grade === 'thpt' ? 'THPT' : 'THCS'})
         </div>
         {loading ? (
           <div className="sa-loading">Đang tải…</div>
-        ) : customTopics.length === 0 ? (
-          <div className="sa-config-hint">Chưa có nhãn tự thêm nào cho môn/cấp này.</div>
+        ) : topics.length === 0 ? (
+          <div className="sa-config-hint">Chưa có nhãn nào cho môn/cấp này.</div>
         ) : (
           <div className="sa-table-wrap">
             <table className="sa-table">
               <thead><tr><th>Nhóm</th><th>Chủ đề</th><th /></tr></thead>
               <tbody>
-                {customTopics.map(t => (
-                  <tr key={t.id}>
-                    <td>{t.group || '—'}</td>
-                    <td>{t.topic}</td>
-                    <td><button className="sa-btn sa-btn--ghost" onClick={() => handleDelete(t.id)}>Xoá</button></td>
-                  </tr>
+                {topics.map(t => (
+                  <TopicRow key={t.id} t={t} onSave={handleSave} onDelete={handleDelete} />
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
-
-      <div className="sa-config-card">
-        <div className="sa-config-title">Nhãn có sẵn trong hệ thống</div>
-        <div className="sa-config-hint" style={{ marginBottom: 10 }}>Danh sách nhãn gốc, chỉ để tham khảo.</div>
-        {groups.map(g => (
-          <div key={g.group} style={{ marginBottom: 12 }}>
-            <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: 6 }}>{g.group}</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {g.topics.map(t => <span key={t} className="eq-topic-group-tag">{t}</span>)}
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   )

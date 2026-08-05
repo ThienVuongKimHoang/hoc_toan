@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
-import { DIFFICULTY_LEVELS, getLabelGroups, subjectHasLabels } from '../data/labels.js'
+import React, { useEffect, useState } from 'react'
+import { DIFFICULTY_LEVELS, subjectHasLabels } from '../data/labels.js'
+import { fetchTopicGroups } from '../store/topicStore.js'
 import { SUBJECTS } from './SubjectBadge.jsx'
 
 function CloseIcon() {
@@ -173,7 +174,13 @@ export default function MixExamModal({ subject = 'toan', grade: initialGrade = '
   const [result,     setResult]     = useState(null)
   const [error,      setError]      = useState(null)
 
-  const groups = getLabelGroups(subject, grade)
+  const [groups, setGroups] = useState([])
+  useEffect(() => {
+    if (!subjectHasLabels(subject)) { setGroups([]); return }
+    let cancelled = false
+    fetchTopicGroups(subject, grade).then(g => { if (!cancelled) setGroups(g) })
+    return () => { cancelled = true }
+  }, [subject, grade])
 
   const addCriterion = () =>
     setCriteria(prev => [...prev, { topic: '', level: null, count: 3 }])
