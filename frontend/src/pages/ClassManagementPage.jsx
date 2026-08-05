@@ -29,7 +29,7 @@ import SortableDocList from '../components/SortableDocList.jsx'
 import SaveCaptureModal from '../components/SaveCaptureModal.jsx'
 import { isExerciseDoc, sortDocsByOrder } from '../utils/exerciseDocs.js'
 import { extractYoutubeId, youtubeEmbedUrl, youtubeThumbnail, youtubeWatchUrl } from '../utils/youtube.js'
-import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, GradePicker, SubjectPicker, gradeLabel, NO_GRADE_SUBJECTS } from '../components/SubjectBadge.jsx'
+import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, GradePicker, SubjectPicker, gradeLabel, gradeToCap, NO_GRADE_SUBJECTS } from '../components/SubjectBadge.jsx'
 import { ROLES } from '../auth/mockUsers.js'
 
 /* Avatar học sinh/giáo viên trong kết quả tìm kiếm: user.avatar có thể là URL ảnh Google
@@ -1464,7 +1464,7 @@ function ProgressTab({ classId, teacherId }) {
 /* ─── Ngân hàng đề của lớp (con của tab "Bài tập", cùng cấp với 2 tab con
    "Bài tập"/"Đề thi") — tạo/sửa/xóa đề, phát đề công khai, cài luyện tập.
    Đề chỉ hiện ở đây khi thuộc đúng lớp này (classId) — lớp khác không thấy. ─── */
-function ExamBankPanel({ classId, teacherId, user, subject, onAssign }) {
+function ExamBankPanel({ classId, teacherId, user, subject, grade, onAssign }) {
   const [exams, setExams] = useState([])
   const [loading, setLoading] = useState(true)
   const [showChoice, setShowChoice] = useState(false)
@@ -1598,7 +1598,8 @@ function ExamBankPanel({ classId, teacherId, user, subject, onAssign }) {
         <CreateExamChoiceModal onChoice={handleChoice} onClose={() => setShowChoice(false)} initialSubject={subject} />
       )}
       {showMix && (
-        <MixExamModal standalone subject={subject} onClose={() => setShowMix(false)} onAddQuestions={handleMixComplete} />
+        <MixExamModal standalone subject={subject} grade={gradeToCap(grade) || 'thpt'}
+          onClose={() => setShowMix(false)} onAddQuestions={handleMixComplete} />
       )}
       {republish && (
         <PublishModal exam={republish} teacherId={teacherId}
@@ -1993,7 +1994,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
               <>
                 {/* Ngân hàng đề của lớp — tạo/sửa/xóa/phát đề/luyện tập. Mọi giáo viên
                     (chính + co-teacher) của lớp này tạo/thấy chung; lớp khác không thấy. */}
-                <ExamBankPanel classId={cls.id} teacherId={teacherId} user={user} subject={subject}
+                <ExamBankPanel classId={cls.id} teacherId={teacherId} user={user} subject={subject} grade={cls.grade}
                   onAssign={(exam) => { setAssignPresetExam(exam); setShowAssignment(true) }} />
 
                 <h4 className="sub-section-title" style={{ marginTop: 20 }}>Đã giao</h4>

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import MathText from '../MathText.jsx'
 import MarkerText, { referencedImageIds } from '../MarkerText.jsx'
-import { DIFFICULTY_LEVELS } from '../../data/labels.js'
+import { DIFFICULTY_LEVELS, subjectHasLabels } from '../../data/labels.js'
 import './EditableQuestion.css'
 
 export function PencilIcon({ size = 12 }) {
@@ -491,10 +491,13 @@ function TopicDropdown({ groups, value, onChange, onClose }) {
   )
 }
 
-function LabelRow({ q, groups = [], onChange, onAutoClassify, classifying }) {
+function LabelRow({ q, subject, groups = [], onChange, onAutoClassify, classifying }) {
   const [topicOpen, setTopicOpen] = useState(false)
   const [hoveredDiff, setHoveredDiff] = useState(null)
-  const hasTopics = groups.length > 0
+  // Môn có hỗ trợ gắn nhãn hay không là 1 điều kiện tĩnh (subject) — không phụ
+  // thuộc việc fetch /api/topics/custom có thành công hay không, để phần gắn nhãn
+  // vẫn hiển thị (dropdown có thể tạm rỗng) ngay cả khi API lỗi/chưa tải xong.
+  const hasTopics = subjectHasLabels(subject)
   const activeDiff = DIFFICULTY_LEVELS.find(d => d.id === (hoveredDiff ?? q.level_label))
 
   return (
@@ -1209,6 +1212,7 @@ export default function EditableQuestion({
       {!readingMode && (
         <LabelRow
           q={q}
+          subject={subject}
           groups={topicGroups}
           onChange={onUpdate}
           onAutoClassify={autoClassify}

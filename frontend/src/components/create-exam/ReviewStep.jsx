@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import EditableQuestion from './EditableQuestion.jsx'
 import ReadingSection from './ReadingSection.jsx'
 import MixExamModal from '../MixExamModal.jsx'
-import { SUBJECTS, GRADES } from '../SubjectBadge.jsx'
+import { SUBJECTS, GRADES, gradeToCap } from '../SubjectBadge.jsx'
 import { subjectHasLabels } from '../../data/labels.js'
 import { fetchTopicGroups } from '../../store/topicStore.js'
 
@@ -157,6 +157,13 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
   const [highlightQ, setHighlightQ] = useState(null)
   const [toasts, setToasts]         = useState([])
   const jumpIdxRef = useRef(0)
+
+  /* Khối lớp của đề quyết định cấp học mặc định (10-12 → THPT, 6-9 → THCS) —
+   * GV vẫn bấm tay đổi được, chỉ tự động lại khi đổi khối lớp khác. */
+  useEffect(() => {
+    const cap = gradeToCap(examGrade)
+    if (cap) setGrade(cap)
+  }, [examGrade])
 
   /* Nhãn chủ đề (nhóm + tên) cho môn + cấp học hiện tại, dùng cho dropdown chọn chủ đề */
   const [topicGroups, setTopicGroups] = useState([])

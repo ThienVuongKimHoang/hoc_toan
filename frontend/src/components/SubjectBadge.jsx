@@ -48,6 +48,13 @@ export const STUDENT_GRADES = [...GRADES, 'khac']
 
 export const gradeLabel = (g) => (g === 'khac' ? 'Khác' : g ? `Lớp ${g}` : '')
 
+/** Suy ra cấp học từ khối lớp: 10-12 là THPT, 6-9 là THCS. Dùng để tự động
+ *  chọn cấp khi lấy nhãn chủ đề (custom_topics) theo khối lớp đã chọn. */
+export const gradeToCap = (g) => {
+  const n = Number(g)
+  return n ? (n >= 10 ? 'thpt' : 'thcs') : null
+}
+
 /** Badge cấp độ (pill xám) — dùng cạnh tên lớp/thẻ học sinh. */
 export function GradeBadge({ grade, size = 'md' }) {
   if (!grade) return null
