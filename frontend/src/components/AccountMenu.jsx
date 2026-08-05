@@ -64,11 +64,13 @@ function buildMenu(role, actions) {
     items.push({ icon: IC.system, label: 'Bảng điều khiển Admin', action: actions.onGoAdmin, highlight: true })
   }
 
-  items.push({ icon: IC.settings, label: 'Cài đặt', action: null })
+  if (hasTeacherAccess(role)) {
+    items.push({ icon: IC.settings, label: 'Cài đặt', action: actions.onGoSettings })
+  }
   return items
 }
 
-export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, onGoClasses, onGoMyClasses, onGoTools, onGoHistory }) {
+export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, onGoClasses, onGoMyClasses, onGoTools, onGoHistory, onGoSettings }) {
   const [open, setOpen] = useState(false)
   const ref  = useRef(null)
   const meta = ROLE_META[user.role]
@@ -80,7 +82,7 @@ export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, on
   }, [])
 
   const close = () => setOpen(false)
-  const menuItems = buildMenu(user.role, { onGoProfile, onGoAdmin, onGoClasses, onGoMyClasses, onGoTools, onGoHistory })
+  const menuItems = buildMenu(user.role, { onGoProfile, onGoAdmin, onGoClasses, onGoMyClasses, onGoTools, onGoHistory, onGoSettings })
 
   return (
     <div className="acct-wrap" ref={ref}>

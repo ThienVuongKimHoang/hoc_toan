@@ -252,6 +252,19 @@ CREATE TABLE IF NOT EXISTS banned_ips (
     banned_at  TIMESTAMPTZ  DEFAULT NOW()
 );
 
+-- Nhãn chủ đề do giáo viên trở lên tự thêm, dùng chung toàn hệ thống
+-- (bổ sung cho danh sách nhãn cứng SUBJECT_TOPIC_LISTS trong api.py)
+CREATE TABLE IF NOT EXISTS custom_topics (
+    id          SERIAL PRIMARY KEY,
+    subject     VARCHAR(20)  NOT NULL,
+    grade       VARCHAR(10)  NOT NULL,
+    group_name  VARCHAR(200) DEFAULT '',
+    topic       VARCHAR(300) NOT NULL,
+    created_by  BIGINT,
+    created_at  TIMESTAMPTZ  DEFAULT NOW(),
+    UNIQUE(subject, grade, topic)
+);
+
 -- Session đăng nhập: token ngẫu nhiên phát khi login/register/google, xác minh
 -- danh tính người gọi ở mọi request thay vì tin ID client tự khai.
 CREATE TABLE IF NOT EXISTS sessions (
@@ -1193,6 +1206,64 @@ def unban_ip(ip: str) -> bool:
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM banned_ips WHERE ip=%s", (ip,))
+            deleted = cur.rowcount > 0
+        conn.commit()
+    return deleted
+
+
+# ── Nhãn chủ đề tự thêm (custom_topics) ─────────────────────────────────────
+
+def list_custom_topics(subject: str = None, grade: str = None) -> list:
+    query = "SELECT id, subject, grade, group_name, topic, created_by, created_at FROM custom_topics"
+    conds, params = [], []
+    if subject:
+        conds.append("subject=%s"); params.append(subject)
+    if grade:
+        conds.append("grade=%s"); params.append(grade)
+    if conds:
+        query += " WHERE " + " AND ".join(conds)
+    query += " ORDER BY created_at DESC"
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(query, params)
+            rows = [dict(r) for r in cur.fetchall()]
+    return [{
+        "id":        r["id"],
+        "subject":   r["subject"],
+        "grade":     r["grade"],
+        "group":     r["group_name"] or "",
+        "topic":     r["topic"],
+        "createdBy": r["created_by"],
+        "createdAt": r["created_at"].isoformat() if r["created_at"] else None,
+    } for r in rows]
+
+
+def add_custom_topic(subject: str, grade: str, topic: str, group_name: str = "", created_by=None) -> dict:
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                INSERT INTO custom_topics (subject, grade, group_name, topic, created_by)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (subject, grade, topic) DO UPDATE SET topic = EXCLUDED.topic
+                RETURNING id, subject, grade, group_name, topic, created_by, created_at
+            """, (subject, grade, group_name or "", topic, created_by))
+            r = dict(cur.fetchone())
+        conn.commit()
+    return {
+        "id":        r["id"],
+        "subject":   r["subject"],
+        "grade":     r["grade"],
+        "group":     r["group_name"] or "",
+        "topic":     r["topic"],
+        "createdBy": r["created_by"],
+        "createdAt": r["created_at"].isoformat() if r["created_at"] else None,
+    }
+
+
+def delete_custom_topic(topic_id: int) -> bool:
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM custom_topics WHERE id=%s", (topic_id,))
             deleted = cur.rowcount > 0
         conn.commit()
     return deleted

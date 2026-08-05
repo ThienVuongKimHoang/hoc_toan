@@ -491,10 +491,12 @@ function TopicDropdown({ groups, value, onChange, onClose }) {
   )
 }
 
-function LabelRow({ q, subject, grade, onChange, onAutoClassify, classifying }) {
+function LabelRow({ q, subject, grade, customTopics = [], onChange, onAutoClassify, classifying }) {
   const [topicOpen, setTopicOpen] = useState(false)
   const [hoveredDiff, setHoveredDiff] = useState(null)
-  const groups = getLabelGroups(subject, grade)
+  const groups = customTopics.length > 0
+    ? [...getLabelGroups(subject, grade), { group: 'Tự thêm', topics: customTopics.map(t => t.topic) }]
+    : getLabelGroups(subject, grade)
   const hasTopics = groups.length > 0
   const activeDiff = DIFFICULTY_LEVELS.find(d => d.id === (hoveredDiff ?? q.level_label))
 
@@ -798,7 +800,7 @@ const SECTION_COLOR = {
 
 export default function EditableQuestion({
   q, index, pointsPerQ, onUpdate, onDelete, onReportSubmit, highlight,
-  subject = 'toan', grade = 'thpt',
+  subject = 'toan', grade = 'thpt', customTopics = [],
   readingMode = false, clozeMode = false,
 }) {
   const [editingText, setEditingText] = useState(() => hasSuspiciousLatex(q.question_text))
@@ -1212,6 +1214,7 @@ export default function EditableQuestion({
           q={q}
           subject={subject}
           grade={grade}
+          customTopics={customTopics}
           onChange={onUpdate}
           onAutoClassify={autoClassify}
           classifying={classifying}

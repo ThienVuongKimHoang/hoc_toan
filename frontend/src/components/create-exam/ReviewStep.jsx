@@ -4,6 +4,7 @@ import ReadingSection from './ReadingSection.jsx'
 import MixExamModal from '../MixExamModal.jsx'
 import { SUBJECTS, GRADES } from '../SubjectBadge.jsx'
 import { subjectHasLabels } from '../../data/labels.js'
+import { authHeaders } from '../../auth/mockUsers.js'
 
 function isUnanswered(q, sec) {
   if (sec === 'PHẦN I' || sec === 'TIẾNG ANH' || sec === 'READING') return q.answer === null || q.answer === undefined
@@ -156,6 +157,18 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
   const [highlightQ, setHighlightQ] = useState(null)
   const [toasts, setToasts]         = useState([])
   const jumpIdxRef = useRef(0)
+
+  /* Nhãn chủ đề do giáo viên trở lên tự thêm (bổ sung danh sách cứng trong labels.js) */
+  const [customTopics, setCustomTopics] = useState([])
+  useEffect(() => {
+    if (!subjectHasLabels(subject)) { setCustomTopics([]); return }
+    let cancelled = false
+    fetch(`/api/topics/custom?subject=${subject}&grade=${grade}`, { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : { topics: [] })
+      .then(data => { if (!cancelled) setCustomTopics(data.topics || []) })
+      .catch(() => { if (!cancelled) setCustomTopics([]) })
+    return () => { cancelled = true }
+  }, [subject, grade])
 
   /* ── Drag state ── */
   const cardEls      = useRef({})   // { [_uid]: DOM wrapper element }
@@ -567,6 +580,7 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
                       index={idx}
                       subject={subject}
                       grade={grade}
+                      customTopics={customTopics}
                       pointsPerQ={sections[activeSection]?.points_per_q}
                       onUpdate={updated => updateQuestion(activeSection, idx, updated)}
                       onDelete={() => deleteQuestion(activeSection, idx)}

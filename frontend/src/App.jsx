@@ -12,6 +12,7 @@ import SuperAdminPage from './pages/SuperAdminPage.jsx'
 import ClassManagementPage from './pages/ClassManagementPage.jsx'
 import MyClassesPage from './pages/MyClassesPage.jsx'
 import ExamReviewPage from './pages/ExamReviewPage.jsx'
+import SettingsPage from './pages/SettingsPage.jsx'
 import AssignmentPopup from './components/AssignmentPopup.jsx'
 import UploadZone from './components/UploadZone.jsx'
 import ProgressPanel from './components/ProgressPanel.jsx'
@@ -62,6 +63,7 @@ function parseHash() {
   // do ClassManagementPage tự đọc từ hash; ở đây chỉ cần giữ view class-mgmt.
   if (hash === 'classes' || hash.startsWith('classes/')) return { view: 'class-mgmt', examId: null, classId: null }
   if (hash === 'my-classes') return { view: 'my-classes', examId: null, classId: null }
+  if (hash === 'settings') return { view: 'settings', examId: null, classId: null }
   if (hash === 'tools/solver') return { view: 'solver-page', examId: null, classId: null }
   if (hash === 'tools/geo3d') return { view: 'geo3d-page', examId: null, classId: null }
   if (hash === 'tools/whiteboard') return { view: 'whiteboard-page', examId: null, classId: null }
@@ -280,6 +282,11 @@ export default function App() {
     if (!hasTeacherAccess(user.role)) return
     setHash('classes'); setView('class-mgmt')
   }
+  const goSettings = () => {
+    if (!user) { goLogin(); return }
+    if (!hasTeacherAccess(user.role)) return
+    setHash('settings'); setView('settings')
+  }
   const goMyClasses = () => user ? (setClassId(null), setOpenClassId(null), setHash('my-classes'), setView('my-classes')) : goLogin()
   const openClass = (cid) => user ? (setClassId(null), setOpenClassId(cid), setHash(`class/${cid}`), setView('my-classes')) : goLogin()
   const goTools = () => user ? setShowTeacherTools(true) : goLogin()
@@ -381,6 +388,7 @@ export default function App() {
       onOpenReports={() => goAdminTab('reports')}
       onGoTools={goTools}
       onGoHistory={goHistory}
+      onGoSettings={goSettings}
     />
   )
 
@@ -433,6 +441,22 @@ export default function App() {
       <>
         {header}
         <ClassManagementPage user={user} onGoHome={goHome} />
+        {teacherToolOverlays}
+      </>
+    )
+  }
+
+  if (view === 'settings') {
+    if (!user) return (
+      <>{header}<AccessDenied message="Bạn cần đăng nhập để truy cập trang này." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
+    )
+    if (!hasTeacherAccess(user.role)) return (
+      <>{header}<AccessDenied message="Cài đặt chỉ dành cho Giáo viên, Admin và Super Admin." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={true} /></>
+    )
+    return (
+      <>
+        {header}
+        <SettingsPage user={user} onGoHome={goHome} />
         {teacherToolOverlays}
       </>
     )

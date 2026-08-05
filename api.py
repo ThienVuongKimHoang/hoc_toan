@@ -139,6 +139,12 @@ async def require_admin(user: dict = Depends(require_auth)) -> dict:
     return user
 
 
+async def require_teacher(user: dict = Depends(require_auth)) -> dict:
+    if user.get("role") not in ("giao_vien", "admin", "super_admin"):
+        raise HTTPException(403, "Chỉ Giáo viên, Admin và Super Admin mới có quyền này.")
+    return user
+
+
 async def require_super_admin(user: dict = Depends(require_auth)) -> dict:
     if user.get("role") != "super_admin":
         raise HTTPException(403, "Chỉ super_admin mới có quyền này.")
@@ -3735,9 +3741,15 @@ SUBJECT_TOPIC_LISTS = {
 
 
 def _topic_list_for(subject: str, grade: str):
-    """(danh sách chủ đề, tên môn) cho phân loại. Mặc định về Toán khi môn lạ."""
+    """(danh sách chủ đề, tên môn) cho phân loại. Mặc định về Toán khi môn lạ.
+
+    Gộp thêm nhãn do giáo viên trở lên tự thêm (bảng custom_topics) vào danh sách
+    cứng, để Groq (tự động lẫn thủ công) có thể chọn cả nhãn tự thêm."""
     conf = SUBJECT_TOPIC_LISTS.get(subject) or SUBJECT_TOPIC_LISTS['toan']
     topics = conf['thcs'] if grade == 'thcs' else conf['thpt']
+    custom = [c["topic"] for c in db.list_custom_topics(subject, grade)]
+    if custom:
+        topics = topics + [t for t in custom if t not in topics]
     return topics, conf['name']
 
 
@@ -3800,6 +3812,36 @@ Trả về JSON ĐÚNG ĐỊNH DẠNG, không giải thích thêm:
         }
     except Exception as e:
         return JSONResponse({"topic_label": None, "level_label": None, "error": str(e)}, status_code=200)
+
+
+@app.get("/api/topics/custom")
+async def list_custom_topics(subject: str = None, grade: str = None, caller: dict = Depends(require_teacher)):
+    """Danh sách nhãn chủ đề do giáo viên trở lên tự thêm (dùng chung toàn hệ thống)."""
+    return {"topics": db.list_custom_topics(subject, grade)}
+
+
+@app.post("/api/topics/custom")
+async def add_custom_topic(request: Request, caller: dict = Depends(require_teacher)):
+    """Giáo viên trở lên thêm 1 nhãn chủ đề mới cho môn + cấp học."""
+    body = await request.json()
+    subject = (body.get("subject") or "").strip()
+    grade = (body.get("grade") or "").strip()
+    topic = (body.get("topic") or "").strip()
+    group = (body.get("group") or "").strip()
+    if subject not in ("toan", "ly", "hoa") or grade not in ("thpt", "thcs"):
+        return JSONResponse({"error": "Môn hoặc cấp học không hợp lệ."}, status_code=400)
+    if not topic:
+        return JSONResponse({"error": "Tên chủ đề không được để trống."}, status_code=400)
+    created = db.add_custom_topic(subject, grade, topic, group, caller["id"])
+    return {"ok": True, "topic": created}
+
+
+@app.delete("/api/topics/custom/{topic_id}")
+async def delete_custom_topic(topic_id: int, caller: dict = Depends(require_teacher)):
+    """Giáo viên trở lên xoá 1 nhãn chủ đề tự thêm (dùng chung, không giới hạn theo người tạo)."""
+    if not db.delete_custom_topic(topic_id):
+        return JSONResponse({"error": "Không tìm thấy nhãn chủ đề."}, status_code=404)
+    return {"ok": True}
 
 
 @app.get("/api/questions/bank")
