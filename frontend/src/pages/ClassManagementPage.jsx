@@ -11,7 +11,8 @@ import {
   deleteAssignmentSubmission,
   deleteClass, getAllClasses, getClassById, getClassesByTeacher, getSubmissions,
   joinUrl, removeAssignment, removeCoTeacher, removeDocument, removeMemberFromClass,
-  searchStudents, searchTeachers, updateClassInfo, updateDocument, updateMemberLabel, uploadFile,
+  searchStudents, searchTeachers, updateAssignmentDeadline, updateClassInfo, updateDocument,
+  updateMemberLabel, uploadFile,
 } from '../store/classStore.js'
 import {
   getAttendanceHistory, getAttendanceSession, getClassProgress, submitAttendance,
@@ -828,6 +829,61 @@ function AddTeacherModal({ teacherId, coTeachers, onClose, onAdd }) {
   )
 }
 
+/* ─── Extend deadline modal (gia hạn hạn nộp một lượt giao bài/đề đã có) ─── */
+function ExtendDeadlineModal({ assignment, onClose, onSave }) {
+  const formatDt = iso => iso
+    ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '—'
+  const current = assignment.closeTime || assignment.dueDate
+  const currentDt = current ? new Date(current) : null
+  const [date, setDate] = useState(currentDt ? localDateStr(currentDt) : localDateStr())
+  const [time, setTime] = useState(currentDt
+    ? `${String(currentDt.getHours()).padStart(2, '0')}:${String(currentDt.getMinutes()).padStart(2, '0')}`
+    : '23:59')
+  const [err, setErr] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const submit = async () => {
+    setErr('')
+    if (!date) { setErr('Vui lòng chọn ngày hạn mới.'); return }
+    const iso = new Date(`${date}T${time}`).toISOString()
+    setSaving(true)
+    try {
+      await onSave(iso)
+    } catch (e) {
+      setErr(e.message || 'Gia hạn thất bại, vui lòng thử lại.')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 420 }}>
+        <div className="modal-header"><h2>⏰ Gia hạn nộp bài</h2><button className="modal-close" onClick={onClose}>✕</button></div>
+        <div style={{ padding: '0 24px 24px' }}>
+          <div className="cm-info-note" style={{ marginBottom: 14 }}>
+            <strong>{assignment.title}</strong><br />Hạn hiện tại: {formatDt(current)}
+          </div>
+          <label className="cm-label">Hạn nộp mới *</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input type="date" className="cm-input" style={{ flex: 2 }}
+              value={date} onChange={e => setDate(e.target.value)} />
+            <input type="time" className="cm-input" style={{ flex: 1 }}
+              value={time} onChange={e => setTime(e.target.value)} />
+          </div>
+          {err && <div className="cm-error">{err}</div>}
+          <div className="cm-footer">
+            <button className="pm-cancel" onClick={onClose}>Huỷ</button>
+            <button className="btn-primary cm-submit" onClick={submit} disabled={saving}>
+              {saving ? 'Đang lưu...' : '⏰ Gia hạn'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Assignment form modal ─── */
 function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExamId, onClose, onSave }) {
   // Đề thi thuộc LỚP này (mọi giáo viên/co-teacher của lớp tạo ra đều hiện ở đây) —
@@ -1569,6 +1625,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
   const [assignPresetExam, setAssignPresetExam] = useState(null)   // đề đã chọn sẵn khi bấm "Giao đề" từ ngân hàng đề
   const [uploading, setUploading] = useState(false)
   const [viewSubs, setViewSubs] = useState(null)
+  const [extendingAsgn, setExtendingAsgn] = useState(null)
   const [viewingFile, setViewingFile] = useState(null)
   const [copiedJoin, setCopiedJoin] = useState(false)
   const [openFolder, setOpenFolder] = useState(null)
@@ -1644,6 +1701,13 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
     if (!confirm('Xoá bài tập này?')) return
     await removeAssignment(cls.id, aId)
     refresh()
+  }
+  const handleExtendDeadline = async (aId, newCloseIso) => {
+    try {
+      await updateAssignmentDeadline(cls.id, aId, newCloseIso)
+      setExtendingAsgn(null)
+      refresh()
+    } catch (err) { alert(err.message) }
   }
 
   /* Documents — gắn subject. Đang mở 1 Buổi thì upload sẽ mở popup gán Câu/Đề-Đáp án
@@ -1777,6 +1841,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
           <button className="mec-btn mec-btn--results" onClick={() => setViewSubs(a)}>
             {IC.chart(14)} {isExam ? 'Xem điểm' : `${subCount}/${total} nộp`}
           </button>
+          <button className="cm-remove-btn" title="Gia hạn nộp bài" onClick={() => setExtendingAsgn(a)}>{IC.pencil(14)}</button>
           <button className="cm-remove-btn" onClick={() => handleRemoveAssignment(a.id)}>{IC.trash(14)}</button>
         </div>
       </div>
@@ -2143,6 +2208,10 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
       {viewSubs && (
         <SubmissionsPanel classId={cls.id} assignment={viewSubs} members={subjMembers}
           allAssignments={cls.assignments || []} teacherId={teacherId} onClose={() => setViewSubs(null)} />
+      )}
+      {extendingAsgn && (
+        <ExtendDeadlineModal assignment={extendingAsgn} onClose={() => setExtendingAsgn(null)}
+          onSave={(iso) => handleExtendDeadline(extendingAsgn.id, iso)} />
       )}
       {viewingFile && <FileViewerModal file={viewingFile} onClose={() => setViewingFile(null)} />}
       {pendingUploadFile && (

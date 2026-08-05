@@ -2367,6 +2367,56 @@ async def delete_assignment_endpoint(cls_id: str, asgn_id: str, caller: dict = D
     return {"ok": True}
 
 
+@app.put("/api/classes/{cls_id}/assignments/{asgn_id}/deadline")
+async def extend_assignment_deadline_endpoint(cls_id: str, asgn_id: str, request: Request,
+                                                caller: dict = Depends(require_auth)):
+    """Gia hạn (sửa) hạn nộp của một lượt giao bài/đề ĐÃ TỒN TẠI, tại chỗ — không xóa/tạo lại
+    nên không mất submissions đã có. Dùng chung cho bài tập (dueDate) và đề thi (closeTime)."""
+    cls0 = db.get_class(cls_id)
+    if cls0 is None:
+        return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if not _is_class_teacher(cls0, caller["id"]):
+        return JSONResponse({"error": "Không có quyền sửa hạn nộp của lớp này"}, status_code=403)
+
+    body = await request.json()
+    raw_close = body.get("closeTime")
+    try:
+        new_close = datetime.fromisoformat(str(raw_close).replace("Z", "+00:00"))
+    except Exception:
+        return JSONResponse({"error": "Thời gian không hợp lệ."}, status_code=400)
+    if new_close <= datetime.now(_tz.utc):
+        return JSONResponse({"error": "Hạn mới phải ở tương lai."}, status_code=422)
+
+    err = {}
+    def mutate(cls):
+        asgn = _find_assignment(cls, asgn_id)
+        if not asgn:
+            err["resp"] = ("Không tìm thấy bài tập", 404)
+            return False
+        if asgn.get("openTime"):
+            try:
+                open_dt = datetime.fromisoformat(str(asgn["openTime"]).replace("Z", "+00:00"))
+                if new_close <= open_dt:
+                    err["resp"] = ("Hạn mới phải sau thời gian mở đề.", 422)
+                    return False
+            except Exception:
+                pass
+        new_close_iso = new_close.isoformat()
+        asgn["closeTime"] = new_close_iso
+        asgn["dueDate"] = new_close_iso
+        # Bài đã quá hạn gần như chắc chắn đã bị quét (xem _scan_overdue_assignments) — reset
+        # cờ để bài được quét lại theo hạn mới, không bị bỏ sót vĩnh viễn.
+        asgn.pop("reportScanned", None)
+
+    cls = db.update_class_atomic(cls_id, mutate)
+    if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    if "resp" in err:
+        msg, status = err["resp"]
+        return JSONResponse({"error": msg}, status_code=status)
+    asgn = _find_assignment(cls, asgn_id)
+    return asgn
+
+
 @app.post("/api/classes/{cls_id}/assignments/{asgn_id}/submit")
 async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request,
                                       caller: dict = Depends(require_auth)):
