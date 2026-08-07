@@ -52,16 +52,23 @@ def _resolve_path(file_meta: dict, docs_dir: Path) -> Optional[Path]:
     return p if p.exists() else None
 
 
+def _is_pdf(path: Path, mime: str = "") -> bool:
+    return path.suffix.lower() == ".pdf" or mime == "application/pdf"
+
+
 def _file_to_images(path: Path, mime: str = "") -> list[tuple[str, str]]:
     """Trả về list (b64, mime) — ảnh giữ nguyên, PDF render từng trang (tối đa 3)."""
-    suffix = path.suffix.lower()
-    if suffix == ".pdf" or mime == "application/pdf":
+    if _is_pdf(path, mime):
         out = []
-        with fitz.open(path) as doc:
-            for page in doc[:3]:
-                pix = page.get_pixmap(dpi=150)
-                out.append((base64.b64encode(pix.tobytes("png")).decode(), "image/png"))
+        try:
+            with fitz.open(path) as doc:
+                for page in doc[:3]:
+                    pix = page.get_pixmap(dpi=150)
+                    out.append((base64.b64encode(pix.tobytes("png")).decode(), "image/png"))
+        except Exception:
+            return []          # PDF hỏng/có mật khẩu → coi như không render được, không crash pipeline
         return out
+    suffix = path.suffix.lower()
     if suffix in _IMG_EXT:
         m = mime if mime.startswith("image/") else f"image/{suffix.lstrip('.').replace('jpg', 'jpeg')}"
         return [(base64.b64encode(path.read_bytes()).decode(), m)]
@@ -137,19 +144,20 @@ def extract_essay_text(client, files: list, docs_dir: Path) -> str:
         p = _resolve_path(f, docs_dir)
         if p is None:
             continue
+        mime = f.get("mimeType", "")
         suffix = p.suffix.lower()
-        if suffix in (".txt", ".md"):
-            parts.append(p.read_text(encoding="utf-8", errors="ignore").strip())
-        elif suffix == ".docx":
-            parts.append(_docx_text(p))
-        elif suffix == ".pdf":
+        if _is_pdf(p, mime):                        # xét cả mimeType, không chỉ đuôi file
             text = _pdf_text(p)
             if len(text) >= 80:                     # PDF có text layer
                 parts.append(text)
-            else:                                   # PDF scan → OCR
-                ocr_images.extend(_file_to_images(p))
+            else:                                   # PDF scan/lỗi text layer → OCR
+                ocr_images.extend(_file_to_images(p, mime))
+        elif suffix in (".txt", ".md"):
+            parts.append(p.read_text(encoding="utf-8", errors="ignore").strip())
+        elif suffix == ".docx":
+            parts.append(_docx_text(p))
         elif suffix in _IMG_EXT:
-            ocr_images.extend(_file_to_images(p, f.get("mimeType", "")))
+            ocr_images.extend(_file_to_images(p, mime))
     if ocr_images:
         prompt = (
             "Transcribe the English essay in the image(s) exactly as written, including "
