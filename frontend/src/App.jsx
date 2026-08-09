@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ROLES, hasAdminAccess, hasTeacherAccess, authHeaders, getToken } from './auth/mockUsers.js'
+import { ROLES, hasAdminAccess, hasTeacherAccess, hasVocabAccess, authHeaders, getToken } from './auth/mockUsers.js'
 import Header from './components/Header.jsx'
 import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
@@ -21,6 +21,7 @@ import TeacherToolsModal from './components/TeacherToolsModal.jsx'
 import ExerciseSolver from './components/ExerciseSolver.jsx'
 import GeoViewerPage from './pages/GeoViewerPage.jsx'
 import WhiteboardPage from './pages/WhiteboardPage.jsx'
+import VocabPage from './pages/VocabPage.jsx'
 
 const SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III']
 const SECTION_LABELS = {
@@ -66,6 +67,7 @@ function parseHash() {
   if (hash === 'settings') return { view: 'settings', examId: null, classId: null }
   if (hash === 'tools/solver') return { view: 'solver-page', examId: null, classId: null }
   if (hash === 'tools/geo3d') return { view: 'geo3d-page', examId: null, classId: null }
+  if (hash === 'tools/vocab') return { view: 'vocab-page', examId: null, classId: null }
   if (hash === 'tools/whiteboard') return { view: 'whiteboard-page', examId: null, classId: null }
   if (hash.startsWith('tools/whiteboard/')) {
     // tools/whiteboard/<classId>/<subject>/<returnHash đã encode> — mở bảng trắng từ trong 1 lớp,
@@ -290,6 +292,7 @@ export default function App() {
   const goMyClasses = () => user ? (setClassId(null), setOpenClassId(null), setHash('my-classes'), setView('my-classes')) : goLogin()
   const openClass = (cid) => user ? (setClassId(null), setOpenClassId(cid), setHash(`class/${cid}`), setView('my-classes')) : goLogin()
   const goTools = () => user ? setShowTeacherTools(true) : goLogin()
+  const goVocabPage = () => { setHash('tools/vocab'); setView('vocab-page') }
 
   // Sảnh chờ thi — không yêu cầu đăng nhập (auth xử lý trong ExamTakePage)
   const goExamLobby = () => {
@@ -389,6 +392,7 @@ export default function App() {
       onGoTools={goTools}
       onGoHistory={goHistory}
       onGoSettings={goSettings}
+      onGoVocab={goVocabPage}
     />
   )
 
@@ -571,6 +575,21 @@ export default function App() {
       <GeoViewerPage onBack={() => { setHash(''); setView('home') }} />
     </>
   )
+
+  if (view === 'vocab-page') {
+    if (!user) return (
+      <>{header}<AccessDenied message="Bạn cần đăng nhập để truy cập trang này." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
+    )
+    if (!hasVocabAccess(user)) return (
+      <>{header}<AccessDenied message="Tính năng đang trong giai đoạn thử nghiệm riêng tư." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={true} /></>
+    )
+    return (
+      <>
+        {header}
+        <VocabPage user={user} onBack={() => { setHash(''); setView('home') }} />
+      </>
+    )
+  }
 
   if (view === 'whiteboard-page') return (
     <>

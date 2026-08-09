@@ -94,6 +94,14 @@ export function hasMemberAccess(role) {
   return (ROLE_META[role]?.tier ?? 0) >= 1
 }
 
+// Tính năng "Ôn luyện IELTS" (từ vựng) đang thử nghiệm riêng tư cho 1 tài khoản duy nhất —
+// so sánh bằng string vì id thật của user là số nguyên mili-giây (BIGINT).
+export const VOCAB_BETA_USER_ID = '1782551719452'
+
+export function hasVocabAccess(user) {
+  return !!user && String(user.id) === VOCAB_BETA_USER_ID
+}
+
 export async function login(email, password) {
   try {
     const res  = await fetch('/api/auth/login', {

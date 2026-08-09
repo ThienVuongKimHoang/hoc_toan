@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import RoleBadge from './RoleBadge.jsx'
-import { ROLE_META, ROLES, hasTeacherAccess } from '../auth/mockUsers.js'
+import { ROLE_META, ROLES, hasTeacherAccess, hasVocabAccess } from '../auth/mockUsers.js'
 import { AvatarDisplay } from '../pages/ProfilePage.jsx'
 
 const IC = {
@@ -34,6 +34,11 @@ const IC = {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
     </svg>
   ),
+  ielts: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5v-17Z"/><path d="M4 19a2.5 2.5 0 0 1 2.5-2.5H20"/>
+    </svg>
+  ),
 }
 
 function MenuItem({ icon, label, danger, highlight, onClick }) {
@@ -45,11 +50,17 @@ function MenuItem({ icon, label, danger, highlight, onClick }) {
   )
 }
 
-function buildMenu(role, actions) {
+function buildMenu(user, actions) {
+  const role = user.role
   const tier = ROLE_META[role]?.tier ?? 1
   const items = []
 
   items.push({ icon: IC.profile,    label: 'Hồ sơ cá nhân', action: actions.onGoProfile })
+
+  // Tính năng "Ôn luyện IELTS" (từ vựng) đang thử nghiệm riêng tư cho 1 tài khoản duy nhất.
+  if (hasVocabAccess(user)) {
+    items.push({ icon: IC.ielts, label: 'Ôn luyện IELTS', action: actions.onGoVocab })
+  }
 
   if (role === ROLES.STUDENT) {
     items.push({ icon: IC.users,   label: 'Lớp của tôi',      action: actions.onGoMyClasses })
@@ -70,7 +81,7 @@ function buildMenu(role, actions) {
   return items
 }
 
-export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, onGoClasses, onGoMyClasses, onGoTools, onGoHistory, onGoSettings }) {
+export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, onGoClasses, onGoMyClasses, onGoTools, onGoHistory, onGoSettings, onGoVocab }) {
   const [open, setOpen] = useState(false)
   const ref  = useRef(null)
   const meta = ROLE_META[user.role]
@@ -82,7 +93,7 @@ export default function AccountMenu({ user, onLogout, onGoProfile, onGoAdmin, on
   }, [])
 
   const close = () => setOpen(false)
-  const menuItems = buildMenu(user.role, { onGoProfile, onGoAdmin, onGoClasses, onGoMyClasses, onGoTools, onGoHistory, onGoSettings })
+  const menuItems = buildMenu(user, { onGoProfile, onGoAdmin, onGoClasses, onGoMyClasses, onGoTools, onGoHistory, onGoSettings, onGoVocab })
 
   return (
     <div className="acct-wrap" ref={ref}>

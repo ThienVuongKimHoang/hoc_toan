@@ -58,6 +58,7 @@ import database as db
 import ielts_grading as ielts
 import listening_grading as listening
 import speaking_grading as speaking
+import vocab_ai
 
 # task_id → {"status": pending|running|done|error, "progress": [...], "result": ..., "error": ...}
 TASKS: dict[str, dict] = {}
@@ -148,6 +149,18 @@ async def require_teacher(user: dict = Depends(require_auth)) -> dict:
 async def require_super_admin(user: dict = Depends(require_auth)) -> dict:
     if user.get("role") != "super_admin":
         raise HTTPException(403, "Chỉ super_admin mới có quyền này.")
+    return user
+
+
+# Tính năng "Ôn luyện IELTS" (từ vựng) đang thử nghiệm riêng tư cho 1 tài khoản duy nhất.
+VOCAB_BETA_USER_ID = "1782551719452"
+
+
+async def require_vocab_beta_user(user: dict = Depends(require_auth)) -> dict:
+    """Chặn ở tầng API (không chỉ ẩn menu) để không thể bypass bằng gọi thẳng /api
+    hoặc gõ #tools/vocab trên URL."""
+    if str(user.get("id")) != VOCAB_BETA_USER_ID:
+        raise HTTPException(403, "Tính năng đang trong giai đoạn thử nghiệm riêng tư.")
     return user
 
 
@@ -2743,6 +2756,76 @@ async def mark_notification_read(request: Request, caller: dict = Depends(requir
 async def mark_all_read(caller: dict = Depends(require_auth)):
     db.mark_all_notifs_read(str(caller["id"]))
     return {"ok": True}
+
+
+# ─── Ôn luyện IELTS (từ vựng) — thử nghiệm riêng tư 1 tài khoản ───────────────
+
+@app.get("/api/vocab-progress")
+async def get_vocab_progress_endpoint(caller: dict = Depends(require_vocab_beta_user)):
+    return db.get_vocab_progress(caller["id"])
+
+
+@app.post("/api/vocab-progress/queue")
+async def set_vocab_queue_endpoint(request: Request, caller: dict = Depends(require_vocab_beta_user)):
+    body = await request.json()
+    word_id = int(body.get("wordId"))
+    in_queue = bool(body.get("inQueue"))
+    return db.upsert_vocab_queue(caller["id"], word_id, in_queue)
+
+
+@app.post("/api/vocab-progress/result")
+async def record_vocab_result_endpoint(request: Request, caller: dict = Depends(require_vocab_beta_user)):
+    body = await request.json()
+    word_id = int(body.get("wordId"))
+    correct = bool(body.get("correct"))
+    return db.record_vocab_result(caller["id"], word_id, correct)
+
+
+@app.post("/api/vocab-progress/clear-queue")
+async def clear_vocab_queue_endpoint(caller: dict = Depends(require_vocab_beta_user)):
+    db.clear_vocab_queue(caller["id"])
+    return {"ok": True}
+
+
+def _groq_chat_with_key_rotation(*, model: str, messages: list, temperature: float, max_tokens: int):
+    """Xoay vòng key dự phòng khi bị rate-limit (429) — theo đúng convention của
+    generate_questions_api, giữ hành vi này khi chạm tới load_api_keys."""
+    keys = load_api_keys()
+    last_err = None
+    for key in keys:
+        try:
+            return Groq(api_key=key).chat.completions.create(
+                model=model, messages=messages, temperature=temperature, max_tokens=max_tokens,
+            )
+        except Exception as e:
+            last_err = e
+            err_str = str(e)
+            if "429" in err_str or "rate_limit" in err_str.lower():
+                continue
+            raise
+    raise last_err
+
+
+@app.post("/api/vocab/examples")
+async def vocab_generate_examples(request: Request, caller: dict = Depends(require_vocab_beta_user)):
+    body = await request.json()
+    word = (body.get("word") or "").strip()
+    vietnamese = (body.get("vietnamese") or "").strip()
+    if not word:
+        raise HTTPException(400, "word là bắt buộc")
+    try:
+        resp = _groq_chat_with_key_rotation(
+            model=vocab_ai.TEXT_MODEL,
+            messages=[
+                {"role": "system", "content": "You are an English teacher. Return ONLY valid JSON, no markdown, no explanation."},
+                {"role": "user", "content": vocab_ai.EXAMPLES_PROMPT.format(word=word, vietnamese=vietnamese)},
+            ],
+            temperature=0.7,
+            max_tokens=400,
+        )
+        return vocab_ai.parse_llm_json(resp.choices[0].message.content)
+    except ValueError as e:
+        raise HTTPException(502, str(e))
 
 
 # ─── Điểm danh + Tiến độ học sinh + Báo cáo tổng hợp ──────────────────────────

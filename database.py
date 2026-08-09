@@ -267,6 +267,24 @@ CREATE TABLE IF NOT EXISTS custom_topics (
     UNIQUE(subject, grade, topic)
 );
 
+-- Tiến độ học từ vựng (tính năng "Ôn luyện IELTS", thử nghiệm riêng tư 1 tài khoản):
+-- hàng đợi ôn tập + số lần đúng/sai mỗi từ, theo từng người dùng. word_id tham chiếu
+-- id trong frontend/src/data/vocabulary.js (dữ liệu tĩnh phía frontend, không có
+-- bảng từ vựng trong DB) nên không đặt FK cho word_id.
+CREATE TABLE IF NOT EXISTS vocab_progress (
+    id                SERIAL      PRIMARY KEY,
+    user_id           BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    word_id           INT         NOT NULL CHECK (word_id BETWEEN 1 AND 5000),
+    in_queue          BOOLEAN     NOT NULL DEFAULT FALSE,
+    queued_at         TIMESTAMPTZ,
+    correct_count     INT         NOT NULL DEFAULT 0,
+    wrong_count       INT         NOT NULL DEFAULT 0,
+    last_practiced_at TIMESTAMPTZ,
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, word_id)
+);
+CREATE INDEX IF NOT EXISTS idx_vocab_progress_user ON vocab_progress(user_id);
+
 -- Session đăng nhập: token ngẫu nhiên phát khi login/register/google, xác minh
 -- danh tính người gọi ở mọi request thay vì tin ID client tự khai.
 CREATE TABLE IF NOT EXISTS sessions (
@@ -2079,6 +2097,72 @@ def retarget_notifs(old_uid: str, new_uid: str) -> None:
             cur.execute(
                 "UPDATE notifications SET target_user_id=%s WHERE target_user_id=%s",
                 (str(new_uid), str(old_uid)),
+            )
+        conn.commit()
+
+
+# ── Vocab progress (tính năng "Ôn luyện IELTS") ─────────────────────────────────
+
+def _vocab_progress_from_row(row: dict) -> dict:
+    r = dict(row)
+    return {
+        "wordId":         r["word_id"],
+        "inQueue":        bool(r["in_queue"]),
+        "queuedAt":       r["queued_at"].isoformat() if r.get("queued_at") else None,
+        "correctCount":   r["correct_count"],
+        "wrongCount":     r["wrong_count"],
+        "lastPracticedAt": r["last_practiced_at"].isoformat() if r.get("last_practiced_at") else None,
+        "updatedAt":      r["updated_at"].isoformat() if r.get("updated_at") else None,
+    }
+
+
+def get_vocab_progress(user_id) -> list:
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM vocab_progress WHERE user_id=%s", (user_id,))
+            rows = cur.fetchall()
+    return [_vocab_progress_from_row(dict(r)) for r in rows]
+
+
+def upsert_vocab_queue(user_id, word_id: int, in_queue: bool) -> dict:
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                INSERT INTO vocab_progress(user_id, word_id, in_queue, queued_at, updated_at)
+                VALUES(%s, %s, %s, CASE WHEN %s THEN NOW() ELSE NULL END, NOW())
+                ON CONFLICT (user_id, word_id) DO UPDATE
+                    SET in_queue=EXCLUDED.in_queue, queued_at=EXCLUDED.queued_at, updated_at=NOW()
+                RETURNING *
+            """, (user_id, word_id, in_queue, in_queue))
+            row = cur.fetchone()
+        conn.commit()
+    return _vocab_progress_from_row(dict(row))
+
+
+def record_vocab_result(user_id, word_id: int, correct: bool) -> dict:
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                INSERT INTO vocab_progress(user_id, word_id, correct_count, wrong_count, last_practiced_at, updated_at)
+                VALUES(%s, %s, %s, %s, NOW(), NOW())
+                ON CONFLICT (user_id, word_id) DO UPDATE
+                    SET correct_count = vocab_progress.correct_count + EXCLUDED.correct_count,
+                        wrong_count   = vocab_progress.wrong_count + EXCLUDED.wrong_count,
+                        last_practiced_at = NOW(), updated_at = NOW()
+                RETURNING *
+            """, (user_id, word_id, 1 if correct else 0, 0 if correct else 1))
+            row = cur.fetchone()
+        conn.commit()
+    return _vocab_progress_from_row(dict(row))
+
+
+def clear_vocab_queue(user_id) -> None:
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE vocab_progress SET in_queue=FALSE, queued_at=NULL, updated_at=NOW() "
+                "WHERE user_id=%s AND in_queue=TRUE",
+                (user_id,),
             )
         conn.commit()
 
