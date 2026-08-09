@@ -93,7 +93,7 @@ function Hero({ info }) {
       <div className="hp-wrap hp-hero-grid">
         <div className="hp-hero-copy hp-reveal">
           <div className="hp-chips">
-            {['Toán · Lý · Hóa · Ngữ Văn', 'Tiếng Anh · IELTS'].map(t => (
+            {['Toán · Lý · Hóa · Ngữ Văn', 'Tiếng Anh · IELTS · TOEIC', 'Tiếng Anh thiếu nhi', 'Ôn luyện ngữ pháp'].map(t => (
               <span key={t} className="hp-chip"><span className="hp-chip-dot" />{t}</span>
             ))}
           </div>
