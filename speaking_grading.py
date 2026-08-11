@@ -15,11 +15,14 @@ và listening_grading.py (đọc docx, resolve path, JSON parsing, clamp/roundin
 viết lại.
 """
 
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from ielts_grading import (
     _clamp_band,
@@ -64,16 +67,18 @@ def _pick_docx_file(files: list) -> Optional[dict]:
     return None
 
 
-def generate_audio(client, text: str, dest_dir: Path) -> Optional[dict]:
+def generate_audio(client, text: str, dest_dir: Path) -> tuple[Optional[dict], Optional[str]]:
     """
-    Sinh audio đọc mẫu bằng Groq TTS (Orpheus). Trả về metadata cùng hình dạng với
-    response của /api/class-documents/upload để frontend phát bằng <audio src=...>
-    giống mọi file khác. Lỗi TTS không được ném ra ngoài — chỉ trả None (không có
-    audio mẫu), không làm hỏng phần còn lại của kết quả chấm.
+    Sinh audio đọc mẫu bằng Groq TTS (Orpheus). Trả về (metadata, error).
+    metadata có hình dạng giống response của /api/class-documents/upload để frontend
+    phát bằng <audio src=...> giống mọi file khác. Lỗi TTS (vd. hết quota) không được
+    ném ra ngoài — không làm hỏng phần còn lại của kết quả chấm — nhưng được log và
+    trả về trong `error` để frontend đề xuất phương án đọc dự phòng (giọng đọc trình
+    duyệt) thay vì âm thầm biến mất như trước.
     """
     text = (text or "").strip()
     if not text:
-        return None
+        return None, None
     try:
         resp = client.audio.speech.create(
             model=TTS_MODEL, voice=TTS_VOICE,
@@ -88,9 +93,10 @@ def generate_audio(client, text: str, dest_dir: Path) -> Optional[dict]:
             "url": f"/class-docs/{filename}", "mimeType": "audio/wav",
             "size": dest.stat().st_size,
             "uploadedAt": datetime.now(timezone.utc).isoformat(),
-        }
-    except Exception:
-        return None
+        }, None
+    except Exception as e:
+        logger.warning("Sinh audio mẫu TTS (Task 1 Speaking) thất bại: %s", e, exc_info=True)
+        return None, str(e)[:300]
 
 
 def grade_task1_script(client, questions_text: str, script_text: str) -> dict:
@@ -356,7 +362,7 @@ def run_grading(client, assignment: dict, submission: dict, docs_dir: Path, stud
     except Exception as e:
         return {"status": "error", "error": f"Lỗi khi chấm Task 1: {e}", "gradedAt": now_iso()}
 
-    task1["audioFile"] = generate_audio(client, task1.get("improvedText", ""), docs_dir)
+    task1["audioFile"], task1["audioError"] = generate_audio(client, task1.get("improvedText", ""), docs_dir)
 
     result = {
         "status": "done", "gradedAt": now_iso(), "model": GRADER_MODEL,

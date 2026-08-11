@@ -33,6 +33,28 @@ function fmtDur(sec) {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}p${s % 60 ? ` ${s % 60}s` : ''}`
 }
 
+/* Dự phòng khi TTS server (Groq Orpheus) lỗi/hết quota: đọc improvedText bằng giọng đọc trình duyệt */
+function BrowserTtsButton({ text }) {
+  const [speaking, setSpeaking] = useState(false)
+  useEffect(() => () => { window.speechSynthesis?.cancel() }, [])
+  const toggle = () => {
+    if (!('speechSynthesis' in window)) { alert('Trình duyệt này không hỗ trợ đọc giọng nói.'); return }
+    window.speechSynthesis.cancel()
+    if (speaking) { setSpeaking(false); return }
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = 'en-US'
+    u.onend = () => setSpeaking(false)
+    u.onerror = () => setSpeaking(false)
+    window.speechSynthesis.speak(u)
+    setSpeaking(true)
+  }
+  return (
+    <button type="button" className="mec-btn" onClick={toggle}>
+      {speaking ? '⏹ Dừng đọc' : '🔊 Nghe bằng giọng đọc trình duyệt (dự phòng)'}
+    </button>
+  )
+}
+
 function makeTaskDraft(t) {
   return {
     criteria: CRIT_KEYS.reduce((acc, k) => {
@@ -183,11 +205,20 @@ function TaskPanel({ task, taskKey, textKey, editable, editing, draft, setDraft,
           ) : (
             <pre className="ielts-essay-text">{t.improvedText || '—'}</pre>
           )}
-          {t.audioFile?.url && (
+          {t.audioFile?.url ? (
             <div className="ls-block">
               {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
               <audio controls src={t.audioFile.url} className="ls-audio-player" />
               <div className="ls-hint">{editable ? '🔊 Audio mẫu do AI đọc bản đã sửa — nghe để luyện phát âm chuẩn' : '🔊 Nghe audio mẫu bản đã sửa để luyện phát âm chuẩn'}</div>
+            </div>
+          ) : (
+            <div className="ls-block">
+              <div className="ls-hint">
+                ⚠️ {editable
+                  ? `Không tạo được audio AI mẫu (lỗi TTS${t.audioError ? `: ${t.audioError}` : ''}, có thể do hết quota) — dùng tạm phương án dự phòng:`
+                  : 'Chưa có audio mẫu AI — nghe tạm bằng giọng đọc trình duyệt:'}
+              </div>
+              <BrowserTtsButton text={t.improvedText} />
             </div>
           )}
         </div>
