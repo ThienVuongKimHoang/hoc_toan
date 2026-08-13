@@ -5909,6 +5909,64 @@ button { font-family: inherit; }
 .phr-meta  { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; color: #94a3b8; }
 .phr-score { text-align: right; flex-shrink: 0; }
 
+/* ─── History page: Dark Tech theme ───────────────────────────────────────
+   Scoped under .eh-dark (only ExamHistoryPage.jsx's root div carries it) —
+   ProfilePage.jsx shares the base .prof-*/.phi-* classes above and is left
+   completely untouched; every rule here is a descendant of .eh-dark. */
+.prof-page.eh-dark { background: #0b1120; }
+.eh-dark .prof-section {
+  background: #121a2e;
+  border-color: #24304a;
+  box-shadow: 0 0 0 1px rgba(34,211,238,0.04), 0 20px 40px -20px rgba(0,0,0,0.6);
+}
+.eh-dark .prof-section-title { color: #f1f5f9; border-bottom-color: #1c2740; }
+.eh-dark .prof-section-desc  { color: #94a3b8; }
+
+/* Breadcrumb */
+.eh-dark .phc-back    { background: #16233d; color: #94a3b8; }
+.eh-dark .phc-back:hover { background: #1c2c4c; color: #f1f5f9; }
+.eh-dark .phc-link    { color: #22d3ee; }
+.eh-dark .phc-link:hover { color: #67e8f9; }
+.eh-dark .phc-sep     { color: #475569; }
+.eh-dark .phc-current { color: #94a3b8; }
+
+/* Cấp 1 & 2: hàng Lớp / Đề */
+.eh-dark .prof-hist-row { background: #121a2e; border-color: #24304a; color: #f1f5f9; }
+.eh-dark .prof-hist-row:hover {
+  background: #16233d; border-color: #22d3ee;
+  box-shadow: 0 0 0 1px rgba(34,211,238,0.35), 0 8px 24px -8px rgba(34,211,238,0.25);
+}
+.eh-dark .prof-hist-row > svg { color: #64748b; }
+.eh-dark .phr-icon--class { background: linear-gradient(135deg, rgba(56,189,248,0.18), rgba(34,211,238,0.06)); color: #38bdf8; }
+.eh-dark .phr-icon--exam  { background: linear-gradient(135deg, rgba(34,211,238,0.18), rgba(56,189,248,0.06)); color: #22d3ee; }
+.eh-dark .phr-title { color: #f1f5f9; }
+.eh-dark .phr-meta  { color: #64748b; }
+
+/* Cấp 3: từng lần làm */
+.eh-dark .prof-history-item { background: #121a2e; border-color: #24304a; color: #f1f5f9; }
+.eh-dark .prof-history-item:hover {
+  background: #16233d; border-color: #22d3ee;
+  box-shadow: 0 0 0 1px rgba(34,211,238,0.35), 0 8px 24px -8px rgba(34,211,238,0.25);
+}
+.eh-dark .phi-title {
+  color: #f1f5f9;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.3px;
+}
+.eh-dark .phi-meta  { color: #64748b; }
+.eh-dark .prof-score-bar { background: #1c2740; }
+.eh-dark .psb-fill  { box-shadow: 0 0 8px currentColor; }
+.eh-dark .phi-score-num {
+  color: #f1f5f9;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.eh-dark .phi-score-total { color: #64748b; }
+.eh-dark .phi-score-pending { color: #fbbf24; background: rgba(217,119,6,0.15); border-color: rgba(217,119,6,0.4); }
+
+/* Nút dưới cùng ("Hồ sơ cá nhân" / "Về trang chủ") */
+.eh-dark .prof-btn--ghost { background: #16233d; color: #94a3b8; }
+.eh-dark .prof-btn--ghost:hover { background: #1c2c4c; color: #f1f5f9; }
+
 /* ─── Admin chips ─── */
 .prof-admin-chips { display: flex; flex-wrap: wrap; gap: 10px; }
 .pac {

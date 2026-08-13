@@ -38,7 +38,7 @@ function ScoreBar({ score, total }) {
   const color = pct >= 80 ? '#059669' : pct >= 60 ? '#f59e0b' : '#ef4444'
   return (
     <div className="prof-score-bar">
-      <div className="psb-fill" style={{ width: `${pct}%`, background: color }} />
+      <div className="psb-fill" style={{ width: `${pct}%`, background: color, color }} />
     </div>
   )
 }
@@ -141,7 +141,7 @@ export default function ExamHistoryPage({ user, onGoHome, onGoProfile }) {
   const level        = activeExam ? 'attempts' : activeClass ? 'exams' : 'classes'
 
   return (
-    <div className="prof-page">
+    <div className="prof-page eh-dark">
       <div className="container prof-container">
         <div className="prof-section">
           <h3 className="prof-section-title">{IcClock(16)} Lịch sử làm bài</h3>
