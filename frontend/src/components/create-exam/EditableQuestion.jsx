@@ -4,6 +4,41 @@ import MarkerText, { referencedImageIds } from '../MarkerText.jsx'
 import { DIFFICULTY_LEVELS, subjectHasLabels } from '../../data/labels.js'
 import './EditableQuestion.css'
 
+/* Đọc file ảnh thành data URL, tự động thu nhỏ + nén JPEG nếu vượt quá maxBytes
+   trước khi nhúng base64 vào đề. Trước đây các nơi chèn ảnh (đề bài, đáp án A-D)
+   chặn thẳng bằng alert() khi ảnh gốc > 5MB rồi KHÔNG thêm ảnh — rất dễ gặp với
+   ảnh chụp từ điện thoại (chụp công thức/hình vẽ Hóa-Lý), và giáo viên dễ hiểu
+   nhầm thành lỗi "Lưu" vì ảnh chưa từng được thêm vào để mà lưu. Giờ tự nén để
+   hầu hết ảnh dùng được ngay; chỉ báo lỗi khi file thực sự không đọc được. */
+function loadImageFile(file, { maxDim = 1600, quality = 0.82, maxBytes = 5 * 1024 * 1024 } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) { reject(new Error('not-image')); return }
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('read-failed'))
+    reader.onload = (e) => {
+      const rawDataUrl = e.target.result
+      if (file.size <= maxBytes) { resolve(rawDataUrl); return }
+      const img = new Image()
+      img.onerror = () => reject(new Error('decode-failed'))
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
+        const w = Math.max(1, Math.round(img.width * scale))
+        const h = Math.max(1, Math.round(img.height * scale))
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+        let q = quality
+        let out = canvas.toDataURL('image/jpeg', q)
+        while (out.length * 0.75 > maxBytes && q > 0.4) { q -= 0.1; out = canvas.toDataURL('image/jpeg', q) }
+        resolve(out)
+      }
+      img.src = rawDataUrl
+    }
+    reader.readAsDataURL(file)
+  })
+}
+const IMAGE_LOAD_FAIL_MSG = 'Không đọc được ảnh này. Thử ảnh khác hoặc giảm kích thước trước khi tải lên.'
+
 export function PencilIcon({ size = 12 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -377,10 +412,9 @@ function ImageGallery({ images, onAdd, onDelete, figurePath, onDeleteFigure }) {
 
   const handleFile = (file) => {
     if (!file || !file.type.startsWith('image/')) return
-    if (file.size > 5 * 1024 * 1024) { alert('Ảnh quá lớn (tối đa 5 MB).'); return }
-    const reader = new FileReader()
-    reader.onload = (e) => onAdd({ id: Date.now().toString(), dataUrl: e.target.result, name: file.name })
-    reader.readAsDataURL(file)
+    loadImageFile(file)
+      .then(dataUrl => onAdd({ id: Date.now().toString(), dataUrl, name: file.name }))
+      .catch(() => alert(IMAGE_LOAD_FAIL_MSG))
   }
 
   const handlePaste = (e) => {
@@ -580,10 +614,9 @@ function MCQChoiceRow({ letter, value, images, isCorrect, onChangeText, onSetCor
 
   const handleFile = (file) => {
     if (!file || !file.type.startsWith('image/')) return
-    if (file.size > 5 * 1024 * 1024) { alert('Ảnh quá lớn (tối đa 5 MB).'); return }
-    const reader = new FileReader()
-    reader.onload = (e) => onAddImage({ id: `c${Date.now()}${Math.random().toString(36).slice(2, 6)}`, dataUrl: e.target.result, name: file.name })
-    reader.readAsDataURL(file)
+    loadImageFile(file)
+      .then(dataUrl => onAddImage({ id: `c${Date.now()}${Math.random().toString(36).slice(2, 6)}`, dataUrl, name: file.name }))
+      .catch(() => alert(IMAGE_LOAD_FAIL_MSG))
   }
 
   const handlePaste = (e) => {
@@ -848,14 +881,12 @@ export default function EditableQuestion({
 
   const handleAIImageFile = (file) => {
     if (!file || !file.type.startsWith('image/')) return
-    if (file.size > 5 * 1024 * 1024) { alert('Ảnh quá lớn (tối đa 5 MB)'); return }
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const dataUrl = e.target.result
-      const b64 = dataUrl.split(',')[1]
-      setAiImage({ dataUrl, b64, mime: file.type, name: file.name })
-    }
-    reader.readAsDataURL(file)
+    loadImageFile(file)
+      .then(dataUrl => {
+        const mime = dataUrl.slice(5, dataUrl.indexOf(';')) || file.type
+        setAiImage({ dataUrl, b64: dataUrl.split(',')[1], mime, name: file.name })
+      })
+      .catch(() => alert(IMAGE_LOAD_FAIL_MSG))
   }
 
   const handleAIPaste = (e) => {
@@ -984,10 +1015,9 @@ export default function EditableQuestion({
 
   const addImageAndInsertMarker = (file) => {
     if (!file || !file.type.startsWith('image/')) return
-    if (file.size > 5 * 1024 * 1024) { alert('Ảnh quá lớn (tối đa 5 MB).'); return }
-    const reader = new FileReader()
-    reader.onload = (ev) => handleAddImage({ id: `i${Date.now()}`, dataUrl: ev.target.result, name: file.name })
-    reader.readAsDataURL(file)
+    loadImageFile(file)
+      .then(dataUrl => handleAddImage({ id: `i${Date.now()}`, dataUrl, name: file.name }))
+      .catch(() => alert(IMAGE_LOAD_FAIL_MSG))
   }
 
   const handleRawPaste = (e) => {
