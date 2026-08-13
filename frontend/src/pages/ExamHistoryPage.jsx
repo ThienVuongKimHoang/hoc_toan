@@ -36,9 +36,16 @@ const formatDuration = (sec) => {
 function ScoreBar({ score, total }) {
   const pct   = (score / total) * 100
   const color = pct >= 80 ? '#059669' : pct >= 60 ? '#f59e0b' : '#ef4444'
+  // Chạy từ 0 → điểm thật ngay sau khi mount (rAF để đảm bảo trình duyệt vẽ
+  // frame 0% trước, rồi mới chuyển sang giá trị đích để CSS transition bắt được).
+  const [width, setWidth] = useState(0)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setWidth(pct))
+    return () => cancelAnimationFrame(id)
+  }, [pct])
   return (
     <div className="prof-score-bar">
-      <div className="psb-fill" style={{ width: `${pct}%`, background: color, color }} />
+      <div className="psb-fill" style={{ width: `${width}%`, background: color, color }} />
     </div>
   )
 }
@@ -172,22 +179,22 @@ export default function ExamHistoryPage({ user, onGoHome, onGoProfile }) {
 
           ) : level === 'classes' ? (
             <div className="prof-hist-list">
-              {classGroups.map(c => (
-                <button key={c.key} className="prof-hist-row" onClick={() => goNav(c.key)}>
+              {classGroups.map((c, i) => (
+                <button key={c.key} className="prof-hist-row" style={{ animationDelay: `${i * 40}ms` }} onClick={() => goNav(c.key)}>
                   <div className="phr-icon phr-icon--class">{IcBook(18)}</div>
                   <div className="phr-body">
                     <div className="phr-title">{c.className}</div>
                     <div className="phr-meta">{c.examCount} đề · {c.attemptCount} lần làm · gần nhất {formatDtShort(c.lastAt)}</div>
                   </div>
-                  {IcChevronRight(16)}
+                  <span className="hist-arrow">{IcChevronRight(16)}</span>
                 </button>
               ))}
             </div>
 
           ) : level === 'exams' ? (
             <div className="prof-hist-list">
-              {activeClass.exams.map(e => (
-                <button key={e.examId} className="prof-hist-row" onClick={() => goNav(activeClass.key, e.examId)}>
+              {activeClass.exams.map((e, i) => (
+                <button key={e.examId} className="prof-hist-row" style={{ animationDelay: `${i * 40}ms` }} onClick={() => goNav(activeClass.key, e.examId)}>
                   <div className="phr-icon phr-icon--exam">{IcFile(18)}</div>
                   <div className="phr-body">
                     <div className="phr-title">{e.examTitle}</div>
@@ -197,20 +204,20 @@ export default function ExamHistoryPage({ user, onGoHome, onGoProfile }) {
                     </div>
                   </div>
                   <div className="phr-score"><ScoreTag scaled={e.best} /></div>
-                  {IcChevronRight(16)}
+                  <span className="hist-arrow">{IcChevronRight(16)}</span>
                 </button>
               ))}
             </div>
 
           ) : (
             <div className="prof-history-list">
-              {activeExam.attempts.map(s => {
+              {activeExam.attempts.map((s, i) => {
                 const pending = s.score == null
                 const scaled  = pending ? null : scaledScore(s.score, s.maxScore)
                 const dur     = formatDuration(s.timeSpent)
                 return (
-                  <a key={s.id} className="prof-history-item" href={`#results/${s.examId}/${s.id}`}
-                     title="Xem lại bài làm">
+                  <a key={s.id} className="prof-history-item" style={{ animationDelay: `${i * 40}ms` }}
+                     href={`#results/${s.examId}/${s.id}`} title="Xem lại bài làm">
                     <div className="phi-left">
                       <div className="phi-title">Lần {activeExam.attemptNumberOf.get(s.id)}</div>
                       <div className="phi-meta">
@@ -225,7 +232,10 @@ export default function ExamHistoryPage({ user, onGoHome, onGoProfile }) {
                       </div>
                       {!pending && <ScoreBar score={scaled} total={10} />}
                     </div>
-                    <div className="phi-score"><ScoreTag scaled={scaled} /></div>
+                    <div className="phi-score">
+                      <ScoreTag scaled={scaled} />
+                      <span className="hist-arrow">{IcChevronRight(16)}</span>
+                    </div>
                   </a>
                 )
               })}
