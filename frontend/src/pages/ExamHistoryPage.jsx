@@ -141,7 +141,7 @@ export default function ExamHistoryPage({ user, onGoHome, onGoProfile }) {
   const level        = activeExam ? 'attempts' : activeClass ? 'exams' : 'classes'
 
   return (
-    <div className="prof-page eh-dark">
+    <div className="prof-page eh-tech">
       <div className="container prof-container">
         <div className="prof-section">
           <h3 className="prof-section-title">{IcClock(16)} Lịch sử làm bài</h3>

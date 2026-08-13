@@ -5909,63 +5909,78 @@ button { font-family: inherit; }
 .phr-meta  { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; color: #94a3b8; }
 .phr-score { text-align: right; flex-shrink: 0; }
 
-/* ─── History page: Dark Tech theme ───────────────────────────────────────
-   Scoped under .eh-dark (only ExamHistoryPage.jsx's root div carries it) —
+/* ─── History page: Light Tech theme ──────────────────────────────────────
+   Scoped under .eh-tech (only ExamHistoryPage.jsx's root div carries it) —
    ProfilePage.jsx shares the base .prof-*/.phi-* classes above and is left
-   completely untouched; every rule here is a descendant of .eh-dark. */
-.prof-page.eh-dark { background: #0b1120; }
-.eh-dark .prof-section {
-  background: #121a2e;
-  border-color: #24304a;
-  box-shadow: 0 0 0 1px rgba(34,211,238,0.04), 0 20px 40px -20px rgba(0,0,0,0.6);
+   completely untouched; every rule here is a descendant of .eh-tech. */
+.prof-page.eh-tech {
+  background:
+    radial-gradient(760px 420px at 12% -8%, rgba(37,99,235,0.10), transparent 60%),
+    radial-gradient(620px 380px at 96% 12%, rgba(6,182,212,0.10), transparent 60%),
+    #f6f9fd;
 }
-.eh-dark .prof-section-title { color: #f1f5f9; border-bottom-color: #1c2740; }
-.eh-dark .prof-section-desc  { color: #94a3b8; }
+.eh-tech .prof-section {
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-color: rgba(37,99,235,0.14);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 20px 40px -24px rgba(37,99,235,0.18);
+}
+.eh-tech .prof-section-title { color: #0f172a; border-bottom-color: rgba(37,99,235,0.10); }
+.eh-tech .prof-section-desc  { color: #64748b; }
 
 /* Breadcrumb */
-.eh-dark .phc-back    { background: #16233d; color: #94a3b8; }
-.eh-dark .phc-back:hover { background: #1c2c4c; color: #f1f5f9; }
-.eh-dark .phc-link    { color: #22d3ee; }
-.eh-dark .phc-link:hover { color: #67e8f9; }
-.eh-dark .phc-sep     { color: #475569; }
-.eh-dark .phc-current { color: #94a3b8; }
+.eh-tech .phc-back    { background: rgba(37,99,235,0.08); color: #475569; }
+.eh-tech .phc-back:hover { background: rgba(37,99,235,0.14); color: #1e293b; }
+.eh-tech .phc-link    { color: #2563eb; }
+.eh-tech .phc-link:hover { color: #06b6d4; }
+.eh-tech .phc-sep     { color: #cbd5e1; }
+.eh-tech .phc-current { color: #64748b; }
 
 /* Cấp 1 & 2: hàng Lớp / Đề */
-.eh-dark .prof-hist-row { background: #121a2e; border-color: #24304a; color: #f1f5f9; }
-.eh-dark .prof-hist-row:hover {
-  background: #16233d; border-color: #22d3ee;
-  box-shadow: 0 0 0 1px rgba(34,211,238,0.35), 0 8px 24px -8px rgba(34,211,238,0.25);
+.eh-tech .prof-hist-row {
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-color: rgba(37,99,235,0.12); color: #0f172a;
 }
-.eh-dark .prof-hist-row > svg { color: #64748b; }
-.eh-dark .phr-icon--class { background: linear-gradient(135deg, rgba(56,189,248,0.18), rgba(34,211,238,0.06)); color: #38bdf8; }
-.eh-dark .phr-icon--exam  { background: linear-gradient(135deg, rgba(34,211,238,0.18), rgba(56,189,248,0.06)); color: #22d3ee; }
-.eh-dark .phr-title { color: #f1f5f9; }
-.eh-dark .phr-meta  { color: #64748b; }
+.eh-tech .prof-hist-row:hover {
+  background: #ffffff; border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37,99,235,0.18), 0 12px 28px -12px rgba(37,99,235,0.30);
+}
+.eh-tech .prof-hist-row > svg { color: #94a3b8; }
+.eh-tech .phr-icon--class { background: linear-gradient(135deg, #2563eb, #06b6d4); color: #ffffff; }
+.eh-tech .phr-icon--exam  { background: linear-gradient(135deg, #06b6d4, #2563eb); color: #ffffff; }
+.eh-tech .phr-title { color: #0f172a; }
+.eh-tech .phr-meta  { color: #64748b; }
 
 /* Cấp 3: từng lần làm */
-.eh-dark .prof-history-item { background: #121a2e; border-color: #24304a; color: #f1f5f9; }
-.eh-dark .prof-history-item:hover {
-  background: #16233d; border-color: #22d3ee;
-  box-shadow: 0 0 0 1px rgba(34,211,238,0.35), 0 8px 24px -8px rgba(34,211,238,0.25);
+.eh-tech .prof-history-item {
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-color: rgba(37,99,235,0.12); color: #0f172a;
 }
-.eh-dark .phi-title {
-  color: #f1f5f9;
+.eh-tech .prof-history-item:hover {
+  background: #ffffff; border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37,99,235,0.18), 0 12px 28px -12px rgba(37,99,235,0.30);
+}
+.eh-tech .phi-title {
+  color: #0f172a;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0.3px;
 }
-.eh-dark .phi-meta  { color: #64748b; }
-.eh-dark .prof-score-bar { background: #1c2740; }
-.eh-dark .psb-fill  { box-shadow: 0 0 8px currentColor; }
-.eh-dark .phi-score-num {
-  color: #f1f5f9;
+.eh-tech .phi-meta  { color: #64748b; }
+.eh-tech .prof-score-bar { background: #e2e8f0; }
+.eh-tech .psb-fill  { box-shadow: 0 0 6px currentColor; }
+.eh-tech .phi-score-num {
+  color: #0f172a;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
-.eh-dark .phi-score-total { color: #64748b; }
-.eh-dark .phi-score-pending { color: #fbbf24; background: rgba(217,119,6,0.15); border-color: rgba(217,119,6,0.4); }
+.eh-tech .phi-score-total { color: #94a3b8; }
+.eh-tech .phi-score-pending { color: #b45309; background: #fffbeb; border-color: #fde68a; }
 
 /* Nút dưới cùng ("Hồ sơ cá nhân" / "Về trang chủ") */
-.eh-dark .prof-btn--ghost { background: #16233d; color: #94a3b8; }
-.eh-dark .prof-btn--ghost:hover { background: #1c2c4c; color: #f1f5f9; }
+.eh-tech .prof-btn--ghost { background: rgba(37,99,235,0.08); color: #475569; }
+.eh-tech .prof-btn--ghost:hover { background: rgba(37,99,235,0.14); color: #1e293b; }
 
 /* ─── Admin chips ─── */
 .prof-admin-chips { display: flex; flex-wrap: wrap; gap: 10px; }
