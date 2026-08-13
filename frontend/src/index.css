@@ -961,7 +961,7 @@ button { font-family: inherit; }
 .q-toggle { margin-left: auto; color: #94a3b8; font-size: 0.75rem; }
 
 .q-body  { padding: 16px; }
-.q-text  { line-height: 1.7; margin-bottom: 14px; color: #1e293b; }
+.q-text  { line-height: 1.7; margin-bottom: 14px; color: #1e293b; overflow-x: auto; overflow-wrap: break-word; }
 
 /* ── Figures ── */
 .figure-images { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
@@ -996,8 +996,8 @@ button { font-family: inherit; }
 .choice-btn.correct  { border-color: #22c55e !important; background: #f0fdf4 !important; color: #166534; }
 .choice-btn.wrong    { border-color: #ef4444 !important; background: #fef2f2 !important; color: #991b1b; }
 .choice-btn:disabled { cursor: default; }
-.choice-label { font-weight: 700; color: #1d4ed8; min-width: 18px; }
-.choice-text  { flex: 1; }
+.choice-label { font-weight: 700; color: #1d4ed8; min-width: 18px; flex-shrink: 0; }
+.choice-text  { flex: 1; min-width: 0; overflow-x: auto; overflow-wrap: break-word; }
 .choice-text .figure-img { max-height: 160px; }
 
 /* ── True/False ── */
@@ -1014,8 +1014,8 @@ button { font-family: inherit; }
 }
 .sub-row.correct { border-color: #22c55e; background: #f0fdf4; }
 .sub-row.wrong   { border-color: #ef4444; background: #fef2f2; }
-.sub-label { font-weight: 700; color: #7c3aed; min-width: 20px; }
-.sub-text  { flex: 1; font-size: 0.9rem; line-height: 1.6; }
+.sub-label { font-weight: 700; color: #7c3aed; min-width: 20px; flex-shrink: 0; }
+.sub-text  { flex: 1; min-width: 0; font-size: 0.9rem; line-height: 1.6; overflow-x: auto; overflow-wrap: break-word; }
 .tf-buttons { display: flex; gap: 6px; margin-left: auto; }
 .tf-btn {
   padding: 4px 12px;
