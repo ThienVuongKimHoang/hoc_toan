@@ -5868,6 +5868,47 @@ button { font-family: inherit; }
   border-radius: 99px; padding: 4px 10px; white-space: nowrap;
 }
 
+/* ─── History drill-down: breadcrumb (Lớp → Đề → Lần làm) ─── */
+.prof-hist-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; margin: -8px 0 18px; }
+.phc-back {
+  display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+  padding: 6px 12px; min-height: 32px;
+  background: #f1f5f9; color: #475569; border: none; border-radius: 99px;
+  font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.phc-back:hover { background: #e2e8f0; color: #1e293b; }
+.phc-trail  { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.phc-link   { background: none; border: none; padding: 4px 2px; font-size: 0.85rem; font-weight: 600; color: #2563eb; cursor: pointer; white-space: nowrap; }
+.phc-link:hover { text-decoration: underline; }
+.phc-sep    { color: #cbd5e1; display: inline-flex; }
+.phc-current {
+  font-size: 0.85rem; font-weight: 600; color: #64748b;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;
+}
+
+/* ─── History drill-down: hàng Lớp / Đề (cấp 1 & 2) ─── */
+.prof-hist-list { display: flex; flex-direction: column; gap: 12px; }
+.prof-hist-row {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 14px 16px; min-height: 64px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;
+  text-align: left; font: inherit; color: inherit; cursor: pointer;
+  transition: border-color .15s, background .15s, transform .1s;
+}
+.prof-hist-row:hover  { background: #f1f5f9; border-color: #cbd5e1; }
+.prof-hist-row:active { transform: scale(0.995); }
+.phr-icon {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 40px; height: 40px; border-radius: 10px;
+}
+.phr-icon--class { background: #eff6ff; color: #2563eb; }
+.phr-icon--exam  { background: #fffbeb; color: #d97706; }
+.phr-body  { flex: 1; min-width: 0; }
+.phr-title { font-size: 0.92rem; font-weight: 700; color: #1e293b; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phr-meta  { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; color: #94a3b8; }
+.phr-score { text-align: right; flex-shrink: 0; }
+
 /* ─── Admin chips ─── */
 .prof-admin-chips { display: flex; flex-wrap: wrap; gap: 10px; }
 .pac {
@@ -5905,6 +5946,8 @@ button { font-family: inherit; }
   .prof-history-item { flex-direction: column; align-items: flex-start; }
   .phi-score { align-self: flex-end; }
   .prof-section-title { flex-wrap: wrap; }
+  .prof-hist-row { padding: 12px 14px; gap: 10px; }
+  .phc-current { max-width: 180px; }
 }
 
 /* ═══════════════════════════════════════════

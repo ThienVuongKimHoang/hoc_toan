@@ -58,8 +58,9 @@ function parseHash() {
   }
   if (hash === 'admin') return { view: 'super-admin', examId: null, classId: null, adminTab: null }
   if (hash.startsWith('admin/')) return { view: 'super-admin', examId: null, classId: null, adminTab: hash.slice(6) || null }
-  // history — trang riêng "Lịch sử làm bài" (danh sách các đề học sinh đã làm)
-  if (hash === 'history') return { view: 'exam-history', examId: null, classId: null }
+  // history | history/<classKey> | history/<classKey>/<examId> — trang riêng "Lịch sử làm bài";
+  // ExamHistoryPage tự đọc drill-down (lớp→đề) từ hash, giống cách ClassManagementPage làm với "classes/...".
+  if (hash === 'history' || hash.startsWith('history/')) return { view: 'exam-history', examId: null, classId: null }
   // classes | classes/<khối> | classes/<khối>/<classId> — điều hướng khối→lớp→chi tiết
   // do ClassManagementPage tự đọc từ hash; ở đây chỉ cần giữ view class-mgmt.
   if (hash === 'classes' || hash.startsWith('classes/')) return { view: 'class-mgmt', examId: null, classId: null }
