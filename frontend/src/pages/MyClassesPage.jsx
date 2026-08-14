@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { getClassByCode, getClassesByStudent, getExamWindow, getPendingForStudent, joinClassByCode, submitAssignment, uploadFile } from '../store/classStore.js'
-import { getPracticeInfo } from '../store/examStore.js'
+import { getPracticeInfo, fetchMySubmissions, scaledScore } from '../store/examStore.js'
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, gradeLabel } from '../components/SubjectBadge.jsx'
 import { BandChip, IeltsGradeModal, IeltsStatsModal } from '../components/IeltsGrade.jsx'
 import { ListeningGradeModal, ListeningStatsModal } from '../components/ListeningGrade.jsx'
@@ -449,13 +449,59 @@ function PracticeActiveBadge({ examId, closeTime }) {
   )
 }
 
+/* ─── Điểm cao nhất + lịch sử các lần làm cho 1 đề thi được giao ─── */
+function examScoreBand(pct) {
+  return pct >= 80 ? 'mc-score--high' : pct >= 60 ? 'mc-score--mid' : 'mc-score--low'
+}
+function ExamAttemptHistory({ attempts, examId }) {
+  const [open, setOpen] = useState(false)
+  const scored = attempts.filter(a => a.score != null)
+  const best = scored.length
+    ? Math.max(...scored.map(a => scaledScore(a.score, a.maxScore)))
+    : null
+
+  return (
+    <div className="mc-exam-history">
+      <div className="mc-exam-history-row">
+        {best != null && (
+          <span className={`mc-exam-score ${examScoreBand(best * 10)}`}>
+            {IC.award(13)} Điểm cao nhất: {best}/10
+          </span>
+        )}
+        <button type="button" className="mc-exam-history-toggle" onClick={() => setOpen(o => !o)}>
+          {IC.history(13)} Lịch sử làm bài ({attempts.length} lần)
+          <span className={`mc-exam-history-caret ${open ? 'mc-exam-history-caret--open' : ''}`}>{IC.chevronRight(12)}</span>
+        </button>
+      </div>
+      {open && (
+        <div className="mc-exam-history-list">
+          {attempts.map((a, i) => (
+            <a key={a.id} className="mc-exam-history-item" href={`#results/${examId}/${a.id}`}>
+              <span>Lần {attempts.length - i} · {formatDt(a.submittedAt)}</span>
+              <span className={a.score != null ? `mc-exam-history-score ${examScoreBand(scaledScore(a.score, a.maxScore) * 10)}` : 'mc-exam-history-score'}>
+                {a.score != null ? `${scaledScore(a.score, a.maxScore)}/10` : 'Chờ công bố'}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── Exam assignment card (đề thi được giao) ─── */
-function ExamAssignmentCard({ assignment, cls, user }) {
+function ExamAssignmentCard({ assignment, cls, user, mySubs }) {
   const st = examWindowStatus(assignment)
   const openIso  = assignment.openTime
   const closeIso = assignment.closeTime || assignment.dueDate
   const maxAttempts = assignment.maxAttempts || null
   const scoreMode   = assignment.scoreMode || 'highest'
+
+  const attempts = (mySubs || [])
+    .filter(s => s.assignmentId != null
+      ? String(s.assignmentId) === String(assignment.id)
+      : String(s.examId) === String(assignment.examId))
+    .sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0))
 
   const [used, setUsed] = useState(null)   // số lần đã làm (riêng cho lần giao bài này)
   useEffect(() => {
@@ -501,6 +547,7 @@ function ExamAssignmentCard({ assignment, cls, user }) {
         {practiceActiveNow(practiceInfo) && (
           <PracticeActiveBadge examId={assignment.examId} closeTime={practiceInfo.closeTime} />
         )}
+        {attempts.length > 0 && <ExamAttemptHistory attempts={attempts} examId={assignment.examId} />}
       </div>
       {st === 'open' && !exhausted ? (
         <a className="btn-primary mc-submit-btn" href={`#take/${assignment.examId}/${cls.id}/${assignment.id}`}>
@@ -516,11 +563,11 @@ function ExamAssignmentCard({ assignment, cls, user }) {
 }
 
 /* ─── Assignment card for student ─── */
-function AssignmentCard({ assignment, cls, user, onSubmit }) {
+function AssignmentCard({ assignment, cls, user, onSubmit, mySubs }) {
   const [showGrade, setShowGrade] = useState(false)
   const [showStats, setShowStats] = useState(false)
 
-  if (assignment.examId) return <ExamAssignmentCard assignment={assignment} cls={cls} user={user} />
+  if (assignment.examId) return <ExamAssignmentCard assignment={assignment} cls={cls} user={user} mySubs={mySubs} />
 
   const mySubmission = assignment.submissions?.find(s => String(s.studentId) === String(user.id))
   const isDuePast   = assignment.dueDate && new Date(assignment.dueDate) < new Date()
@@ -603,6 +650,7 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
   const [submitting, setSubmitting] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [localCls,   setLocalCls]   = useState(cls)
+  const [mySubs,     setMySubs]     = useState([])   // lịch sử làm đề thi của học sinh (mọi lớp)
 
   useEffect(() => {
     // Refresh class data to get latest submissions
@@ -615,6 +663,15 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
       }
     })
   }, [cls.id, refreshKey])
+
+  useEffect(() => {
+    let alive = true
+    fetchMySubmissions(user.id)
+      .then(res => { if (alive) setMySubs(res.submissions || []) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [user.id, refreshKey])
+  const classSubs = mySubs.filter(s => String(s.classId) === String(localCls.id))
 
   // AI đang chấm bài của mình → tự refresh để hiện kết quả khi chấm xong
   const hasPendingGrade = (localCls.assignments || []).some(a =>
@@ -679,7 +736,7 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
               return (
                 <div className="mc-asgn-list">
                   {[...list].sort((a,b) => new Date(a.dueDate)-new Date(b.dueDate)).map(a => (
-                    <AssignmentCard key={a.id} assignment={a} cls={localCls} user={user} onSubmit={setSubmitting} />
+                    <AssignmentCard key={a.id} assignment={a} cls={localCls} user={user} onSubmit={setSubmitting} mySubs={classSubs} />
                   ))}
                 </div>
               )

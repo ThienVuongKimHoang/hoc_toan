@@ -8131,6 +8131,44 @@ button { font-family: inherit; }
 }
 .mc-exam-subinfo span { display: inline-flex; align-items: center; gap: 4px; }
 .mc-exam-subinfo .mc-dot { color: #cbd5e1; }
+
+/* ── Điểm + lịch sử làm bài trong thẻ đề thi được giao ── */
+.mc-exam-history { margin-top: 8px; }
+.mc-exam-history-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.mc-exam-score {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.76rem; font-weight: 700;
+  padding: 2px 9px; border-radius: 999px;
+}
+.mc-score--high { background: #dcfce7; color: #15803d; }
+.mc-score--mid  { background: #fef9c3; color: #a16207; }
+.mc-score--low  { background: #fee2e2; color: #b91c1c; }
+.mc-exam-history-toggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: none; cursor: pointer;
+  font-size: 0.78rem; font-weight: 600; color: #2563eb; padding: 2px 0;
+}
+.mc-exam-history-toggle:hover { color: #1d4ed8; text-decoration: underline; }
+.mc-exam-history-caret { display: inline-flex; transition: transform 0.15s ease; }
+.mc-exam-history-caret--open { transform: rotate(90deg); }
+.mc-exam-history-list {
+  display: flex; flex-direction: column; gap: 4px;
+  margin-top: 6px; padding: 8px 10px;
+  background: #f8fafc; border: 1px solid #e6ebf2; border-radius: 8px;
+}
+.mc-exam-history-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 0.78rem; color: #334155; text-decoration: none;
+  padding: 3px 0;
+}
+.mc-exam-history-item:hover { color: #2563eb; }
+.mc-exam-history-score { font-weight: 700; color: #64748b; }
+.mc-exam-history-score.mc-score--high { color: #15803d; background: none; padding: 0; }
+.mc-exam-history-score.mc-score--mid  { color: #a16207; background: none; padding: 0; }
+.mc-exam-history-score.mc-score--low  { color: #b91c1c; background: none; padding: 0; }
+
 .mc-submitted-info {
   display: flex; align-items: center; gap: 5px;
   font-size: 0.78rem; color: #059669; margin-top: 5px;

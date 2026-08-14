@@ -214,6 +214,10 @@ export default function App() {
         setHash('')
         setView(rv)
       }
+    } else if (u.role === ROLES.TEACHER) {
+      setHash('classes'); setView('class-mgmt')
+    } else if (u.role === ROLES.STUDENT) {
+      setHash('my-classes'); setView('my-classes')
     } else {
       setView('home')
     }
@@ -251,6 +255,15 @@ export default function App() {
       window.removeEventListener('popstate', onHash)
       window.removeEventListener('hashchange', onHash)
     }
+  }, []) // eslint-disable-line
+
+  // Mở app / F5 mà hash trống và đã có sẵn session (giáo viên/học sinh) → vào thẳng
+  // danh mục lớp thay vì trang chủ. Deps rỗng: chỉ chạy đúng 1 lần lúc mount, để sau
+  // đó tự bấm "Trang chủ" (goHome) không bị effect này kéo ngược lại lớp.
+  useEffect(() => {
+    if (view !== 'home' || window.location.hash) return
+    if (user?.role === ROLES.TEACHER) { setHash('classes'); setView('class-mgmt') }
+    else if (user?.role === ROLES.STUDENT) { setHash('my-classes'); setView('my-classes') }
   }, []) // eslint-disable-line
 
   // Khi truy cập #join/<code> mà chưa đăng nhập → lưu redirect và chuyển sang login
