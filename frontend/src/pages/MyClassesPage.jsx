@@ -459,27 +459,42 @@ function ExamAttemptHistory({ attempts, examId }) {
   const best = scored.length
     ? Math.max(...scored.map(a => scaledScore(a.score, a.maxScore)))
     : null
+  const latest = attempts[0]
+  const latestScore = latest?.score != null ? scaledScore(latest.score, latest.maxScore) : null
 
   return (
     <div className="mc-exam-history">
-      <div className="mc-exam-history-row">
-        {best != null && (
-          <span className={`mc-exam-score ${examScoreBand(best * 10)}`}>
-            {IC.award(13)} Điểm cao nhất: {best}/10
+      <button
+        type="button"
+        className={`mc-exam-history-toggle ${open ? 'mc-exam-history-toggle--open' : ''}`}
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+      >
+        <span className="mc-exam-history-toggle-icon">{IC.history(15)}</span>
+        <span className="mc-exam-history-toggle-text">
+          <span className="mc-exam-history-toggle-label">Xem lại các lần làm</span>
+          <span className="mc-exam-history-toggle-sub">
+            {attempts.length} lần làm{latestScore != null ? ` · gần nhất ${latestScore}/10` : ''}
           </span>
+        </span>
+        {best != null && (
+          <span className={`mc-exam-score ${examScoreBand(best * 10)}`}>{IC.award(12)} Cao nhất {best}/10</span>
         )}
-        <button type="button" className="mc-exam-history-toggle" onClick={() => setOpen(o => !o)}>
-          {IC.history(13)} Lịch sử làm bài ({attempts.length} lần)
-          <span className={`mc-exam-history-caret ${open ? 'mc-exam-history-caret--open' : ''}`}>{IC.chevronRight(12)}</span>
-        </button>
-      </div>
+        <span className={`mc-exam-history-caret ${open ? 'mc-exam-history-caret--open' : ''}`}>{IC.chevronRight(14)}</span>
+      </button>
       {open && (
         <div className="mc-exam-history-list">
           {attempts.map((a, i) => (
             <a key={a.id} className="mc-exam-history-item" href={`#results/${examId}/${a.id}`}>
-              <span>Lần {attempts.length - i} · {formatDt(a.submittedAt)}</span>
-              <span className={a.score != null ? `mc-exam-history-score ${examScoreBand(scaledScore(a.score, a.maxScore) * 10)}` : 'mc-exam-history-score'}>
-                {a.score != null ? `${scaledScore(a.score, a.maxScore)}/10` : 'Chờ công bố'}
+              <span className="mc-exam-history-item-left">
+                <span className="mc-exam-history-item-badge">Lần {attempts.length - i}</span>
+                {formatDt(a.submittedAt)}
+              </span>
+              <span className="mc-exam-history-item-right">
+                <span className={a.score != null ? `mc-exam-history-score ${examScoreBand(scaledScore(a.score, a.maxScore) * 10)}` : 'mc-exam-history-score'}>
+                  {a.score != null ? `${scaledScore(a.score, a.maxScore)}/10` : 'Chờ công bố'}
+                </span>
+                {IC.chevronRight(13)}
               </span>
             </a>
           ))}
