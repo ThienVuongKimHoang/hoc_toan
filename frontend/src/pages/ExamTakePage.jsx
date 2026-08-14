@@ -450,6 +450,9 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
       setFinalMax(result.maxScore)
       setSubmitted(true)
       clearAttempt(attemptKeyStr)
+      // Thay (không push) hash "take/..." bằng nơi sẽ về sau khi nộp — bấm Back trên
+      // trình duyệt lúc này sẽ không quay lại được trạng thái làm bài (đề đã nộp rồi).
+      window.history.replaceState(null, '', classId ? `#class/${classId}/exam` : window.location.pathname)
     } catch (e) {
       setSubmitErr(e?.message || 'Nộp bài thất bại. Vui lòng thử lại.')
     } finally {
