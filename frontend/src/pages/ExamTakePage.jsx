@@ -485,7 +485,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
             </div>
           )}
           {classId && onGoClass ? (
-            <button className="btn-primary" style={{ marginTop: 24 }} onClick={() => onGoClass(classId)}>← Về lớp học</button>
+            <button className="btn-primary" style={{ marginTop: 24 }} onClick={() => onGoClass(classId, 'exam')}>← Về lớp học</button>
           ) : (
             <button className="btn-primary" style={{ marginTop: 24 }} onClick={onGoHome}>← Trang chủ</button>
           )}

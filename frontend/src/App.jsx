@@ -47,7 +47,11 @@ function parseHash() {
     return { view: 'take-exam', examId, classId: classId || null, assignmentId: assignmentId || null }
   }
   if (hash.startsWith('join/')) return { view: 'my-classes', examId: null, classId: hash.slice(5) }
-  if (hash.startsWith('class/')) return { view: 'my-classes', examId: null, classId: null, openClassId: hash.slice(6) }
+  if (hash.startsWith('class/')) {
+    // class/<id>[/<asgnTab>] — asgnTab ("exam"|"homework") gợi ý mở sẵn đúng tab con khi vào lớp
+    const [cid, asgnTab] = hash.slice(6).split('/')
+    return { view: 'my-classes', examId: null, classId: null, openClassId: cid, openAsgnTab: asgnTab || null }
+  }
   if (hash.startsWith('lobby/')) return { view: 'exam-lobby', examId: hash.slice(6) || null, classId: null }
   if (hash === 'lobby') return { view: 'exam-lobby', examId: null, classId: null }
   if (hash.startsWith('practice/')) return { view: 'practice-exam', examId: hash.slice(9), classId: null }
@@ -235,6 +239,7 @@ export default function App() {
   const [assignmentId, setAssignmentId] = useState(() => parseHash().assignmentId ?? null)
   const [subId, setSubId] = useState(() => parseHash().subId ?? null)
   const [openClassId, setOpenClassId] = useState(() => parseHash().openClassId ?? null)
+  const [openAsgnTab, setOpenAsgnTab] = useState(() => parseHash().openAsgnTab ?? null)
   const [whiteboardSubject, setWhiteboardSubject] = useState(() => parseHash().whiteboardSubject ?? null)
   const [whiteboardReturnHash, setWhiteboardReturnHash] = useState(() => parseHash().whiteboardReturnHash ?? null)
   const [adminTab, setAdminTab] = useState(() => parseHash().adminTab ?? null)
@@ -243,8 +248,8 @@ export default function App() {
 
   useEffect(() => {
     const onHash = () => {
-      const { view: v, examId: id, classId: cid, assignmentId: aid, subId: sid, openClassId: ocid, whiteboardSubject: wbs, whiteboardReturnHash: wbr, adminTab: at } = parseHash()
-      setView(v); setExamId(id); setClassId(cid ?? null); setAssignmentId(aid ?? null); setSubId(sid ?? null); setOpenClassId(ocid ?? null)
+      const { view: v, examId: id, classId: cid, assignmentId: aid, subId: sid, openClassId: ocid, openAsgnTab: oat, whiteboardSubject: wbs, whiteboardReturnHash: wbr, adminTab: at } = parseHash()
+      setView(v); setExamId(id); setClassId(cid ?? null); setAssignmentId(aid ?? null); setSubId(sid ?? null); setOpenClassId(ocid ?? null); setOpenAsgnTab(oat ?? null)
       setWhiteboardSubject(wbs ?? null); setWhiteboardReturnHash(wbr ?? null)
       setAdminTab(at ?? null); setAdminNavNonce(n => n + 1)
     }
@@ -308,8 +313,10 @@ export default function App() {
     if (!hasTeacherAccess(user.role)) return
     setHash('settings'); setView('settings')
   }
-  const goMyClasses = () => user ? (setClassId(null), setOpenClassId(null), setHash('my-classes'), setView('my-classes')) : goLogin()
-  const openClass = (cid) => user ? (setClassId(null), setOpenClassId(cid), setHash(`class/${cid}`), setView('my-classes')) : goLogin()
+  const goMyClasses = () => user ? (setClassId(null), setOpenClassId(null), setOpenAsgnTab(null), setHash('my-classes'), setView('my-classes')) : goLogin()
+  const openClass = (cid, asgnTab = null) => user
+    ? (setClassId(null), setOpenClassId(cid), setOpenAsgnTab(asgnTab), setHash(asgnTab ? `class/${cid}/${asgnTab}` : `class/${cid}`), setView('my-classes'))
+    : goLogin()
   const goTools = () => user ? setShowTeacherTools(true) : goLogin()
   const goVocabPage = () => { setHash('tools/vocab'); setView('vocab-page') }
 
@@ -503,7 +510,7 @@ export default function App() {
     return (
       <>
         {header}
-        <MyClassesPage user={user} initialJoinCode={classId ?? ''} initialClassId={openClassId} />
+        <MyClassesPage user={user} initialJoinCode={classId ?? ''} initialClassId={openClassId} initialAsgnTab={openAsgnTab} />
         {teacherToolOverlays}
       </>
     )

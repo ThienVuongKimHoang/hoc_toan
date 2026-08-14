@@ -661,7 +661,7 @@ function AssignmentCard({ assignment, cls, user, onSubmit, mySubs }) {
 }
 
 /* ─── Class view (student inside a class) ─── */
-function ClassView({ cls, user, pendingCount = 0, onBack }) {
+function ClassView({ cls, user, pendingCount = 0, onBack, initialAsgnTab }) {
   const [submitting, setSubmitting] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [localCls,   setLocalCls]   = useState(cls)
@@ -700,7 +700,7 @@ function ClassView({ cls, user, pendingCount = 0, onBack }) {
 
   const subject = primarySubject(localCls)             // mỗi lớp = 1 môn
   const [tab, setTab] = useState('assignments')       // 'assignments' | 'documents'
-  const [asgnTab, setAsgnTab] = useState('homework')  // 'homework' | 'exam'
+  const [asgnTab, setAsgnTab] = useState(initialAsgnTab === 'exam' ? 'exam' : 'homework')  // 'homework' | 'exam'
   const [viewingFile, setViewingFile] = useState(null)
   const [openFolder, setOpenFolder] = useState(null)
 
@@ -928,7 +928,7 @@ function JoinModal({ initialCode, user, onClose, onJoined }) {
 }
 
 /* ─── Main student page ─── */
-export default function MyClassesPage({ user, initialJoinCode, initialClassId }) {
+export default function MyClassesPage({ user, initialJoinCode, initialClassId, initialAsgnTab }) {
   const [classes,     setClasses]     = useState([])
   const [selected,    setSelected]    = useState(null)
   const [showJoin,    setShowJoin]    = useState(false)
@@ -937,6 +937,9 @@ export default function MyClassesPage({ user, initialJoinCode, initialClassId })
   const [autoJoining, setAutoJoining] = useState(!!initialJoinCode)
   const [toast,       setToast]       = useState(null)
   const [pendingItems, setPendingItems] = useState([])
+  // Tab con ("exam"/"homework") cần mở sẵn khi vào lớp — chỉ áp dụng cho lượt mở lớp
+  // hiện tại (vd quay lại từ bài thi vừa nộp); mở lớp khác thủ công thì xoá gợi ý này.
+  const [pendingAsgnTab, setPendingAsgnTab] = useState(initialAsgnTab || null)
 
   const reload = async () => {
     setLoading(true)
@@ -952,12 +955,12 @@ export default function MyClassesPage({ user, initialJoinCode, initialClassId })
 
   useEffect(() => { reload() }, []) // eslint-disable-line
 
-  // Mở thẳng một lớp khi điều hướng từ thông báo (#class/<id>)
+  // Mở thẳng một lớp khi điều hướng từ thông báo hoặc sau khi nộp bài (#class/<id>[/<tab>])
   useEffect(() => {
     if (!initialClassId || loading) return
     const c = classes.find(c => c.id === initialClassId)
-    if (c) setSelected(c)
-  }, [initialClassId, loading, classes])
+    if (c) { setSelected(c); setPendingAsgnTab(initialAsgnTab || null) }
+  }, [initialClassId, loading, classes]) // eslint-disable-line
 
   // Vào bằng link #join/<code>: mở hộp thoại tham gia (điền sẵn mã) để học sinh
   // CHỌN MÔN — việc tham gia giờ theo từng môn nên không thể tự động tham gia.
@@ -996,7 +999,7 @@ export default function MyClassesPage({ user, initialJoinCode, initialClassId })
       <div className="create-topbar">
         <h1 className="exam-title" style={{display:'flex',alignItems:'center',gap:10}}>{IC.users(24)} Lớp của tôi</h1>
       </div>
-      <ClassView cls={selected} user={user} pendingCount={countPending(selected)} onBack={() => setSelected(null)} />
+      <ClassView cls={selected} user={user} pendingCount={countPending(selected)} onBack={() => setSelected(null)} initialAsgnTab={pendingAsgnTab} />
     </div>
   )
 
@@ -1039,7 +1042,7 @@ export default function MyClassesPage({ user, initialJoinCode, initialClassId })
               </div>
             )
             return (
-              <div key={cls.id} className="cm-class-card cm-subject-card" data-subject={subject || 'khac'} style={{cursor:'pointer'}} onClick={() => setSelected(cls)}>
+              <div key={cls.id} className="cm-class-card cm-subject-card" data-subject={subject || 'khac'} style={{cursor:'pointer'}} onClick={() => { setPendingAsgnTab(null); setSelected(cls) }}>
                 {hasPhoto && (
                   <div className="cm-tour-photo">
                     <img src={SUBJECT_BG[subject]} alt="" loading="lazy" />
