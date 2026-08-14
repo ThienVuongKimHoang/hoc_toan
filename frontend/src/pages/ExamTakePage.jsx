@@ -373,7 +373,7 @@ function SectionNav({ sections, sectionList, active, onChange }) {
 }
 
 /* ── Main exam view ── */
-function ExamView({ exam, studentName, studentId, className, classId, assignmentId, onGoHome }) {
+function ExamView({ exam, studentName, studentId, className, classId, assignmentId, onGoHome, onGoClass }) {
   const hideResults    = exam.settings?.hideResults || false
   const sectionList    = getSectionList(exam)
   // Đề có phần tự luận: điểm chấm tay đến sau (0đ cho đến khi giáo viên chấm), nhưng
@@ -484,7 +484,11 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
               <p className="etl-name-tag">Bài làm của: <strong>{studentName}</strong></p>
             </div>
           )}
-          <button className="btn-primary" style={{ marginTop: 24 }} onClick={onGoHome}>← Trang chủ</button>
+          {classId && onGoClass ? (
+            <button className="btn-primary" style={{ marginTop: 24 }} onClick={() => onGoClass(classId)}>← Về lớp học</button>
+          ) : (
+            <button className="btn-primary" style={{ marginTop: 24 }} onClick={onGoHome}>← Trang chủ</button>
+          )}
         </div>
       </div>
     )
@@ -652,7 +656,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
 }
 
 /* ── Root component ── */
-export default function ExamTakePage({ examId, classId, assignmentId, user, onGoHome, onGoLogin }) {
+export default function ExamTakePage({ examId, classId, assignmentId, user, onGoHome, onGoClass, onGoLogin }) {
   const [exam,        setExam]        = useState(null)
   const [notFound,    setNotFound]    = useState(false)
   const [status,      setStatus]      = useState('pending')
@@ -816,6 +820,7 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
       classId={effectiveClassId}
       assignmentId={exam._classGated ? (exam._assignmentId || null) : null}
       onGoHome={onGoHome}
+      onGoClass={onGoClass}
     />
   )
 }

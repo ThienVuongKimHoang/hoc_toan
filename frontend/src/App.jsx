@@ -258,8 +258,7 @@ export default function App() {
   }, []) // eslint-disable-line
 
   // Mở app / F5 mà hash trống và đã có sẵn session (giáo viên/học sinh) → vào thẳng
-  // danh mục lớp thay vì trang chủ. Deps rỗng: chỉ chạy đúng 1 lần lúc mount, để sau
-  // đó tự bấm "Trang chủ" (goHome) không bị effect này kéo ngược lại lớp.
+  // danh mục lớp thay vì trang chủ (khớp với goHome, cũng luôn đưa 2 vai trò này về lớp học).
   useEffect(() => {
     if (view !== 'home' || window.location.hash) return
     if (user?.role === ROLES.TEACHER) { setHash('classes'); setView('class-mgmt') }
@@ -276,7 +275,13 @@ export default function App() {
     }
   }, [view, user, classId])
 
-  const goHome = () => { setHash(''); setView('home') }
+  // Với giáo viên/học sinh, "trang chủ" luôn là phần lớp học của họ — bấm logo/nút
+  // Trang chủ ở bất kỳ đâu cũng đưa họ về đó, không phải trang chủ marketing.
+  const goHome = () => {
+    if (user?.role === ROLES.TEACHER) { setHash('classes'); setView('class-mgmt'); return }
+    if (user?.role === ROLES.STUDENT) { setHash('my-classes'); setView('my-classes'); return }
+    setHash(''); setView('home')
+  }
   const goProfile = () => user ? (setHash(''), setView('profile')) : goLogin()
   const goHistory = () => user ? (setHash('history'), setView('exam-history')) : goLogin()
   const goLogin = () => { setHash(''); setView('login') }
@@ -551,7 +556,7 @@ export default function App() {
   )
 
   if (view === 'take-exam') return (
-    <ExamTakePage examId={examId} classId={classId} assignmentId={assignmentId} user={user} onGoHome={goHome} onGoLogin={() => goLoginFromExam(examId, classId, assignmentId)} />
+    <ExamTakePage examId={examId} classId={classId} assignmentId={assignmentId} user={user} onGoHome={goHome} onGoClass={openClass} onGoLogin={() => goLoginFromExam(examId, classId, assignmentId)} />
   )
 
   if (view === 'practice-exam') return (
