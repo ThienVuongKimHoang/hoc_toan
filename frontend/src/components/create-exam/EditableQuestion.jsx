@@ -838,6 +838,14 @@ export default function EditableQuestion({
 }) {
   const [editingText, setEditingText] = useState(() => hasSuspiciousLatex(q.question_text))
   const [localText, setLocalText] = useState(q.question_text || '')
+  // Đồng bộ localText khi q.question_text đổi từ BÊN NGOÀI trong lúc đang edit
+  // (cùng lý do đã fix ở MathEditField phía trên: chèn ảnh khi editingText=true
+  // chỉ ghi thẳng q.images qua onUpdate, KHÔNG qua setLocalText nếu gọi từ nơi
+  // khác ngoài handleAddImage — ví dụ AI áp dụng/report — nếu thiếu chỗ này,
+  // localText cũ sẽ đè mất thay đổi đó khi bấm "✓ Lưu").
+  useEffect(() => {
+    if (editingText) setLocalText(q.question_text || '')
+  }, [q.question_text])
   const [showPreview, setShowPreview] = useState(true)
   const [showReport, setShowReport] = useState(false)
   const [reported, setReported] = useState(false)
