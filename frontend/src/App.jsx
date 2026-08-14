@@ -3,7 +3,7 @@ import { ROLES, hasAdminAccess, hasTeacherAccess, hasVocabAccess, authHeaders, g
 import Header from './components/Header.jsx'
 import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
-import ExamTakePage from './pages/ExamTakePage.jsx'
+import ExamTakePage, { wasExamJustSubmitted } from './pages/ExamTakePage.jsx'
 import PracticeExamPage from './pages/PracticeExamPage.jsx'
 import ExamLobbyPage from './pages/ExamLobbyPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
@@ -246,19 +246,50 @@ export default function App() {
   const [adminNavNonce, setAdminNavNonce] = useState(0)
   const [showTeacherTools, setShowTeacherTools] = useState(false)
 
+  // Luôn trỏ tới user mới nhất — effect bên dưới có deps rỗng (chỉ gắn listener 1 lần)
+  // nên không thể đọc trực tiếp biến `user` (sẽ bị "đóng băng" giá trị lúc mount).
+  const userRef = useRef(user)
+  useEffect(() => { userRef.current = user }, [user])
+
   useEffect(() => {
-    const onHash = () => {
+    const applyHash = () => {
       const { view: v, examId: id, classId: cid, assignmentId: aid, subId: sid, openClassId: ocid, openAsgnTab: oat, whiteboardSubject: wbs, whiteboardReturnHash: wbr, adminTab: at } = parseHash()
       setView(v); setExamId(id); setClassId(cid ?? null); setAssignmentId(aid ?? null); setSubId(sid ?? null); setOpenClassId(ocid ?? null); setOpenAsgnTab(oat ?? null)
       setWhiteboardSubject(wbs ?? null); setWhiteboardReturnHash(wbr ?? null)
       setAdminTab(at ?? null); setAdminNavNonce(n => n + 1)
     }
-    window.addEventListener('popstate', onHash)
-    window.addEventListener('hashchange', onHash)
-    onHash()
+    // Bấm Back/Forward mà đích đến là đúng lượt thi VỪA nộp (cùng tab) → đề đã nộp rồi,
+    // không cho vào lại màn hình làm bài — điều hướng thẳng về lớp học (hoặc trang chủ)
+    // thay vì mở lại đề. Bấm "Làm bài"/"Làm lại" (điều hướng mới, không phải Back/Forward)
+    // không đi qua đây nên không bị chặn nhầm.
+    const onPop = () => {
+      const parsed = parseHash()
+      const uid = userRef.current?.id
+      if (parsed.view === 'take-exam' && uid != null &&
+          wasExamJustSubmitted(parsed.examId, parsed.classId, parsed.assignmentId, uid)) {
+        // Thay (không push) entry "take/..." này bằng đích đến — Back thêm lần nữa sẽ
+        // đi thẳng tới trang trước đó, không tạo thêm entry trùng lặp trong lịch sử.
+        let targetHash
+        if (parsed.classId) {
+          setClassId(null); setOpenClassId(parsed.classId); setOpenAsgnTab('exam'); setView('my-classes')
+          targetHash = `class/${parsed.classId}/exam`
+        } else {
+          const role = userRef.current?.role
+          if (role === ROLES.TEACHER) { setView('class-mgmt'); targetHash = 'classes' }
+          else if (role === ROLES.STUDENT) { setView('my-classes'); targetHash = 'my-classes' }
+          else { setView('home'); targetHash = '' }
+        }
+        window.history.replaceState(null, '', targetHash ? `#${targetHash}` : window.location.pathname)
+        return
+      }
+      applyHash()
+    }
+    window.addEventListener('popstate', onPop)
+    window.addEventListener('hashchange', applyHash)
+    applyHash()
     return () => {
-      window.removeEventListener('popstate', onHash)
-      window.removeEventListener('hashchange', onHash)
+      window.removeEventListener('popstate', onPop)
+      window.removeEventListener('hashchange', applyHash)
     }
   }, []) // eslint-disable-line
 

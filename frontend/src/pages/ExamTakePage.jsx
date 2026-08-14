@@ -36,6 +36,20 @@ function clearAttempt(key) {
   try { localStorage.removeItem(key) } catch { /* ignore */ }
 }
 
+/* ── Đánh dấu 1 lượt làm bài "vừa nộp xong" (trong tab hiện tại), để App.jsx chặn
+   việc bấm nút Back trên trình duyệt quay lại được màn hình làm bài đã nộp. Cờ này
+   chỉ được đọc khi điều hướng bằng Back/Forward (popstate) — bấm "Làm bài"/"Làm lại"
+   là điều hướng mới (hashchange), nên không bị chặn nhầm. ── */
+export function markExamJustSubmitted(examId, classId, assignmentId, studentId) {
+  try { sessionStorage.setItem(attemptKey(examId, classId, assignmentId, studentId) + '_submitted', '1') } catch { /* ignore */ }
+}
+export function clearExamJustSubmitted(examId, classId, assignmentId, studentId) {
+  try { sessionStorage.removeItem(attemptKey(examId, classId, assignmentId, studentId) + '_submitted') } catch { /* ignore */ }
+}
+export function wasExamJustSubmitted(examId, classId, assignmentId, studentId) {
+  try { return sessionStorage.getItem(attemptKey(examId, classId, assignmentId, studentId) + '_submitted') === '1' } catch { return false }
+}
+
 /* ── Countdown hook ── */
 function useCountdown(targetIso) {
   const calc = () => Math.max(0, new Date(targetIso).getTime() - Date.now())
@@ -450,8 +464,11 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
       setFinalMax(result.maxScore)
       setSubmitted(true)
       clearAttempt(attemptKeyStr)
-      // Thay (không push) hash "take/..." bằng nơi sẽ về sau khi nộp — bấm Back trên
-      // trình duyệt lúc này sẽ không quay lại được trạng thái làm bài (đề đã nộp rồi).
+      // Đánh dấu lượt này "vừa nộp" — App.jsx dựa vào cờ này để chặn bấm Back trên
+      // trình duyệt quay lại được màn hình làm bài (chỉ chặn khi Back/Forward, không
+      // chặn khi bấm "Làm bài"/"Làm lại" để bắt đầu lượt mới).
+      markExamJustSubmitted(exam.id, classId, assignmentId, studentId)
+      // Thay (không push) hash "take/..." bằng nơi sẽ về sau khi nộp.
       window.history.replaceState(null, '', classId ? `#class/${classId}/exam` : window.location.pathname)
     } catch (e) {
       setSubmitErr(e?.message || 'Nộp bài thất bại. Vui lòng thử lại.')
@@ -664,6 +681,12 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
   const [notFound,    setNotFound]    = useState(false)
   const [status,      setStatus]      = useState('pending')
   const [pwdUnlocked, setPwdUnlocked] = useState(false)
+
+  // Vào trang này bằng điều hướng MỚI (bấm "Làm bài"/"Làm lại") luôn là 1 lượt làm bài
+  // hợp lệ — xoá cờ "vừa nộp" của lượt trước để không bị App.jsx chặn nhầm lượt mới này.
+  useEffect(() => {
+    if (user?.id != null) clearExamJustSubmitted(examId, classId, assignmentId, user.id)
+  }, [examId, classId, assignmentId, user?.id])
 
   useEffect(() => {
     let cancelled = false
