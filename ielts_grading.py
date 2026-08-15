@@ -6,7 +6,7 @@ Pipeline:
      mô tả biểu đồ + chép lại đề — quan trọng với Task 1).
   2. Trích xuất bài làm học sinh từ file nộp (txt/md/docx/pdf đọc text;
      ảnh hoặc PDF scan → vision model OCR).
-  3. Chấm bằng llama-3.3-70b-versatile theo band descriptors trong
+  3. Chấm bằng openai/gpt-oss-120b theo band descriptors trong
      tieu_chi_writing/task1.txt & task2.txt (part 1 ↔ task 1, part 2 ↔ task 2).
 """
 
@@ -24,8 +24,8 @@ import fitz  # pymupdf
 _BASE = Path(__file__).parent
 _CRITERIA_DIR = _BASE / "tieu_chi_writing"
 
-# Model chấm điểm (text) — theo lựa chọn: llama 3.3 70B trên Groq
-GRADER_MODEL = "llama-3.3-70b-versatile"
+# Model chấm điểm (text) — theo lựa chọn: GPT OSS 120B trên Groq
+GRADER_MODEL = "openai/gpt-oss-120b"
 # Model vision — đọc ảnh đề bài Task 1 & OCR bài viết tay (70B không có vision)
 VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 

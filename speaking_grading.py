@@ -3,7 +3,7 @@ Chấm bài IELTS Speaking (Task 1 + Task 2, có phân loại học sinh Yếu/�
 
 Pipeline:
   1. Task 1 (mọi học sinh): đọc kịch bản .docx đã nộp → chấm ngữ pháp/từ vựng bằng
-     llama-3.3-70b-versatile, chỉ lỗi, viết lại một bản kịch bản hoàn thiện hơn
+     openai/gpt-oss-120b, chỉ lỗi, viết lại một bản kịch bản hoàn thiện hơn
      ("improvedText") → sinh audio đọc mẫu bản đã sửa bằng Groq TTS (Orpheus).
   2. Task 2 (chỉ học sinh nhãn "on"): file ghi âm đã nộp → Groq Whisper transcribe →
      chấm ngữ pháp/từ vựng từ transcript, đồng thời đối chiếu transcript với chính
@@ -39,7 +39,7 @@ from listening_grading import (
 )
 
 # Model chấm điểm (text) — dùng chung với IELTS Writing / Chấm nói
-GRADER_MODEL = "llama-3.3-70b-versatile"
+GRADER_MODEL = "openai/gpt-oss-120b"
 # Model + giọng đọc TTS (Groq/Orpheus) để sinh audio đọc mẫu bản Task 1 đã sửa
 TTS_MODEL = "canopylabs/orpheus-v1-english"
 TTS_VOICE = "troy"

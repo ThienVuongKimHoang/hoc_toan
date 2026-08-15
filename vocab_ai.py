@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 
-TEXT_MODEL = "llama-3.1-8b-instant"
+TEXT_MODEL = "openai/gpt-oss-20b"  # llama-3.1-8b-instant bị Groq khai tử
 
 EXAMPLES_PROMPT = """Create 3 example sentences using the English word "{word}" (Vietnamese: {vietnamese}).
 Return this exact JSON structure:

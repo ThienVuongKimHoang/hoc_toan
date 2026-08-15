@@ -1,12 +1,12 @@
 """
 Chấm bài nói tiếng Anh — nhận file ghi âm, dùng Groq Whisper chuyển thành
-văn bản (transcript), rồi chấm ngữ pháp + từ vựng bằng llama-3.3-70b-versatile.
+văn bản (transcript), rồi chấm ngữ pháp + từ vựng bằng openai/gpt-oss-120b.
 
 Pipeline:
   1. Lấy file ghi âm từ bài nộp của học sinh (submission["files"]).
   2. Speech-to-text bằng Groq Whisper (whisper-large-v3), lấy transcript +
      segments (kèm mốc thời gian) để đồng bộ audio ↔ văn bản ở frontend.
-  3. Chấm bằng llama-3.3-70b-versatile theo 2 tiêu chí: ngữ pháp, từ vựng
+  3. Chấm bằng openai/gpt-oss-120b theo 2 tiêu chí: ngữ pháp, từ vựng
      (thang band IELTS 0-9 để đồng bộ UI với IELTS Writing).
 
 Dùng lại các hàm thuần không phụ thuộc đặc thù IELTS từ ielts_grading.py
@@ -29,7 +29,7 @@ from ielts_grading import (
 )
 
 # Model chấm điểm (text) — dùng chung với IELTS Writing
-GRADER_MODEL = "llama-3.3-70b-versatile"
+GRADER_MODEL = "openai/gpt-oss-120b"
 # Model speech-to-text — ưu tiên độ chính xác (job chạy nền, không cần nhanh)
 STT_MODEL = "whisper-large-v3"
 

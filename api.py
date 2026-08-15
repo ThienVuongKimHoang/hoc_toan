@@ -210,7 +210,7 @@ def _classify_inplace(groq_client, questions: list, task: dict, subject: str = "
                 f'JSON: [{{"topic_label":"...","level_label":"..."}},...]'
             )
             resp = groq_client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="openai/gpt-oss-20b",  # llama-3.1-8b-instant bị Groq khai tử
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
                 max_tokens=len(batch) * 25 + 50,
@@ -3506,10 +3506,10 @@ _GEN_SECTION_PROMPTS = {
 
 
 _GEN_VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
-_GEN_TEXT_MODEL   = "llama-3.3-70b-versatile"
+_GEN_TEXT_MODEL   = "openai/gpt-oss-120b"
 # Model dự phòng khi _GEN_TEXT_MODEL hết quota: mỗi model có bucket rate-limit riêng trên Groq,
 # nên xoay model mới né được giới hạn token/ngày dùng chung giữa các key cùng org.
-_GEN_TEXT_MODEL_FALLBACKS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"]
+_GEN_TEXT_MODEL_FALLBACKS = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b"]
 _GEN_REASONING_MODELS = ("openai/gpt-oss",)
 
 
@@ -3730,7 +3730,7 @@ Trả về JSON ĐÚNG ĐỊNH DẠNG, không giải thích thêm:
     try:
         groq = _get_groq()
         resp = groq.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="openai/gpt-oss-20b",  # llama-3.1-8b-instant bị Groq khai tử
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             max_tokens=80,

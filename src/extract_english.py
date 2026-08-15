@@ -46,10 +46,10 @@ ENGLISH_POINTS_PER_Q    = 0.25
 ENGLISH_TOTAL_QUESTIONS = 40
 
 VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
-TEXT_MODEL   = "llama-3.3-70b-versatile"
+TEXT_MODEL   = "openai/gpt-oss-120b"
 # Model dự phòng khi TEXT_MODEL hết quota TPD/TPM: mỗi model có bucket rate-limit riêng trên Groq,
 # nên xoay model (không chỉ xoay key) mới né được giới hạn token/ngày dùng chung giữa các key cùng org.
-TEXT_MODEL_FALLBACKS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"]
+TEXT_MODEL_FALLBACKS = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b"]
 _REASONING_MODELS = ("openai/gpt-oss",)  # các model này hỗ trợ reasoning_effort để giảm token suy luận thừa
 MIN_TEXT_CHARS = 150  # dưới ngưỡng này → coi là PDF scan, dùng Vision fallback
 
