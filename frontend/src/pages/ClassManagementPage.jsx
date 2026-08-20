@@ -1419,40 +1419,117 @@ function ProgressTab({ classId, teacherId }) {
   if (err) return <div className="cm-error">{err}</div>
   if (!data?.students?.length) return <div className="cm-empty-state">Lớp chưa có học sinh.</div>
 
+  const getGpaBadgeType = (gpa) => {
+    if (gpa == null) return 'gray'
+    if (gpa >= 8.0) return 'success'
+    if (gpa >= 6.5) return 'warning'
+    return 'danger'
+  }
+
+  const getAttendanceBadgeType = (rate) => {
+    if (rate == null) return 'gray'
+    if (rate >= 90) return 'success'
+    if (rate >= 75) return 'warning'
+    return 'danger'
+  }
+
   return (
-    <div className="cm-member-list">
-      {data.students.map(st => (
-        <div key={st.studentId} className="cm-member-row"
-          style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8, cursor: 'pointer' }}
-          onClick={() => setSelected(st)}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div className="cm-member-avatar">{st.studentName?.[0]?.toUpperCase() || '?'}</div>
-            <div style={{ flex: 1, fontWeight: 600 }}>{st.studentName}</div>
-            <span className="cm-exam-chip">
-              🗓️ {st.attendance.rate != null ? `${st.attendance.rate}% chuyên cần` : 'Chưa điểm danh'}
-            </span>
-            <span className="cm-exam-chip">📝 {st.assignments.submitted}/{st.assignments.total} bài nộp</span>
-          </div>
-          {st.attendance.vang > 0 && (
-            <div style={{ fontSize: 12, color: '#dc2626' }}>Vắng {st.attendance.vang} buổi</div>
-          )}
-          {st.assignments.missed.length > 0 && (
-            <div style={{ fontSize: 12, color: '#dc2626' }}>
-              Bỏ bài: {st.assignments.missed.map(m => m.title).join(', ')}
-            </div>
-          )}
-          {st.scoreHistory.length > 0 && (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {st.scoreHistory.map((s, i) => (
-                <span key={i} className="cm-exam-chip"
-                  title={s.date ? new Date(s.date).toLocaleDateString('vi-VN') : ''}>
-                  {s.title}: {s.score}/{s.maxScore}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+    <div className="spd-table-wrapper" style={{ margin: '16px 0 0 0', overflowX: 'auto' }}>
+      <table className="spd-table" style={{ width: '100%', minWidth: '750px' }}>
+        <thead>
+          <tr>
+            <th>Học sinh</th>
+            <th style={{ width: '140px', textAlign: 'center' }}>Chuyên cần</th>
+            <th style={{ width: '140px', textAlign: 'center' }}>Bài tập đã nộp</th>
+            <th style={{ width: '110px', textAlign: 'center' }}>Điểm TB</th>
+            <th>Lịch sử điểm (gần nhất)</th>
+            <th style={{ width: '120px', textAlign: 'center' }}>Hành động</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.students.map(st => {
+            const studentPoints = [...st.scoreHistory]
+              .map(s => scaledScore(s.score, s.maxScore))
+            const studentAvg = studentPoints.length
+              ? Math.round((studentPoints.reduce((sum, p) => sum + p, 0) / studentPoints.length) * 100) / 100
+              : null
+
+            return (
+              <tr key={st.studentId} style={{ cursor: 'pointer' }} onClick={() => setSelected(st)}>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="cm-member-avatar" style={{ margin: 0 }}>
+                      {st.studentName?.[0]?.toUpperCase() || '?'}
+                    </div>
+                    <div style={{ fontWeight: 600, color: '#1e293b' }}>{st.studentName}</div>
+                  </div>
+                  {st.attendance.vang > 0 && (
+                    <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '4px', fontWeight: 600 }}>
+                      ⚠️ Vắng {st.attendance.vang} buổi
+                    </div>
+                  )}
+                  {st.assignments.missed.length > 0 && (
+                    <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px', fontWeight: 600 }}>
+                      ⚠️ Bỏ {st.assignments.missed.length} bài tập
+                    </div>
+                  )}
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <span className={`spd-badge spd-badge--${getAttendanceBadgeType(st.attendance.rate)}`}>
+                    🗓️ {st.attendance.rate != null ? `${st.attendance.rate}%` : '—'}
+                  </span>
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <span className="spd-badge spd-badge--info">
+                    📝 {st.assignments.submitted}/{st.assignments.total} bài
+                  </span>
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  {studentAvg != null ? (
+                    <span className={`spd-badge spd-badge--${getGpaBadgeType(studentAvg)}`} style={{ minWidth: '40px', justifyContent: 'center', fontWeight: 800 }}>
+                      {studentAvg}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#94a3b8' }}>—</span>
+                  )}
+                </td>
+                <td>
+                  {st.scoreHistory.length > 0 ? (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {st.scoreHistory.slice(-3).map((s, i) => {
+                        const scaled = scaledScore(s.score, s.maxScore)
+                        return (
+                          <span key={i} className={`spd-badge spd-badge--${getGpaBadgeType(scaled)}`}
+                            title={`${s.title}: ${s.score}/${s.maxScore} (${scaled}/10)`}
+                            style={{ fontSize: '0.68rem', padding: '2px 8px', fontWeight: 600 }}>
+                            {s.title.length > 16 ? `${s.title.substring(0, 16)}...` : s.title}: {scaled}
+                          </span>
+                        )
+                      })}
+                      {st.scoreHistory.length > 3 && (
+                        <span style={{ fontSize: '0.72rem', color: '#64748b', alignSelf: 'center', fontWeight: 500 }}>
+                          +{st.scoreHistory.length - 3} bài khác
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontStyle: 'italic' }}>Chưa có bài kiểm tra</span>
+                  )}
+                </td>
+                <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                  <button 
+                    className="cm-btn cm-btn--secondary" 
+                    style={{ padding: '6px 12px', fontSize: '0.78rem', borderRadius: '8px', minWidth: '80px' }}
+                    onClick={() => setSelected(st)}
+                  >
+                    📈 Chi tiết
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
 
       {selected && (
         <StudentProgressModal student={selected} onClose={() => setSelected(null)} />

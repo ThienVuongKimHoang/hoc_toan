@@ -215,7 +215,7 @@ export default function StudentProgressModal({ student, onClose }) {
                             ))}
                           </div>
                           
-                          <svg className="sd-line-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+                          <svg className="sd-line-svg" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block' }}>
                             <defs>
                               <linearGradient id="chartAreaGrad" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#2563eb" stopOpacity="0.22" />
@@ -223,23 +223,25 @@ export default function StudentProgressModal({ student, onClose }) {
                               </linearGradient>
                             </defs>
                             {points.length > 1 && (
-                              <polygon
-                                className="sd-area-path"
-                                points={
-                                  `${((0.5) / points.length) * 100},100 ` +
-                                  points.map((p, i) => `${((i + 0.5) / points.length) * 100},${100 - (p.scaled / 10) * 100}`).join(' ') +
-                                  ` ,${((points.length - 0.5) / points.length) * 100},100`
-                                }
-                                style={{ fill: 'url(#chartAreaGrad)', stroke: 'none' }}
-                              />
+                              <>
+                                <polygon
+                                  className="sd-area-path"
+                                  points={
+                                    `${(0.5 / points.length) * 100},100 ` +
+                                    points.map((p, i) => `${((i + 0.5) / points.length) * 100},${100 - (p.scaled / 10) * 100}`).join(' ') +
+                                    ` ${(points.length - 0.5) / points.length * 100},100`
+                                  }
+                                  style={{ fill: 'url(#chartAreaGrad)', stroke: 'none' }}
+                                />
+                                <polyline
+                                  className="sd-line-path"
+                                  points={points
+                                    .map((p, i) => `${((i + 0.5) / points.length) * 100},${100 - (p.scaled / 10) * 100}`)
+                                    .join(' ')}
+                                  style={{ strokeWidth: 3, stroke: '#2563eb' }}
+                                />
+                              </>
                             )}
-                            <polyline
-                              className="sd-line-path"
-                              points={points
-                                .map((p, i) => `${((i + 0.5) / points.length) * 100},${100 - (p.scaled / 10) * 100}`)
-                                .join(' ')}
-                              style={{ strokeWidth: 3, stroke: '#2563eb' }}
-                            />
                           </svg>
 
                           {points.map((p, i) => {
