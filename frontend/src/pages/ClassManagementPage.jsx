@@ -1518,11 +1518,11 @@ function ProgressTab({ classId, teacherId }) {
                 </td>
                 <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                   <button 
-                    className="cm-btn cm-btn--secondary" 
-                    style={{ padding: '6px 12px', fontSize: '0.78rem', borderRadius: '8px', minWidth: '80px' }}
+                    className="btn-outline" 
+                    style={{ padding: '5px 12px', fontSize: '0.78rem', borderRadius: '8px', minWidth: '80px' }}
                     onClick={() => setSelected(st)}
                   >
-                    📈 Chi tiết
+                    Chi tiết →
                   </button>
                 </td>
               </tr>
