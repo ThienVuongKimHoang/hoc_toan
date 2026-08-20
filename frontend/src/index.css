@@ -10609,3 +10609,286 @@ button { font-family: inherit; }
   .exlb-body { padding: 0 46px; }
   .exlb-nav { width: 38px; height: 38px; }
 }
+
+/* ─── Redesigned Student Progress Modal Styles ─── */
+.spd-header-profile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.spd-avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+  user-select: none;
+}
+
+.spd-profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spd-profile-name {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.spd-profile-subtitle {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.spd-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.spd-metric-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.01);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.spd-metric-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 20px -8px rgba(0, 0, 0, 0.08);
+  border-color: #cbd5e1;
+}
+
+.spd-metric-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1.2rem;
+}
+
+.spd-metric-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.spd-metric-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.spd-metric-value {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.spd-metric-label {
+  font-size: 0.76rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-top: 6px;
+  line-height: 1.2;
+}
+
+.spd-progress-bar-container {
+  width: 100%;
+  height: 6px;
+  background: #f1f5f9;
+  border-radius: 9999px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.spd-progress-bar {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.spd-tabs {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 12px;
+  margin: 20px 0;
+  border: 1px solid #e2e8f0;
+}
+
+.spd-tab-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 9px 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #64748b;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.spd-tab-btn:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.spd-tab-btn.is-active {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+}
+
+.spd-tab-pane {
+  animation: spdFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes spdFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.spd-table-wrapper {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+  margin-top: 16px;
+}
+
+.spd-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.spd-table th {
+  background: #f8fafc;
+  padding: 12px 16px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.spd-table td {
+  padding: 14px 16px;
+  font-size: 0.85rem;
+  color: #334155;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.spd-table tr:last-child td {
+  border-bottom: none;
+}
+
+.spd-table tr {
+  transition: background-color 0.15s ease;
+}
+
+.spd-table tr:hover {
+  background-color: #f8fafc;
+}
+
+/* Badges */
+.spd-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.spd-badge--success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.spd-badge--warning {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.spd-badge--danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.spd-badge--info {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.spd-badge--gray {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* Empty states */
+.spd-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  margin-top: 16px;
+}
+
+.spd-empty-icon {
+  font-size: 2.2rem;
+  margin-bottom: 12px;
+}
+
+.spd-empty-text {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+@media (max-width: 768px) {
+  .spd-metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
