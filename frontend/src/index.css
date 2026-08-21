@@ -5909,18 +5909,19 @@ button { font-family: inherit; }
 .phr-meta  { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; color: #94a3b8; }
 .phr-score { text-align: right; flex-shrink: 0; }
 
-/* ─── History page: Light Tech theme ──────────────────────────────────────
-   Scoped under .eh-tech (only ExamHistoryPage.jsx's root div carries it) —
-   ProfilePage.jsx shares the base .prof-*/.phi-* classes above and is left
-   completely untouched; every rule here is a descendant of .eh-tech. */
+/* ─── History page: Modern Dashboard (Lịch sử làm bài) ────────────────────
+   Scoped under .eh-tech (chỉ ExamHistoryPage.jsx mang class này) — ProfilePage
+   dùng chung các class .prof- / .phi- gốc ở trên và không bị ảnh hưởng.
+   Bảng màu: xanh dương (tin cậy) · xanh lá ≥ 8đ · vàng 5–8đ · đỏ < 5đ. */
 .prof-page.eh-tech {
   background:
     radial-gradient(760px 420px at 12% -8%, rgba(37,99,235,0.10), transparent 60%),
     radial-gradient(620px 380px at 96% 12%, rgba(6,182,212,0.10), transparent 60%),
     #f6f9fd;
 }
+.eh-tech .prof-container { max-width: 1040px; }
 .eh-tech .prof-section {
-  background: rgba(255,255,255,0.72);
+  background: rgba(255,255,255,0.78);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-color: rgba(37,99,235,0.14);
@@ -5928,20 +5929,33 @@ button { font-family: inherit; }
 }
 .eh-tech .prof-section-title { color: #0f172a; border-bottom-color: rgba(37,99,235,0.10); }
 .eh-tech .prof-section-desc  { color: #64748b; }
-
-/* Breadcrumb */
 .eh-tech .phc-back    { background: rgba(37,99,235,0.08); color: #475569; transition: background .2s ease, color .2s ease, transform .15s ease; }
 .eh-tech .phc-back:hover { background: rgba(37,99,235,0.14); color: #1e293b; transform: translateX(-2px); }
-.eh-tech .phc-link    { color: #2563eb; transition: color .15s ease; }
-.eh-tech .phc-link:hover { color: #06b6d4; }
-.eh-tech .phc-sep     { color: #cbd5e1; }
-.eh-tech .phc-current { color: #64748b; }
+.eh-tech .prof-btn--ghost { background: rgba(37,99,235,0.08); color: #475569; transition: background .2s ease, color .2s ease, transform .15s ease; }
+.eh-tech .prof-btn--ghost:hover { background: rgba(37,99,235,0.14); color: #1e293b; transform: translateY(-2px); }
 
-/* Hàng vào danh sách với hiệu ứng trượt lên + mờ dần, so le theo thứ tự
-   (animation-delay đặt inline theo index) — tắt khi người dùng bật giảm
-   chuyển động trong hệ điều hành. */
+/* Mức điểm → màu chữ dùng chung cho mọi khối */
+.eh-tech .eh-tone-good    { color: #059669; }
+.eh-tech .eh-tone-mid     { color: #f59e0b; }
+.eh-tech .eh-tone-low     { color: #ef4444; }
+.eh-tech .eh-tone-pending { color: #94a3b8; }
+.eh-tech .eh-muted        { color: #94a3b8; }
+
+/* Thanh tiến độ nhỏ (thẻ môn, ô điểm trong bảng) */
+.eh-tech .eh-bar { height: 6px; border-radius: 99px; background: #e2e8f0; overflow: hidden; }
+.eh-tech .eh-bar-fill { height: 100%; border-radius: 99px; transition: width .8s cubic-bezier(.16,1,.3,1); }
+
+/* Mũi tên cuối thẻ: ẩn nhẹ lúc nghỉ, trượt vào khi hover */
+.eh-tech .hist-arrow {
+  display: inline-flex; flex-shrink: 0; color: #94a3b8; align-self: flex-start; margin-top: 4px;
+  opacity: 0.55; transform: translateX(-4px);
+  transition: opacity .2s ease, transform .2s ease, color .2s ease;
+}
+.eh-tech .eh-subj-card:hover .hist-arrow { opacity: 1; transform: translateX(0); color: #2563eb; }
+
+/* Hiệu ứng trượt lên so le (animation-delay đặt inline theo index) */
 @media (prefers-reduced-motion: no-preference) {
-  .eh-tech .prof-hist-row, .eh-tech .prof-history-item {
+  .eh-tech .eh-subj-card, .eh-tech .eh-row {
     animation: eh-row-in .38s cubic-bezier(.16,1,.3,1) both;
   }
 }
@@ -5950,77 +5964,206 @@ button { font-family: inherit; }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Mũi tên cuối mỗi hàng: ẩn nhẹ lúc nghỉ, trượt vào + đổi màu khi hover —
-   dùng chung cho cả 3 cấp (Lớp / Đề / Lần làm) */
-.eh-tech .hist-arrow {
-  display: inline-flex; flex-shrink: 0; color: #94a3b8;
-  opacity: 0.55; transform: translateX(-4px);
-  transition: opacity .2s ease, transform .2s ease, color .2s ease;
-}
-.eh-tech .prof-hist-row:hover .hist-arrow,
-.eh-tech .prof-history-item:hover .hist-arrow {
-  opacity: 1; transform: translateX(0); color: #2563eb;
-}
+/* ─── Lời chào ─── */
+.eh-tech .eh-hero { margin: 0 0 22px; }
+.eh-tech .eh-hello { font-size: 1.7rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; margin: 0 0 6px; }
+.eh-tech .eh-hello-sub { font-size: 0.98rem; color: #64748b; margin: 0; }
 
-/* Cấp 1 & 2: hàng Lớp / Đề */
-.eh-tech .prof-hist-row {
-  background: rgba(255,255,255,0.75);
+/* ─── Block 1: thẻ môn học ─── */
+.eh-tech .eh-subj-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px; margin-bottom: 20px;
+}
+.eh-tech .eh-subj-card {
+  display: flex; align-items: flex-start; gap: 14px; width: 100%;
+  padding: 18px; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: rgba(255,255,255,0.82); border: 1px solid rgba(37,99,235,0.12);
+  border-radius: 20px;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  border-color: rgba(37,99,235,0.12); color: #0f172a;
+  box-shadow: 0 18px 34px -26px rgba(37,99,235,0.35);
   transition: border-color .2s ease, background .2s ease, box-shadow .2s ease, transform .2s cubic-bezier(.2,.8,.2,1);
 }
-.eh-tech .prof-hist-row:hover {
+.eh-tech .eh-subj-card:hover {
   background: #ffffff; border-color: #2563eb; transform: translateY(-3px);
-  box-shadow: 0 0 0 1px rgba(37,99,235,0.18), 0 16px 32px -14px rgba(37,99,235,0.35);
+  box-shadow: 0 0 0 1px rgba(37,99,235,0.18), 0 18px 34px -16px rgba(37,99,235,0.35);
 }
-.eh-tech .prof-hist-row:active { transform: translateY(-1px) scale(0.99); }
-.eh-tech .phr-icon--class {
-  background: linear-gradient(135deg, #2563eb, #06b6d4); color: #ffffff;
-  transition: transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s ease;
+.eh-tech .eh-subj-card:active { transform: translateY(-1px) scale(0.995); }
+.eh-tech .eh-subj-ic {
+  width: 54px; height: 54px; flex-shrink: 0; border-radius: 16px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; color: #ffffff;
+  box-shadow: 0 8px 18px -8px rgba(15,23,42,0.45);
+  transition: transform .2s cubic-bezier(.2,.8,.2,1);
 }
-.eh-tech .phr-icon--exam {
-  background: linear-gradient(135deg, #06b6d4, #2563eb); color: #ffffff;
-  transition: transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s ease;
-}
-.eh-tech .prof-hist-row:hover .phr-icon {
-  transform: scale(1.08) rotate(-4deg);
-  box-shadow: 0 6px 16px -4px rgba(37,99,235,0.45);
-}
-.eh-tech .phr-title { color: #0f172a; }
-.eh-tech .phr-meta  { color: #64748b; }
+/* Icon môn là <img> có style inline (SubjectBadge.jsx) → cần !important để lấp đầy ô */
+.eh-tech .eh-subj-ic img { width: 100% !important; height: 100% !important; border-radius: 0 !important; object-fit: cover !important; }
+.eh-tech .eh-subj-card:hover .eh-subj-ic { transform: scale(1.06) rotate(-3deg); }
+.eh-tech .eh-subj-ic--sm { width: 44px; height: 44px; border-radius: 13px; font-size: 1.2rem; }
+.eh-tech .eh-subj-body { flex: 1; min-width: 0; }
+.eh-tech .eh-subj-name { font-size: 1.02rem; font-weight: 800; color: #0f172a; margin-bottom: 3px; }
+.eh-tech .eh-subj-meta { font-size: 0.8rem; color: #64748b; margin-bottom: 10px; }
+.eh-tech .eh-subj-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; font-size: 0.78rem; }
+.eh-tech .eh-subj-avg  { font-weight: 700; white-space: nowrap; }
+.eh-tech .eh-subj-date { display: inline-flex; align-items: center; gap: 4px; color: #94a3b8; white-space: nowrap; }
 
-/* Cấp 3: từng lần làm */
-.eh-tech .prof-history-item {
-  background: rgba(255,255,255,0.75);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  border-color: rgba(37,99,235,0.12); color: #0f172a;
+/* ─── Block 2: đầu trang dashboard + bộ lọc thời gian ─── */
+.eh-tech .eh-dash-head { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; }
+.eh-tech .eh-dash-title { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+.eh-tech .eh-dash-name { font-size: 1.4rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; margin: 0; }
+.eh-tech .eh-dash-sub  { font-size: 0.82rem; color: #64748b; margin: 2px 0 0; }
+.eh-tech .eh-range {
+  display: inline-flex; gap: 4px; padding: 4px;
+  background: rgba(37,99,235,0.07); border-radius: 99px;
+}
+.eh-tech .eh-range-btn {
+  border: none; background: none; cursor: pointer;
+  padding: 7px 14px; border-radius: 99px;
+  font-size: 0.82rem; font-weight: 600; color: #64748b;
+  transition: background .2s ease, color .2s ease, box-shadow .2s ease;
+}
+.eh-tech .eh-range-btn:hover { color: #1e293b; }
+.eh-tech .eh-range-btn.is-active {
+  background: #ffffff; color: #2563eb;
+  box-shadow: 0 2px 8px -2px rgba(37,99,235,0.35);
+}
+
+/* ─── Block 2: ô chỉ số thông minh ─── */
+.eh-tech .eh-stat-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px; margin-bottom: 16px;
+}
+.eh-tech .eh-stat {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px 16px; border-radius: 16px;
+  background: #f8fafc; border: 1px solid #eef2f7;
+  transition: transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s ease;
+}
+.eh-tech .eh-stat:hover { transform: translateY(-2px); box-shadow: 0 12px 22px -16px rgba(15,23,42,0.45); }
+.eh-tech .eh-stat-ic {
+  width: 36px; height: 36px; flex-shrink: 0; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(37,99,235,0.10); color: #2563eb;
+}
+.eh-tech .eh-stat--good .eh-stat-ic    { background: rgba(5,150,105,0.12);  color: #059669; }
+.eh-tech .eh-stat--mid .eh-stat-ic     { background: rgba(245,158,11,0.14); color: #d97706; }
+.eh-tech .eh-stat--low .eh-stat-ic     { background: rgba(239,68,68,0.12);  color: #ef4444; }
+.eh-tech .eh-stat--neutral .eh-stat-ic { background: rgba(100,116,139,0.12); color: #64748b; }
+.eh-tech .eh-stat-body  { min-width: 0; }
+.eh-tech .eh-stat-label { font-size: 0.76rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; }
+.eh-tech .eh-stat-value { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #0f172a; margin: 2px 0 1px; }
+.eh-tech .eh-stat-value b    { font-size: 1.45rem; font-weight: 800; }
+.eh-tech .eh-stat-value span { font-size: 0.85rem; color: #94a3b8; }
+.eh-tech .eh-stat--good .eh-stat-value b { color: #059669; }
+.eh-tech .eh-stat--mid .eh-stat-value b  { color: #d97706; }
+.eh-tech .eh-stat--low .eh-stat-value b  { color: #ef4444; }
+.eh-tech .eh-stat-hint  { font-size: 0.75rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ─── Block 2: nhãn đánh giá / nhắc nhở ─── */
+.eh-tech .eh-verdict {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 16px; border-radius: 14px; margin-bottom: 12px;
+  font-size: 0.86rem; line-height: 1.55;
+}
+.eh-tech .eh-verdict-ic { display: inline-flex; margin-top: 2px; flex-shrink: 0; }
+.eh-tech .eh-verdict--good    { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+.eh-tech .eh-verdict--neutral { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+.eh-tech .eh-verdict--warn    { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+
+/* ─── Block 2: biểu đồ đường ─── */
+.eh-tech .eh-chart { position: relative; margin-top: 8px; }
+.eh-tech .eh-chart svg { display: block; overflow: visible; }
+.eh-tech .eh-grid  { stroke: #e2e8f0; stroke-width: 1; }
+.eh-tech .eh-axis  { fill: #94a3b8; font-size: 11px; font-family: inherit; }
+.eh-tech .eh-line  { fill: none; stroke: #2563eb; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.eh-tech .eh-avg-line  { stroke: #94a3b8; stroke-width: 1.4; stroke-dasharray: 5 5; }
+.eh-tech .eh-avg-label { fill: #94a3b8; font-size: 10.5px; font-weight: 600; }
+.eh-tech .eh-dot   { transition: r .15s ease; cursor: pointer; }
+@media (prefers-reduced-motion: no-preference) {
+  .eh-tech .eh-line { stroke-dasharray: 3000; animation: eh-draw 1.1s cubic-bezier(.16,1,.3,1) both; }
+}
+@keyframes eh-draw { from { stroke-dashoffset: 3000; } to { stroke-dashoffset: 0; } }
+.eh-tech .eh-tip {
+  position: absolute; z-index: 3; pointer-events: none;
+  background: #0f172a; color: #f8fafc;
+  padding: 8px 12px; border-radius: 10px; min-width: 130px;
+  box-shadow: 0 12px 24px -10px rgba(15,23,42,0.6);
+}
+.eh-tech .eh-tip-score { font-size: 1.15rem; font-weight: 800; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.eh-tech .eh-tip-score span { font-size: 0.75rem; color: #94a3b8; }
+.eh-tech .eh-tip-title { font-size: 0.78rem; font-weight: 600; margin-top: 2px; }
+.eh-tech .eh-tip-date  { font-size: 0.72rem; color: #94a3b8; margin-top: 2px; }
+.eh-tech .eh-chart-note { font-size: 0.76rem; color: #94a3b8; margin: 6px 0 0; text-align: right; }
+
+/* ─── Block 3: bảng lịch sử chi tiết ─── */
+.eh-tech .eh-table { display: flex; flex-direction: column; gap: 8px; }
+.eh-tech .eh-thead, .eh-tech .eh-row {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr) 92px 92px 120px 108px;
+  gap: 12px; align-items: center;
+}
+.eh-tech .eh-thead {
+  padding: 0 14px 8px;
+  font-size: 0.72rem; font-weight: 700; color: #94a3b8;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid #eef2f7;
+}
+.eh-tech .eh-row {
+  padding: 12px 14px; border-radius: 14px;
+  background: rgba(255,255,255,0.75); border: 1px solid rgba(37,99,235,0.10);
   transition: border-color .2s ease, background .2s ease, box-shadow .2s ease, transform .2s cubic-bezier(.2,.8,.2,1);
 }
-.eh-tech .prof-history-item:hover {
-  background: #ffffff; border-color: #2563eb; transform: translateY(-3px);
-  box-shadow: 0 0 0 1px rgba(37,99,235,0.18), 0 16px 32px -14px rgba(37,99,235,0.35);
+.eh-tech .eh-row:hover {
+  background: #ffffff; border-color: rgba(37,99,235,0.35); transform: translateY(-2px);
+  box-shadow: 0 14px 26px -18px rgba(37,99,235,0.55);
 }
-.eh-tech .prof-history-item:active { transform: translateY(-1px) scale(0.99); }
-.eh-tech .phi-title {
-  color: #0f172a;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: 0.3px;
+.eh-tech .eh-cell { font-size: 0.83rem; color: #475569; min-width: 0; }
+.eh-tech .eh-cell--date  { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.78rem; color: #64748b; }
+.eh-tech .eh-cell--title b { display: block; font-size: 0.9rem; font-weight: 700; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eh-tech .eh-chip {
+  display: inline-block; margin-top: 4px; font-style: normal;
+  font-size: 0.72rem; font-weight: 600; color: #2563eb;
+  background: rgba(37,99,235,0.08); border-radius: 99px; padding: 2px 9px;
 }
-.eh-tech .phi-meta  { color: #64748b; }
-.eh-tech .phi-score { display: flex; align-items: center; }
-.eh-tech .phi-score .hist-arrow { margin-left: 8px; }
-.eh-tech .prof-score-bar { background: #e2e8f0; }
-.eh-tech .psb-fill  { transition: width .7s cubic-bezier(.16,1,.3,1), box-shadow .2s ease; box-shadow: 0 0 6px currentColor; }
-.eh-tech .phi-score-num {
-  color: #0f172a;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+.eh-tech .eh-cell b { font-weight: 800; }
+.eh-tech .eh-cell--score .eh-score-num   { font-size: 1.15rem; font-weight: 800; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.eh-tech .eh-cell--score .eh-score-total { font-size: 0.75rem; color: #94a3b8; }
+.eh-tech .eh-cell--score .eh-bar { margin-top: 5px; max-width: 92px; }
+.eh-tech .eh-cell--act { display: flex; justify-content: flex-end; }
+.eh-tech .eh-review-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px; border-radius: 10px;
+  font-size: 0.8rem; font-weight: 700; text-decoration: none;
+  background: rgba(37,99,235,0.10); color: #2563eb;
+  transition: background .2s ease, color .2s ease, transform .15s ease;
 }
-.eh-tech .phi-score-total { color: #94a3b8; }
+.eh-tech .eh-review-btn:hover { background: #2563eb; color: #ffffff; transform: translateY(-1px); }
+.eh-tech .eh-cl { display: none; }   /* nhãn cột — chỉ hiện ở dạng thẻ trên mobile */
 .eh-tech .phi-score-pending { color: #b45309; background: #fffbeb; border-color: #fde68a; }
 
-/* Nút dưới cùng ("Hồ sơ cá nhân" / "Về trang chủ") */
-.eh-tech .prof-btn--ghost { background: rgba(37,99,235,0.08); color: #475569; transition: background .2s ease, color .2s ease, transform .15s ease; }
-.eh-tech .prof-btn--ghost:hover { background: rgba(37,99,235,0.14); color: #1e293b; transform: translateY(-2px); }
+/* ─── Responsive: bảng → thẻ xếp dọc ─── */
+@media (max-width: 860px) {
+  .eh-tech .eh-thead { display: none; }
+  .eh-tech .eh-row {
+    grid-template-columns: 1fr auto; gap: 8px 12px; padding: 14px;
+  }
+  .eh-tech .eh-cell--title { grid-column: 1 / -1; order: -1; }
+  .eh-tech .eh-cell--act   { grid-column: 1 / -1; justify-content: flex-start; }
+  .eh-tech .eh-cl {
+    display: block; font-style: normal;
+    font-size: 0.68rem; font-weight: 700; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;
+  }
+  .eh-tech .eh-cell--score .eh-bar { max-width: 140px; }
+}
+@media (max-width: 650px) {
+  .eh-tech .eh-subj-grid { grid-template-columns: 1fr; }
+  .eh-tech .eh-hello { font-size: 1.4rem; }
+  .eh-tech .eh-dash-head { gap: 10px; }
+  .eh-tech .eh-range { width: 100%; justify-content: space-between; }
+  .eh-tech .eh-range-btn { flex: 1; padding: 7px 8px; }
+  .eh-tech .eh-dash-name { font-size: 1.18rem; }
+  .eh-tech .prof-section { padding: 20px 16px; }
+}
 
 /* ─── Admin chips ─── */
 .prof-admin-chips { display: flex; flex-wrap: wrap; gap: 10px; }

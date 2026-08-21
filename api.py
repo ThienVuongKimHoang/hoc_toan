@@ -622,6 +622,59 @@ def _calc_max_score(exam: dict) -> float:
     return _round2(m)
 
 
+def _answer_stats(exam: dict, answers: dict) -> dict:
+    """Số câu đúng / tổng số câu chấm tự động của một bài nộp — dùng cho cột
+    "Đúng/Tổng" ở trang Lịch sử làm bài. PHẦN II tính theo từng ý a–d (mỗi ý là
+    một câu); phần TỰ LUẬN không tính vì giáo viên chấm tay."""
+    answers = answers or {}
+    secs    = exam.get("sections") or {}
+    correct = total = 0
+
+    p1 = secs.get("PHẦN I")
+    if p1:
+        for q in (p1.get("questions") or []):
+            if q.get("answer") is None:
+                continue
+            total += 1
+            if answers.get(f"I_{q.get('question_number')}") == q.get("answer"):
+                correct += 1
+
+    p2 = secs.get("PHẦN II")
+    if p2:
+        for q in (p2.get("questions") or []):
+            user = answers.get(f"II_{q.get('question_number')}")
+            user = user if isinstance(user, dict) else {}
+            for s in (q.get("sub_questions") or []):
+                if s.get("correct_answer") is None:
+                    continue
+                total += 1
+                if user.get(s.get("label")) == s.get("correct_answer"):
+                    correct += 1
+
+    p3 = secs.get("PHẦN III")
+    if p3:
+        for q in (p3.get("questions") or []):
+            ans = str(q.get("answer") or "").strip().lower()
+            if not ans:
+                continue
+            total += 1
+            if str(answers.get(f"III_{q.get('question_number')}") or "").strip().lower() == ans:
+                correct += 1
+
+    for key, prefix in (("TIẾNG ANH", "EN"), ("READING", "RD")):
+        sec = secs.get(key)
+        if not sec:
+            continue
+        for q in (sec.get("questions") or []):
+            if not q.get("answer"):
+                continue
+            total += 1
+            if answers.get(f"{prefix}_{q.get('question_number')}") == q.get("answer"):
+                correct += 1
+
+    return {"correctCount": correct, "questionCount": total}
+
+
 def _to_float(v, default: float = 0.0) -> float:
     try:
         return float(v)
@@ -903,11 +956,18 @@ async def get_student_submissions(student_id: str, caller: dict = Depends(requir
     if str(caller["id"]) != str(student_id):
         return JSONResponse({"error": "Không có quyền xem lịch sử làm bài của người khác"}, status_code=403)
     subs = db.get_submissions_by_student(student_id)
+    exam_cache: dict[str, dict] = {}   # 1 lần đọc/đề, nhiều lần làm dùng chung
     for s in subs:
         if s.get("hideResults") and not s.get("resultsRevealed"):
             s["score"] = None
             s["maxScore"] = None
             s["answers"] = {}
+            continue
+        # Số câu đúng/tổng câu cho bảng lịch sử (chỉ phần chấm tự động)
+        eid = str(s.get("examId"))
+        if eid not in exam_cache:
+            exam_cache[eid] = db.get_exam(eid) or {}
+        s.update(_answer_stats(exam_cache[eid], s.get("answers")))
     return {"submissions": subs}
 
 
