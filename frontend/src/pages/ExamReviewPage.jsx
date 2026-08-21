@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { fetchSubmissionReview, scaledScore } from '../store/examStore.js'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { fetchSubmissionReview, fetchMySubmissions, scaledScore } from '../store/examStore.js'
 import { QuestionText, FigureImages, SECTION_PREFIX, toPassageHTML } from '../components/QuestionCard.jsx'
+import { SUBJECTS } from '../components/SubjectBadge.jsx'
 import MathText from '../components/MathText.jsx'
 import MarkerText from '../components/MarkerText.jsx'
 import './ExamReviewPage.css'
@@ -45,13 +46,122 @@ const formatDt = iso => iso
   ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   : '—'
 
-const formatDuration = (sec) => {
+/* Thời gian dạng đồng hồ mm:ss — dùng cho ô "Thời gian hoàn thành" */
+const formatClock = (sec) => {
   if (sec == null) return '—'
   const m = Math.floor(sec / 60), s = sec % 60
-  return m > 0 ? `${m} phút ${s} giây` : `${s} giây`
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
 const norm = v => (v ?? '').toString().trim().toLowerCase()
+
+/* Mã hoá màu theo mức điểm (thang 10): đỏ < 5 · vàng 5–8 · xanh ≥ 8 */
+const bandOf = v => (v == null ? 'none' : v >= 8 ? 'high' : v >= 5 ? 'mid' : 'low')
+const BAND_COLOR = { high: '#059669', mid: '#f59e0b', low: '#ef4444', none: '#94a3b8' }
+const BAND_MSG = {
+  high: 'Tuyệt vời! Bạn đang làm rất tốt.',
+  mid:  'Khá rồi đấy! Xem lại vài câu sai bên dưới là điểm sẽ lên ngay.',
+  low:  'Đừng nản chí, hãy xem lại lời giải bên dưới nhé!',
+  none: 'Bài này chưa có điểm.',
+}
+
+/* Số chạy từ 0 → giá trị thật khi trang vừa tải (ease-out) */
+function useCountUp(target, ms = 900) {
+  const [v, setV] = useState(0)
+  useEffect(() => {
+    if (target == null) { setV(0); return }
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setV(target); return }
+    let raf, start
+    const step = (t) => {
+      start ??= t
+      const p = Math.min(1, (t - start) / ms)
+      setV(target * (1 - Math.pow(1 - p, 3)))
+      if (p < 1) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    // Chốt giá trị thật kể cả khi rAF không chạy (tab nền, trình duyệt tiết kiệm pin)
+    // — hiệu ứng đẹp là phụ, KHÔNG được để điểm kẹt ở 0.
+    const done = setTimeout(() => setV(target), ms + 250)
+    return () => { cancelAnimationFrame(raf); clearTimeout(done) }
+  }, [target, ms])
+  return v
+}
+
+/* Vòng tròn điểm số (radial progress) — thay cho dòng chữ "2/10" khô khan */
+function RadialScore({ score, band }) {
+  const R = 62, STROKE = 12
+  const C = 2 * Math.PI * R
+  const pct = Math.max(0, Math.min(1, (score ?? 0) / 10))
+  const shown = useCountUp(score)
+  const [dash, setDash] = useState(0)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setDash(pct))
+    return () => cancelAnimationFrame(id)
+  }, [pct])
+  return (
+    <div className="rv-radial">
+      <svg width={(R + STROKE) * 2} height={(R + STROKE) * 2}>
+        <circle cx={R + STROKE} cy={R + STROKE} r={R} className="rv-radial-track" strokeWidth={STROKE} />
+        <circle cx={R + STROKE} cy={R + STROKE} r={R} className="rv-radial-fill" strokeWidth={STROKE}
+          stroke={BAND_COLOR[band]} strokeDasharray={C} strokeDashoffset={C * (1 - dash)}
+          transform={`rotate(-90 ${R + STROKE} ${R + STROKE})`} />
+      </svg>
+      <div className="rv-radial-mid">
+        <span className="rv-radial-num" style={{ color: BAND_COLOR[band] }}>
+          {shown.toFixed(score != null && score % 1 === 0 ? 0 : 2)}
+        </span>
+        <span className="rv-radial-total">/10</span>
+      </div>
+    </div>
+  )
+}
+
+function StatTile({ icon, tone, label, value, hint }) {
+  return (
+    <div className={`rv-stat rv-stat--${tone}`}>
+      <span className="rv-stat-ic">{icon}</span>
+      <span className="rv-stat-label">{label}</span>
+      <span className="rv-stat-value">{value}</span>
+      {hint && <span className="rv-stat-hint">{hint}</span>}
+    </div>
+  )
+}
+
+/* Biểu đồ đường nhỏ: điểm 5 lần làm gần nhất của môn này, chấm to = lần đang xem */
+function MiniTrend({ points, currentId }) {
+  const W = 300, H = 120, PAD = { t: 14, r: 14, b: 22, l: 24 }
+  const iw = W - PAD.l - PAD.r, ih = H - PAD.t - PAD.b
+  const n = points.length
+  const px = i => PAD.l + (n <= 1 ? iw / 2 : (iw * i) / (n - 1))
+  const py = v => PAD.t + ih * (1 - Math.max(0, Math.min(10, v)) / 10)
+  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${px(i)} ${py(p.score)}`).join(' ')
+  const area = n > 1 ? `${line} L ${px(n - 1)} ${PAD.t + ih} L ${px(0)} ${PAD.t + ih} Z` : ''
+  return (
+    <svg className="rv-trend-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Điểm các lần làm gần nhất">
+      <defs>
+        <linearGradient id="rvTrend" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#2563eb" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {[0, 5, 10].map(v => (
+        <g key={v}>
+          <line x1={PAD.l} y1={py(v)} x2={PAD.l + iw} y2={py(v)} className="rv-trend-grid" />
+          <text x={PAD.l - 6} y={py(v) + 3.5} className="rv-trend-axis" textAnchor="end">{v}</text>
+        </g>
+      ))}
+      {area && <path d={area} fill="url(#rvTrend)" />}
+      {n > 1 && <path d={line} className="rv-trend-line" />}
+      {points.map((p, i) => (
+        <g key={p.id}>
+          <circle cx={px(i)} cy={py(p.score)} r={p.id === currentId ? 6 : 4}
+            fill="#fff" stroke={BAND_COLOR[bandOf(p.score)]} strokeWidth={p.id === currentId ? 3 : 2} />
+          <text x={px(i)} y={H - 7} className="rv-trend-axis" textAnchor="middle">{p.label}</text>
+        </g>
+      ))}
+    </svg>
+  )
+}
 
 /* ── Dựng kết quả từng câu theo ĐỀ GỐC (giữ nguyên thứ tự câu trong exam.sections) ── */
 function buildReview(exam, submission) {
@@ -266,7 +376,12 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
   const [errMsg, setErrMsg]         = useState('')
   const [exam, setExam]             = useState(null)
   const [submission, setSubmission] = useState(null)
+  const [history, setHistory]       = useState([])
   const [onlyWrong, setOnlyWrong]   = useState(false)
+  // Tiêu đề trên thanh sticky chỉ hiện khi đã cuộn qua khối tiêu đề lớn —
+  // tránh in cùng một tên đề 2 lần ngay đầu trang.
+  const [compact, setCompact]       = useState(false)
+  const headRef                     = useRef(null)
 
   useEffect(() => {
     let alive = true
@@ -282,6 +397,27 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
       .catch(e => { if (alive) { setErrMsg(e.message || 'Không thể xem lại bài làm'); setState('error') } })
     return () => { alive = false }
   }, [examId, subId])
+
+  // Lịch sử làm bài của chính học sinh đó — để so sánh với lần trước, vẽ đường
+  // tiến độ và xếp hạng giữa các lần làm. Giáo viên mở bài của học sinh sẽ bị
+  // API chặn (403) → chỉ đơn giản là không có các khối này, không báo lỗi.
+  useEffect(() => {
+    const sid = submission?.studentId
+    if (!sid) return
+    let alive = true
+    fetchMySubmissions(sid)
+      .then(res => { if (alive) setHistory(res.submissions || []) })
+      .catch(() => { if (alive) setHistory([]) })
+    return () => { alive = false }
+  }, [submission?.studentId])
+
+  useEffect(() => {
+    const el = headRef.current
+    if (state !== 'ready' || !el || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(([e]) => setCompact(!e.isIntersecting), { rootMargin: '-56px 0px 0px 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [state])
 
   const blocks = useMemo(
     () => (exam && submission ? buildReview(exam, submission) : []),
@@ -300,6 +436,48 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
       essayPending: items.some(i => i.status === 'pending'),
     }
   }, [blocks])
+
+  /* ── Đối chiếu với các lần làm khác: lần trước, hạng, đường tiến độ ── */
+  const progress = useMemo(() => {
+    if (!submission) return { attempts: [], attemptNo: 0, prevDelta: null, rank: 0, trend: [] }
+    const cur = scaledScore(submission.score, submission.maxScore)
+
+    const attempts = history
+      .filter(s => String(s.examId) === String(examId) && s.score != null)
+      .map(s => ({ ...s, scaled: scaledScore(s.score, s.maxScore) }))
+      .sort((a, b) => new Date(a.submittedAt || 0) - new Date(b.submittedAt || 0))
+
+    const idx  = attempts.findIndex(s => String(s.id) === String(subId))
+    const prev = idx > 0 ? attempts[idx - 1] : null
+    const rank = attempts.length
+      ? [...attempts].sort((a, b) => b.scaled - a.scaled).findIndex(s => String(s.id) === String(subId)) + 1
+      : 0
+
+    // 5 lần gần nhất của CÙNG MÔN (không chỉ đề này) — thấy ngay đang lên hay xuống.
+    // Đề cũ chưa gắn môn thì lấy chính các lần làm của đề đó cho khỏi trộn môn.
+    const sameGroup = exam?.subject
+      ? (s => (s.examSubject || 'khac') === exam.subject)
+      : (s => String(s.examId) === String(examId))
+    const trend = history
+      .filter(s => s.score != null && sameGroup(s))
+      .sort((a, b) => new Date(a.submittedAt || 0) - new Date(b.submittedAt || 0))
+      .slice(-5)
+      .map(s => ({
+        id: s.id,
+        score: scaledScore(s.score, s.maxScore),
+        label: s.submittedAt
+          ? new Date(s.submittedAt).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+          : '—',
+      }))
+
+    return {
+      attempts,
+      attemptNo: idx >= 0 ? idx + 1 : attempts.length,
+      prevDelta: prev ? round2(cur - prev.scaled) : null,
+      rank,
+      trend,
+    }
+  }, [history, exam, submission, examId, subId])
 
   if (state === 'loading') return (
     <div className="rv-status"><p>Đang tải bài làm…</p></div>
@@ -328,18 +506,31 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
   )
 
   const scaled       = scaledScore(submission.score, submission.maxScore)
-  const scoreColor   = scaled >= 8 ? '#059669' : scaled >= 5 ? '#f59e0b' : '#ef4444'
+  const band         = bandOf(scaled)
   const shuffled     = !!submission.shuffleMap
   // Điểm hiển thị luôn tính trên TỔNG điểm toàn đề (kể cả tự luận chưa chấm — tạm 0đ)
   // để khớp với điểm giáo viên thấy, tránh 2 màn hình ra 2 điểm khác nhau.
   const pendingEssay = totals.essayPending && totals.essayMax > 0
 
+  const subjectKey   = SUBJECTS[exam.subject] ? exam.subject : null
+  const subjectLabel = subjectKey ? SUBJECTS[subjectKey].label : null
+  const accuracy     = totals.auto ? Math.round((totals.right / totals.auto) * 100) : null
+  const paceSec      = submission.timeSpent && totals.count ? Math.round(submission.timeSpent / totals.count) : null
+  const pace         = paceSec == null ? '—'
+    : paceSec >= 60 ? `${Math.floor(paceSec / 60)}p${String(paceSec % 60).padStart(2, '0')}/câu`
+    : `${paceSec}s/câu`
+  // "Làm lại": đề giao trong lớp thì quay về lớp để vào lại đúng luồng (giữ
+  // nguyên luật số lần làm / thời gian mở); đề lẻ thì vào sảnh đề thi.
+  const retakeHref = submission.classId ? `#class/${submission.classId}/exam` : `#lobby/${examId}`
+  const nextHref   = submission.classId ? `#class/${submission.classId}` : '#my-classes'
+  const goDetail   = () => document.getElementById('rv-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
   return (
     <div className="rv-page">
       <div className="rv-topbar">
         <div className="rv-topbar-in">
-          <div className="rv-topbar-title">
-            <span className="rv-topbar-label">Đối chiếu với đề gốc</span>
+          <div className={`rv-topbar-title ${compact ? 'is-visible' : ''}`}>
+            <span className="rv-topbar-label">Kết quả bài làm</span>
             <h1>{exam.title}</h1>
           </div>
           <div className="rv-topbar-act">
@@ -350,46 +541,140 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
       </div>
 
       <div className="rv-body">
-        <section className="rv-summary">
-          <div className="rv-score" style={{ color: scoreColor }}>
-            {scaled}<span>/10</span>
+        {/* ── Block 1: tiêu đề + breadcrumb + trạng thái ── */}
+        <header className="rv-head" ref={headRef}>
+          <nav className="rv-crumbs">
+            <a href="#history">Lịch sử</a>
+            <span>›</span>
+            {subjectKey && (<><a href={`#history/${subjectKey}`}>{subjectLabel}</a><span>›</span></>)}
+            {submission.className && (<><span className="rv-crumb-mid">{submission.className}</span><span>›</span></>)}
+            <span className="rv-crumb-cur">{exam.title}</span>
+          </nav>
+          <div className="rv-head-row">
+            <h1>{exam.title}</h1>
+            <span className={`rv-state ${pendingEssay ? 'rv-state--pending' : ''}`}>
+              {pendingEssay ? '⏳ Chờ chấm tự luận' : '✓ Đã hoàn thành'}
+            </span>
+            {submission.studentName && <span className="rv-state rv-state--muted">👤 {submission.studentName}</span>}
           </div>
-          <div className="rv-summary-meta">
-            <div className="rv-summary-row">
-              <span><b>{totals.right}</b>/{totals.auto} câu đúng</span>
-              <span>{submission.score}/{submission.maxScore} điểm</span>
-              <span>⏱ {formatDuration(submission.timeSpent)}</span>
-              <span>🗓 {formatDt(submission.submittedAt)}</span>
-              {submission.className && <span>🏫 {submission.className}</span>}
-              {submission.studentName && <span>👤 {submission.studentName}</span>}
+        </header>
+
+        <div className="rv-hero">
+          <div className="rv-hero-main">
+            {/* ── Block 2: điểm số + nhận xét + so sánh lần trước ── */}
+            <section className={`rv-score-card rv-score-card--${band}`}>
+              <RadialScore score={scaled} band={band} />
+              <div className="rv-score-body">
+                <p className="rv-score-msg">{BAND_MSG[band]}</p>
+                <p className="rv-score-sub">
+                  {submission.score}/{submission.maxScore} điểm · {totals.right}/{totals.auto} câu đúng
+                  {progress.attemptNo > 0 && ` · lần làm thứ ${progress.attemptNo}`}
+                </p>
+                {progress.prevDelta == null ? (
+                  <p className="rv-delta rv-delta--flat">● Đây là lần làm đầu tiên của đề này</p>
+                ) : progress.prevDelta > 0 ? (
+                  <p className="rv-delta rv-delta--up">▲ Cao hơn {progress.prevDelta} điểm so với lần làm trước</p>
+                ) : progress.prevDelta < 0 ? (
+                  <p className="rv-delta rv-delta--down">▼ Thấp hơn {Math.abs(progress.prevDelta)} điểm so với lần làm trước</p>
+                ) : (
+                  <p className="rv-delta rv-delta--flat">● Bằng điểm lần làm trước</p>
+                )}
+              </div>
+            </section>
+
+            {/* ── Block 3: thông số chi tiết ── */}
+            <div className="rv-stat-grid">
+              <StatTile icon="⏱" tone="blue" label="Thời gian làm"
+                value={formatClock(submission.timeSpent)} hint={formatDt(submission.submittedAt)} />
+              <StatTile icon="🎯" tone={band} label="Độ chính xác"
+                value={accuracy == null ? '—' : `${accuracy}%`} hint={`${totals.right}/${totals.auto} câu đúng`} />
+              <StatTile icon="🏅" tone="violet" label="Hạng lần làm"
+                value={progress.rank ? `#${progress.rank}` : '—'}
+                hint={progress.attempts.length > 1 ? `trong ${progress.attempts.length} lần làm đề này` : 'mới làm 1 lần'} />
+              <StatTile icon="⚡" tone="amber" label="Tốc độ trung bình"
+                value={pace} hint={`${totals.count} câu trong đề`} />
             </div>
-            <div className="rv-score-bar">
-              <div className="rv-score-fill" style={{ width: `${Math.min(100, (scaled / 10) * 100)}%`, background: scoreColor }} />
+
+            {/* ── Block 5: nút hành động ── */}
+            <div className="rv-actions">
+              <button className="rv-btn rv-btn--primary" onClick={goDetail}>🔍 Xem chi tiết bài làm</button>
+              <a className="rv-btn rv-btn--outline" href={retakeHref}>🔁 Làm lại bài này</a>
+              <a className="rv-btn rv-btn--soft" href={nextHref}>Học tiếp →</a>
             </div>
           </div>
-        </section>
 
-        {shuffled && (
-          <p className="rv-callout">
-            Lượt làm này bật <b>trộn đề</b>. Bên dưới là <b>đề gốc</b> — thứ tự câu và nhãn A/B/C/D theo
-            đề gốc, mỗi câu có ghi chú vị trí bạn đã thấy lúc làm bài.
-          </p>
-        )}
-        {pendingEssay && (
-          <p className="rv-callout rv-callout--warn">
-            ✍️ Phần tự luận đang chờ giáo viên chấm — điểm ở trên đã tính trên tổng điểm toàn đề
-            (phần tự luận tạm tính 0đ cho tới khi được chấm).
-          </p>
-        )}
+          {/* ── Block 4 + gợi ý: đường tiến độ & các lần làm khác ── */}
+          <aside className="rv-hero-side">
+            <section className="rv-card">
+              <h3 className="rv-card-title">{subjectLabel ? `Tiến độ môn ${subjectLabel}` : 'Tiến độ qua các lần làm'}</h3>
+              {progress.trend.length >= 2 ? (
+                <>
+                  <MiniTrend points={progress.trend} currentId={submission.id} />
+                  <p className="rv-card-note">{progress.trend.length} lần làm gần nhất · chấm đậm là bài đang xem</p>
+                </>
+              ) : (
+                <p className="rv-card-empty">Cần ít nhất 2 bài đã có điểm để vẽ đường tiến độ.</p>
+              )}
+              <a className="rv-card-link" href={subjectKey ? `#history/${subjectKey}` : '#history'}>
+                Xem toàn bộ tiến độ →
+              </a>
+            </section>
 
-        <div className="rv-filter">
-          <button className={`rv-filter-btn ${!onlyWrong ? 'is-active' : ''}`} onClick={() => setOnlyWrong(false)}>
-            Tất cả câu <b>{totals.count}</b>
-          </button>
-          <button className={`rv-filter-btn ${onlyWrong ? 'is-active' : ''}`} onClick={() => setOnlyWrong(true)}>
-            Câu cần xem lại <b>{totals.wrong}</b>
-          </button>
+            {progress.attempts.length > 1 && (
+              <section className="rv-card">
+                <h3 className="rv-card-title">Các lần làm đề này</h3>
+                <ul className="rv-attempts">
+                  {progress.attempts.map((a, i) => ({ ...a, no: i + 1 })).reverse().map(a => {
+                    const isCur = String(a.id) === String(subId)
+                    return (
+                      <li key={a.id}>
+                        <a className={`rv-attempt ${isCur ? 'is-current' : ''}`} href={`#results/${examId}/${a.id}`}>
+                          <span className="rv-attempt-no">Lần {a.no}</span>
+                          <span className="rv-attempt-date">
+                            {a.submittedAt ? new Date(a.submittedAt).toLocaleDateString('vi-VN') : '—'}
+                          </span>
+                          <span className="rv-attempt-score" style={{ color: BAND_COLOR[bandOf(a.scaled)] }}>
+                            {a.scaled}<i>/10</i>
+                          </span>
+                        </a>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            )}
+          </aside>
         </div>
+
+        {/* ── Chi tiết: đối chiếu với đề gốc ── */}
+        <section id="rv-detail" className="rv-detail">
+          <header className="rv-detail-head">
+            <div>
+              <span className="rv-detail-label">Đối chiếu với đề gốc</span>
+              <h2>Chi tiết từng câu</h2>
+            </div>
+            <div className="rv-filter">
+              <button className={`rv-filter-btn ${!onlyWrong ? 'is-active' : ''}`} onClick={() => setOnlyWrong(false)}>
+                Tất cả câu <b>{totals.count}</b>
+              </button>
+              <button className={`rv-filter-btn ${onlyWrong ? 'is-active' : ''}`} onClick={() => setOnlyWrong(true)}>
+                Câu cần xem lại <b>{totals.wrong}</b>
+              </button>
+            </div>
+          </header>
+
+          {shuffled && (
+            <p className="rv-callout">
+              Lượt làm này bật <b>trộn đề</b>. Bên dưới là <b>đề gốc</b> — thứ tự câu và nhãn A/B/C/D theo
+              đề gốc, mỗi câu có ghi chú vị trí bạn đã thấy lúc làm bài.
+            </p>
+          )}
+          {pendingEssay && (
+            <p className="rv-callout rv-callout--warn">
+              ✍️ Phần tự luận đang chờ giáo viên chấm — điểm ở trên đã tính trên tổng điểm toàn đề
+              (phần tự luận tạm tính 0đ cho tới khi được chấm).
+            </p>
+          )}
 
         {blocks.map(block => {
           const items = onlyWrong
@@ -425,6 +710,7 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
         {onlyWrong && totals.wrong === 0 && (
           <p className="rv-empty">🎉 Bạn làm đúng toàn bộ các câu có đáp án. Quá tuyệt!</p>
         )}
+        </section>
 
         <div className="rv-foot">
           <a className="rv-btn rv-btn--ghost" href="#history">← Lịch sử làm bài</a>
