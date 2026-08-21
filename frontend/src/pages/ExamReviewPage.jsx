@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { fetchSubmissionReview, fetchMySubmissions, scaledScore } from '../store/examStore.js'
+import { fetchSubmissionReview, fetchMySubmissions, examStatus, scaledScore } from '../store/examStore.js'
+import { getExamWindow } from '../store/classStore.js'
 import { QuestionText, FigureImages, SECTION_PREFIX, toPassageHTML } from '../components/QuestionCard.jsx'
 import { SUBJECTS } from '../components/SubjectBadge.jsx'
 import MathText from '../components/MathText.jsx'
@@ -28,7 +29,6 @@ const SECTION_META = {
 }
 
 const MC_SECTIONS = ['PHẦN I', 'TIẾNG ANH', 'READING']
-const DISPLAY_LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
 
 const STATUS_META = {
   right:   { label: 'Đúng',          icon: '✓' },
@@ -184,7 +184,7 @@ function buildReview(exam, submission) {
       const picked = answers[key]
       // Vị trí câu này trong bản trộn học sinh đã làm (0 = đề không trộn)
       const seenAt = order ? order.indexOf(q.question_number) + 1 : 0
-      const base   = { q, key, picked, seenAt, choiceOrder: shuffle?.choices?.[key] || null }
+      const base   = { q, key, picked, seenAt }
 
       if (MC_SECTIONS.includes(sec)) {
         // PHẦN I tính điểm tối đa cho mọi câu; TIẾNG ANH/READING chỉ tính câu có đáp án
@@ -260,16 +260,8 @@ function PassageBox({ title, text }) {
 
 /* ── Một câu trong đề gốc + dấu vết bài làm của học sinh ── */
 function ReviewQuestion({ item, showPassage }) {
-  const { q, kind, status, picked, earned, max, seenAt, choiceOrder } = item
+  const { q, kind, status, picked, earned, max, seenAt } = item
   const meta = STATUS_META[status] || STATUS_META.nokey
-
-  // Đề bật trộn đáp án: nhãn học sinh THẤY lúc làm khác nhãn của đề gốc —
-  // ghi chú lại để không bị hiểu nhầm là "em chọn B mà sao ở đây là A".
-  const seenLabelOf = (realKey) => {
-    if (!Array.isArray(choiceOrder) || realKey == null) return null
-    const idx = choiceOrder.indexOf(realKey)
-    return idx >= 0 ? (DISPLAY_LABELS[idx] || null) : null
-  }
 
   return (
     <article className={`rv-q rv-q--${status}`} id={`q-${item.key}`}>
@@ -297,14 +289,15 @@ function ReviewQuestion({ item, showPassage }) {
             const isKey  = q.answer != null && key === q.answer
             const isPick = picked === key
             const cls = isKey && isPick ? 'is-right' : isPick ? 'is-wrong' : isKey ? 'is-key' : ''
-            const seen = isPick ? seenLabelOf(key) : null
             return (
               <div key={key} className={`rv-choice ${cls}`}>
                 <span className="rv-choice-key">{key}.</span>
                 <span className="rv-choice-text"><MarkerText text={val} images={q.images} /></span>
                 <span className="rv-choice-tags">
-                  {isPick && <em className="rv-tag rv-tag--pick">Bạn chọn{seen && seen !== key ? ` (lúc làm là ${seen})` : ''}</em>}
-                  {isKey  && <em className="rv-tag rv-tag--key">Đáp án đúng</em>}
+                  {/* Chọn trúng đáp án: ô xanh + đúng 1 nhãn "Đúng" cho gọn */}
+                  {isKey && isPick && <em className="rv-tag rv-tag--ok">Đúng</em>}
+                  {isPick && !isKey && <em className="rv-tag rv-tag--pick">Bạn chọn</em>}
+                  {isKey && !isPick && <em className="rv-tag rv-tag--key">Đáp án đúng</em>}
                 </span>
               </div>
             )
@@ -382,6 +375,9 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
   // tránh in cùng một tên đề 2 lần ngay đầu trang.
   const [compact, setCompact]       = useState(false)
   const headRef                     = useRef(null)
+  // Nút "Làm lại bài này" chỉ bấm được khi đề THỰC SỰ đang mở cho học sinh đó
+  // (trong giờ + còn lượt làm); các trường hợp khác để disabled kèm tooltip.
+  const [retake, setRetake]         = useState({ status: 'loading', tip: 'Đang kiểm tra tình trạng đề…' })
 
   useEffect(() => {
     let alive = true
@@ -410,6 +406,41 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
       .catch(() => { if (alive) setHistory([]) })
     return () => { alive = false }
   }, [submission?.studentId])
+
+  // Đề còn làm lại được không? Đề giao trong lớp hỏi server (giờ mở + số lượt đã
+  // dùng của chính học sinh); đề lẻ thì theo lịch mở/đóng lưu trong settings.
+  useEffect(() => {
+    if (state !== 'ready' || !exam || !submission) return
+    let alive = true
+    const put = r => { if (alive) setRetake(r) }
+    const CLOSED = { status: 'closed', tip: 'Hiện tại đề này đang đóng' }
+
+    if (submission.classId) {
+      getExamWindow(submission.classId, examId, submission.studentId, null, submission.assignmentId)
+        .then(w => {
+          if (!w || !w.assigned) return put(CLOSED)
+          const now = Date.now()
+          if (w.openTime && now < new Date(w.openTime).getTime())
+            return put({ status: 'pending', tip: `Đề chưa mở — mở lúc ${formatDt(w.openTime)}` })
+          if (w.closeTime && now > new Date(w.closeTime).getTime()) return put(CLOSED)
+          const used = w.attemptsUsed ?? 0
+          if (w.maxAttempts && used >= w.maxAttempts)
+            return put({ status: 'exhausted', tip: `Bạn đã dùng hết ${w.maxAttempts} lượt làm cho phép` })
+          put({
+            status: 'open',
+            tip: w.maxAttempts ? `Đề đang mở · còn ${w.maxAttempts - used} lượt làm` : 'Đề đang mở · không giới hạn lượt làm',
+          })
+        })
+        .catch(() => put(CLOSED))
+      return () => { alive = false }
+    }
+
+    const st = examStatus(exam)   // draft | pending | expired | open
+    if (st === 'open') put({ status: 'open', tip: 'Đề đang mở — vào làm lại ngay' })
+    else if (st === 'pending') put({ status: 'pending', tip: `Đề chưa mở — mở lúc ${formatDt(exam.settings?.openTime)}` })
+    else put(CLOSED)
+    return () => { alive = false }
+  }, [state, exam, submission, examId])
 
   useEffect(() => {
     const el = headRef.current
@@ -598,7 +629,16 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
             {/* ── Block 5: nút hành động ── */}
             <div className="rv-actions">
               <button className="rv-btn rv-btn--primary" onClick={goDetail}>🔍 Xem chi tiết bài làm</button>
-              <a className="rv-btn rv-btn--outline" href={retakeHref}>🔁 Làm lại bài này</a>
+              {/* Nút disabled không nhận focus/hover → cho chính lớp bọc tab được
+                  để người dùng bàn phím vẫn đọc được lý do bị khoá. */}
+              <span className="rv-tipwrap" data-tip={retake.tip}
+                tabIndex={retake.status === 'open' ? undefined : 0}>
+                {retake.status === 'open' ? (
+                  <a className="rv-btn rv-btn--outline" href={retakeHref}>🔁 Làm lại bài này</a>
+                ) : (
+                  <button className="rv-btn rv-btn--outline" disabled>🔁 Làm lại bài này</button>
+                )}
+              </span>
               <a className="rv-btn rv-btn--soft" href={nextHref}>Học tiếp →</a>
             </div>
           </div>

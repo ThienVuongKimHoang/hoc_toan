@@ -162,6 +162,37 @@
 .rv-btn--outline:hover { background: #eff6ff; transform: translateY(-1px); }
 .rv-btn--soft { background: #f1f5f9; color: #475569; padding: 12px 18px; font-size: 0.9rem; }
 .rv-btn--soft:hover { background: #e2e8f0; color: #0f172a; }
+.rv-btn:disabled { cursor: not-allowed; }
+.rv-btn--outline:disabled,
+.rv-btn--outline:disabled:hover {
+  background: #f8fafc; color: #94a3b8; border-color: #e2e8f0;
+  transform: none; box-shadow: none;
+}
+
+/* Tooltip cho nút bị khoá — bọc ngoài vì nút disabled không nhận sự kiện chuột */
+.rv-tipwrap { position: relative; display: inline-flex; }
+.rv-tipwrap::after {
+  content: attr(data-tip);
+  position: absolute; left: 50%; bottom: calc(100% + 9px); z-index: 6;
+  transform: translateX(-50%) translateY(4px);
+  background: #0f172a; color: #f8fafc;
+  font-size: 0.76rem; font-weight: 600; line-height: 1.45; text-align: center;
+  padding: 7px 11px; border-radius: 9px;
+  max-width: 240px; width: max-content;
+  opacity: 0; pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+  box-shadow: 0 12px 24px -12px rgba(15,23,42,0.7);
+}
+.rv-tipwrap::before {
+  content: ''; position: absolute; left: 50%; bottom: calc(100% + 4px); z-index: 6;
+  transform: translateX(-50%);
+  border: 5px solid transparent; border-top-color: #0f172a;
+  opacity: 0; pointer-events: none; transition: opacity .18s ease;
+}
+.rv-tipwrap:hover::after, .rv-tipwrap:focus-within::after, .rv-tipwrap:focus::after {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+.rv-tipwrap:hover::before, .rv-tipwrap:focus-within::before, .rv-tipwrap:focus::before { opacity: 1; }
 
 /* ─── Block 4 + gợi ý: thẻ bên phải ─── */
 .rv-card {
@@ -296,6 +327,8 @@
 .rv-tag--pick { background: rgba(15,23,42,0.06); color: #334155; border-color: rgba(15,23,42,0.10); }
 .rv-tag--key  { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
 .rv-tag--ok   { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+/* Nhãn "Đúng" nằm trong ô đáp án đã xanh → tô đặc cho nổi bật */
+.rv-choice.is-right .rv-tag--ok { background: #059669; color: #ffffff; border-color: #059669; }
 .rv-tag--bad  { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
 .rv-tag--miss { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
 
@@ -366,6 +399,8 @@
   .rv-score-body { min-width: 0; }
   .rv-actions { flex-direction: column; }
   .rv-actions .rv-btn { justify-content: center; }
+  .rv-actions .rv-tipwrap { width: 100%; }
+  .rv-actions .rv-tipwrap .rv-btn { width: 100%; }
   .rv-detail-head { align-items: flex-start; }
   .rv-choice-tags, .rv-tf-ans { margin-left: 0; width: 100%; }
   .rv-filter { width: 100%; }

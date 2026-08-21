@@ -1,17 +1,33 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { examStatus, fetchExamById, submitResult, scaledScore, verifyLockEscape } from '../store/examStore.js'
 import { getExamWindow } from '../store/classStore.js'
-import QuestionCard from '../components/QuestionCard.jsx'
+import QuestionCard, { SECTION_PREFIX } from '../components/QuestionCard.jsx'
 import ReadingTakeView from '../components/ReadingTakeView.jsx'
 import { buildShuffleMap, reorderByQuestionNumber } from '../utils/shuffle.js'
+import './ExamTakePage.css'
 
 const SECTION_LABELS = {
-  'PHẦN I':    { label: 'Phần I – Trắc nghiệm',         color: '#2563eb' },
-  'PHẦN II':   { label: 'Phần II – Đúng / Sai',          color: '#7c3aed' },
-  'PHẦN III':  { label: 'Phần III – Trả lời ngắn',       color: '#059669' },
-  'TỰ LUẬN':   { label: 'Tự luận – Upload bài làm',      color: '#d97706' },
-  'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm',      color: '#0f766e' },
-  'READING':   { label: 'Reading – Bài đọc',            color: '#0e7490' },
+  'PHẦN I':    { label: 'Phần I – Trắc nghiệm',         short: 'Phần I',    color: '#2563eb' },
+  'PHẦN II':   { label: 'Phần II – Đúng / Sai',          short: 'Phần II',   color: '#7c3aed' },
+  'PHẦN III':  { label: 'Phần III – Trả lời ngắn',       short: 'Phần III',  color: '#059669' },
+  'TỰ LUẬN':   { label: 'Tự luận – Upload bài làm',      short: 'Tự luận',   color: '#d97706' },
+  'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm',      short: 'Tiếng Anh', color: '#0f766e' },
+  'READING':   { label: 'Reading – Bài đọc',            short: 'Reading',   color: '#0e7490' },
+}
+
+/* Câu này đã trả lời chưa — dùng tô màu ô số trong bảng điều hướng.
+   'done' = đã trả lời · 'partial' = mới chọn vài ý (PHẦN II) · 'none' = chưa làm. */
+function answerStateOf(sec, q, val) {
+  if (sec === 'PHẦN II') {
+    const subs = q.sub_questions || []
+    const user = (val && typeof val === 'object') ? val : {}
+    const done = subs.filter(s => user[s.label] !== undefined).length
+    if (!subs.length || done === 0) return 'none'
+    return done === subs.length ? 'done' : 'partial'
+  }
+  if (sec === 'TỰ LUẬN')  return Array.isArray(val) && val.length > 0 ? 'done' : 'none'
+  if (sec === 'PHẦN III') return String(val ?? '').trim() ? 'done' : 'none'
+  return val != null && val !== '' ? 'done' : 'none'
 }
 
 function getSectionList(exam) {
@@ -212,31 +228,6 @@ function fmtDate(iso) {
   })
 }
 
-/* ── Timer bar ── */
-function TimerBar({ endIso, durationMins }) {
-  const msLeft = useCountdown(endIso)
-  const total  = durationMins * 60_000
-  const pct    = Math.round((msLeft / total) * 100)
-  const urgent = pct < 20
-  const warn   = pct < 50
-  return (
-    <div className={`timer-bar ${urgent ? 'urgent' : warn ? 'warning' : ''}`}>
-      <div className="tb-left">
-        <span className="tb-icon">{urgent ? '🔴' : warn ? '🟡' : '🟢'}</span>
-        <span className="tb-label">Thời gian còn lại</span>
-      </div>
-      <div className="tb-center">
-        <span className="tb-time">{fmtMs(msLeft)}</span>
-      </div>
-      <div className="tb-track">
-        <div className="tb-fill"
-          style={{ width: `${pct}%`, background: urgent ? '#ef4444' : warn ? '#f59e0b' : '#22c55e' }}
-        />
-      </div>
-    </div>
-  )
-}
-
 /* ── Locked / Expired views ── */
 function LockedView({ exam, onGoHome }) {
   const ms = useCountdown(exam.settings.openTime)
@@ -352,40 +343,6 @@ function PasswordGate({ exam, onCorrect }) {
   )
 }
 
-/* ── Section navigation bar (bottom) ── */
-function SectionNav({ sections, sectionList, active, onChange }) {
-  const idx  = sectionList.indexOf(active)
-  const prev = sectionList[idx - 1]
-  const next = sectionList[idx + 1]
-  return (
-    <div className="section-nav-bar">
-      {prev ? (
-        <button className="snb-btn snb-prev" onClick={() => onChange(prev)}>
-          ← {SECTION_LABELS[prev]?.label ?? prev}
-        </button>
-      ) : <span />}
-      <div className="snb-dots">
-        {sectionList.map(s =>
-          sections[s]?.questions?.length > 0 && (
-            <button
-              key={s}
-              className={`snb-dot ${active === s ? 'active' : ''}`}
-              style={{ '--dot-color': SECTION_LABELS[s]?.color ?? '#475569' }}
-              onClick={() => onChange(s)}
-              title={SECTION_LABELS[s]?.label ?? s}
-            />
-          )
-        )}
-      </div>
-      {next ? (
-        <button className="snb-btn snb-next" onClick={() => onChange(next)}>
-          {SECTION_LABELS[next]?.label ?? next} →
-        </button>
-      ) : <span />}
-    </div>
-  )
-}
-
 /* ── Main exam view ── */
 function ExamView({ exam, studentName, studentId, className, classId, assignmentId, onGoHome, onGoClass }) {
   const hideResults    = exam.settings?.hideResults || false
@@ -412,6 +369,33 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   const [submitErr,     setSubmitErr]     = useState('')
   const [finalScore,    setFinalScore]    = useState(null)
   const [finalMax,      setFinalMax]      = useState(null)
+  // Câu đánh dấu "xem lại sau" — lưu cùng lượt làm bài để F5 không mất
+  const [flags,      setFlags]      = useState(() => savedAttempt?.flags || [])
+  const [focusMode,  setFocusMode]  = useState(false)   // chế độ tập trung: 1 câu / màn hình
+  const [focusKey,   setFocusKey]   = useState(null)
+  const [sideOpen,   setSideOpen]   = useState(false)   // ngăn kéo bảng câu hỏi (mobile)
+  const [scrollTo,   setScrollTo]   = useState(null)    // key câu cần cuộn tới sau khi đổi phần
+
+  // Danh sách phẳng mọi câu theo đúng thứ tự học sinh thấy — dùng cho bảng số
+  // câu, chế độ tập trung và đếm tiến độ.
+  const flatQuestions = useMemo(() => {
+    const out = []
+    for (const sec of sectionList) {
+      const raw = exam.sections?.[sec]?.questions ?? []
+      const qs  = reorderByQuestionNumber(raw, shuffleMap?.sections?.[sec])
+      qs.forEach((q, i) => {
+        out.push({
+          sec, q, i,
+          no:  i + 1,                                        // số hiển thị trong phần
+          key: `${SECTION_PREFIX[sec] || 'I'}_${q.question_number}`,
+        })
+      })
+    }
+    return out
+  }, [exam, sectionList.join('|'), shuffleMap])
+
+  const toggleFlag = (key) =>
+    setFlags(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]))
 
   // Khóa màn hình (chống gian lận) — bật theo cài đặt của giáo viên
   const lockOn = !!exam.settings?.lockScreen
@@ -443,8 +427,16 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   // quay lại (F5, mất mạng, đóng tab...) không bị tính lại từ đầu.
   useEffect(() => {
     if (submitted || startedAt == null) return
-    saveAttempt(attemptKeyStr, { startedAt, answers, shuffleMap })
-  }, [answers, startedAt, submitted, attemptKeyStr, shuffleMap])
+    saveAttempt(attemptKeyStr, { startedAt, answers, shuffleMap, flags })
+  }, [answers, startedAt, submitted, attemptKeyStr, shuffleMap, flags])
+
+  // Bấm số câu ở bảng điều hướng khi đang ở phần khác → đổi phần xong mới cuộn tới câu đó
+  useEffect(() => {
+    if (!scrollTo) return
+    const el = document.getElementById(`etx-q-${scrollTo}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setScrollTo(null)
+  }, [scrollTo, activeSection])
 
   const handleAnswerChange = (key, val) => {
     setAnswers(prev => ({ ...prev, [key]: val }))
@@ -544,11 +536,62 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
     )
   }
 
-  const rawQuestions = exam.sections?.[activeSection]?.questions ?? []
-  const questions = reorderByQuestionNumber(rawQuestions, shuffleMap?.sections?.[activeSection])
+  const items      = flatQuestions.filter(f => f.sec === activeSection)
+  const doneCount  = flatQuestions.filter(f => answerStateOf(f.sec, f.q, answers[f.key]) === 'done').length
+  const focusItem  = focusMode
+    ? (flatQuestions.find(f => f.key === focusKey) || items[0] || flatQuestions[0] || null)
+    : null
+  const focusIdx   = focusItem ? flatQuestions.indexOf(focusItem) : -1
+  const secIdx     = sectionList.indexOf(activeSection)
+  const nextSection = sectionList[secIdx + 1]
+
+  const pctLeft  = Math.max(0, Math.min(100, (msLeft / (exam.settings.duration * 60_000)) * 100))
+  // Dưới 5 phút → cam, dưới 1 phút → đỏ (kèm nhấp nháy) để học sinh không lỡ giờ
+  const timeTone = msLeft <= 60_000 ? 'is-urgent' : msLeft <= 5 * 60_000 ? 'is-warn' : ''
+
+  const goToQuestion = (item) => {
+    setActiveSection(item.sec)
+    setSideOpen(false)
+    if (focusMode) { setFocusKey(item.key); scrollTop() }
+    else setScrollTo(item.key)
+  }
+  const goStep = (delta) => {
+    const next = flatQuestions[focusIdx + delta]
+    if (!next) return
+    setActiveSection(next.sec)
+    setFocusKey(next.key)
+    scrollTop()
+  }
+  const toggleFocus = () => {
+    if (!focusMode && !focusKey) setFocusKey((items[0] || flatQuestions[0])?.key || null)
+    setFocusMode(v => !v)
+    scrollTop()
+  }
+
+  const renderQuestion = (item) => {
+    const flagged = flags.includes(item.key)
+    return (
+      <div className="etx-q" id={`etx-q-${item.key}`} key={item.key}>
+        <QuestionCard
+          q={item.q} index={item.i} displayNumber={item.no}
+          examMode={true}
+          answers={answers}
+          onAnswerChange={handleAnswerChange}
+          choiceOrders={shuffleMap?.choices}
+          headerExtra={
+            <button type="button" className={`etx-flag ${flagged ? 'is-on' : ''}`}
+              title={flagged ? 'Bỏ đánh dấu' : 'Đánh dấu để xem lại sau'}
+              onClick={(e) => { e.stopPropagation(); toggleFlag(item.key) }}>
+              {flagged ? '🚩' : '⚑'}<span>{flagged ? 'Đã đánh dấu' : 'Đánh dấu'}</span>
+            </button>
+          }
+        />
+      </div>
+    )
+  }
 
   return (
-    <div className="et-exam">
+    <div className="et-exam etx">
       {askUnlock && (
         <UnlockPrompt onSubmit={tryUnlock} onClose={closeUnlock} />
       )}
@@ -569,8 +612,8 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
           </div>
         </div>
       )}
-      {/* Khối dính trên cùng: khóa màn hình + đồng hồ + thông tin bài làm — cuộn theo trang */}
-      <div className="et-sticky-top">
+      {/* ── Thanh trên cùng gộp: đồng hồ · tên đề · tập trung · nộp bài ── */}
+      <header className={`etx-top ${timeTone}`}>
         {lockActive && (
           <>
             <div className="et-lock-status">🔒 Chế độ khóa màn hình đang bật · Vi phạm: <strong>{violations}</strong></div>
@@ -582,94 +625,175 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
             )}
           </>
         )}
-        <TimerBar endIso={endIso} durationMins={exam.settings.duration} />
-        <div className="et-info-bar">
-          <div className="et-info-left">
-            <span className="et-info-title">📋 {exam.title}</span>
-            <span className="total-badge">{exam.totalQuestions} câu hỏi</span>
+        <div className="etx-top-in">
+          <div className="etx-clock-wrap" title="Thời gian còn lại">
+            <span className="etx-clock">{fmtMs(msLeft)}</span>
+            <span className="etx-clock-label">còn lại</span>
           </div>
-          <div className="et-meta-right">
-            {className && <span className="et-class-badge">🏫 {className}</span>}
-            <span className="et-student-name">👤 {studentName}</span>
-            <button className="btn-submit-exam" disabled={submitting}
-              onClick={() => handleSubmit(false)}>
+          <div className="etx-titlebox">
+            <h1 className="etx-title">{exam.title}</h1>
+            <p className="etx-sub">
+              {className ? `${className} · ` : ''}{studentName} · đã làm {doneCount}/{flatQuestions.length} câu
+            </p>
+          </div>
+          <div className="etx-top-act">
+            <button className="etx-ghost etx-side-toggle" onClick={() => setSideOpen(v => !v)}>
+              ☰ <b>{doneCount}</b>/{flatQuestions.length}
+            </button>
+            <button className={`etx-ghost ${focusMode ? 'is-on' : ''}`} onClick={toggleFocus}
+              title="Chỉ hiển thị 1 câu mỗi màn hình">
+              {focusMode ? '▦ Xem tất cả' : '◎ Tập trung'}
+            </button>
+            <button className="etx-submit" disabled={submitting} onClick={() => handleSubmit(false)}>
               {submitting ? '⏳ Đang nộp…' : '✅ Nộp bài'}
             </button>
           </div>
         </div>
-      </div>
+        <div className="etx-timeline">
+          <div className="etx-timeline-fill" style={{ width: `${pctLeft}%` }} />
+        </div>
+      </header>
 
-      <div className="app" style={{ paddingTop: 16 }}>
-        {submitErr && <div className="pm-error" style={{ margin: '8px 0' }}>⚠️ {submitErr}</div>}
+      <div className="etx-layout">
+        {/* ── Cột trái: bảng số câu hỏi ── */}
+        <aside className={`etx-side ${sideOpen ? 'is-open' : ''}`}>
+          <div className="etx-side-top">
+            <div className="etx-side-title">Danh sách câu hỏi</div>
+            <button className="etx-side-close" onClick={() => setSideOpen(false)}>✕</button>
+          </div>
+          <div className="etx-progress">
+            <div className="etx-progress-bar">
+              <div className="etx-progress-fill"
+                style={{ width: `${flatQuestions.length ? (doneCount / flatQuestions.length) * 100 : 0}%` }} />
+            </div>
+            <span className="etx-progress-text">Đã làm <b>{doneCount}</b>/{flatQuestions.length}</span>
+          </div>
 
-        {sectionList.length > 1 && (
-          <div className="section-tabs">
-            {sectionList.map(sec => {
-              const count = exam.sections?.[sec]?.questions?.length ?? 0
-              const meta  = SECTION_LABELS[sec] ?? { label: sec, color: '#475569' }
-              return (
-                <button key={sec}
-                  className={`tab-btn ${activeSection === sec ? 'active' : ''}`}
-                  style={{ '--tab-color': meta.color }}
-                  onClick={() => { setActiveSection(sec); scrollTop() }}
-                >
-                  {meta.label}<span className="tab-count">{count}</span>
+          {sectionList.map(sec => {
+            const meta = SECTION_LABELS[sec] ?? { short: sec, color: '#475569' }
+            const list = flatQuestions.filter(f => f.sec === sec)
+            const done = list.filter(f => answerStateOf(sec, f.q, answers[f.key]) === 'done').length
+            return (
+              <div key={sec} className={`etx-secblock ${activeSection === sec ? 'is-active' : ''}`}
+                style={{ '--sec': meta.color }}>
+                <button className="etx-secblock-head" onClick={() => list[0] && goToQuestion(list[0])}>
+                  <span className="etx-secdot" />
+                  <span className="etx-secname">{meta.short ?? sec}</span>
+                  <em>{done}/{list.length}</em>
                 </button>
-              )
-            })}
-          </div>
-        )}
+                <div className="etx-qgrid">
+                  {list.map(f => {
+                    const st = answerStateOf(sec, f.q, answers[f.key])
+                    const cur = focusMode ? focusItem?.key === f.key : false
+                    return (
+                      <button key={f.key}
+                        className={`etx-qbtn is-${st} ${flags.includes(f.key) ? 'is-flag' : ''} ${cur ? 'is-current' : ''}`}
+                        onClick={() => goToQuestion(f)}
+                        title={`${meta.short ?? sec} · câu ${f.no}${flags.includes(f.key) ? ' (đã đánh dấu)' : ''}`}>
+                        {f.no}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
 
-        {exam.sections?.[activeSection] && (
-          <div className="section-desc">
-            <span style={{ color: SECTION_LABELS[activeSection]?.color }}>
-              {SECTION_LABELS[activeSection]?.label ?? activeSection}
-            </span>
-            {' — '}{exam.sections[activeSection].questions.length} câu ×{' '}
-            {exam.sections[activeSection].points_per_q}đ/câu
+          <div className="etx-legend">
+            <span><i className="etx-lg etx-lg--done" /> Đã làm</span>
+            <span><i className="etx-lg etx-lg--partial" /> Làm dở</span>
+            <span><i className="etx-lg etx-lg--none" /> Chưa làm</span>
+            <span><i className="etx-lg etx-lg--flag" /> Đánh dấu</span>
           </div>
-        )}
+        </aside>
+        {sideOpen && <div className="etx-scrim" onClick={() => setSideOpen(false)} />}
 
-        <div className="question-list">
-          {questions.length === 0 ? (
-            <p className="empty-msg">Không có câu hỏi nào trong phần này.</p>
-          ) : activeSection === 'READING' ? (
-            <ReadingTakeView
-              questions={questions}
-              examMode={true}
-              savedAnswers={answers}
-              onAnswerChange={handleAnswerChange}
-            />
+        {/* ── Cột phải: nội dung câu hỏi ── */}
+        <main className="etx-main">
+          {submitErr && <div className="pm-error" style={{ marginBottom: 10 }}>⚠️ {submitErr}</div>}
+
+          {focusMode ? (
+            !focusItem ? (
+              <p className="empty-msg">Không có câu hỏi nào.</p>
+            ) : activeSection === 'READING' ? (
+              <ReadingTakeView questions={items.map(f => f.q)} examMode={true}
+                savedAnswers={answers} onAnswerChange={handleAnswerChange} />
+            ) : (
+              <>
+                <div className="etx-focus-head">
+                  <span className="etx-focus-count">Câu {focusIdx + 1} / {flatQuestions.length}</span>
+                  <span className="etx-focus-sec" style={{ color: SECTION_LABELS[focusItem.sec]?.color }}>
+                    {SECTION_LABELS[focusItem.sec]?.label ?? focusItem.sec}
+                  </span>
+                </div>
+                {renderQuestion(focusItem)}
+                <div className="etx-focus-nav">
+                  <button className="etx-navbtn" disabled={focusIdx <= 0} onClick={() => goStep(-1)}>
+                    ← Câu trước
+                  </button>
+                  <button className="etx-navbtn" disabled={focusIdx >= flatQuestions.length - 1}
+                    onClick={() => goStep(1)}>
+                    Câu tiếp theo →
+                  </button>
+                </div>
+              </>
+            )
           ) : (
-            questions.map((q, i) => (
-              <QuestionCard
-                key={`${q.section}-${q.question_number}-${i}`}
-                q={q} index={i} displayNumber={i + 1}
-                examMode={true}
-                answers={answers}
-                onAnswerChange={handleAnswerChange}
-                choiceOrders={shuffleMap?.choices}
-              />
-            ))
+            <>
+              {sectionList.length > 1 && (
+                <div className="etx-tabs">
+                  {sectionList.map(sec => {
+                    const meta  = SECTION_LABELS[sec] ?? { short: sec, color: '#475569' }
+                    const count = exam.sections?.[sec]?.questions?.length ?? 0
+                    return (
+                      <button key={sec}
+                        className={`etx-tab ${activeSection === sec ? 'is-active' : ''}`}
+                        style={{ '--sec': meta.color }}
+                        onClick={() => { setActiveSection(sec); scrollTop() }}>
+                        {meta.short ?? sec}<span>{count}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {exam.sections?.[activeSection] && (
+                <p className="etx-secdesc">
+                  <b style={{ color: SECTION_LABELS[activeSection]?.color }}>
+                    {SECTION_LABELS[activeSection]?.label ?? activeSection}
+                  </b>
+                  {' — '}{exam.sections[activeSection].questions.length} câu
+                  {exam.sections[activeSection].points_per_q ? ` × ${exam.sections[activeSection].points_per_q}đ/câu` : ''}
+                </p>
+              )}
+
+              <div className="etx-qlist">
+                {items.length === 0 ? (
+                  <p className="empty-msg">Không có câu hỏi nào trong phần này.</p>
+                ) : activeSection === 'READING' ? (
+                  <ReadingTakeView questions={items.map(f => f.q)} examMode={true}
+                    savedAnswers={answers} onAnswerChange={handleAnswerChange} />
+                ) : (
+                  items.map(renderQuestion)
+                )}
+              </div>
+
+              {nextSection && (
+                <button className="etx-nextsec" onClick={() => { setActiveSection(nextSection); scrollTop() }}>
+                  Sang {SECTION_LABELS[nextSection]?.label ?? nextSection} →
+                </button>
+              )}
+            </>
           )}
-        </div>
 
-        {/* Section navigation at bottom */}
-        <SectionNav
-          sections={exam.sections}
-          sectionList={sectionList}
-          active={activeSection}
-          onChange={(s) => { setActiveSection(s); scrollTop() }}
-        />
-
-        {/* Submit button at bottom */}
-        <div className="et-bottom-submit">
-          {submitErr && <div className="pm-error">⚠️ {submitErr}</div>}
-          <button className="btn-submit-exam btn-submit-bottom" disabled={submitting}
-            onClick={() => handleSubmit(false)}>
-            {submitting ? '⏳ Đang nộp…' : '✅ Nộp bài'}
-          </button>
-        </div>
+          <div className="etx-bottom">
+            {submitErr && <div className="pm-error">⚠️ {submitErr}</div>}
+            <button className="etx-submit etx-submit--lg" disabled={submitting}
+              onClick={() => handleSubmit(false)}>
+              {submitting ? '⏳ Đang nộp…' : '✅ Nộp bài'}
+            </button>
+          </div>
+        </main>
       </div>
     </div>
   )
