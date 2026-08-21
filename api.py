@@ -624,8 +624,9 @@ def _calc_max_score(exam: dict) -> float:
 
 def _answer_stats(exam: dict, answers: dict) -> dict:
     """Số câu đúng / tổng số câu chấm tự động của một bài nộp — dùng cho cột
-    "Đúng/Tổng" ở trang Lịch sử làm bài. PHẦN II tính theo từng ý a–d (mỗi ý là
-    một câu); phần TỰ LUẬN không tính vì giáo viên chấm tay."""
+    "Đúng/Tổng" ở trang Lịch sử làm bài. Đếm theo CÂU của đề gốc (PHẦN II là 1
+    câu, chỉ tính đúng khi đúng cả 4 ý) để khớp với con số "câu đúng" ở trang
+    xem lại bài; phần TỰ LUẬN không tính vì giáo viên chấm tay."""
     answers = answers or {}
     secs    = exam.get("sections") or {}
     correct = total = 0
@@ -644,12 +645,12 @@ def _answer_stats(exam: dict, answers: dict) -> dict:
         for q in (p2.get("questions") or []):
             user = answers.get(f"II_{q.get('question_number')}")
             user = user if isinstance(user, dict) else {}
-            for s in (q.get("sub_questions") or []):
-                if s.get("correct_answer") is None:
-                    continue
-                total += 1
-                if user.get(s.get("label")) == s.get("correct_answer"):
-                    correct += 1
+            subs = [s for s in (q.get("sub_questions") or []) if s.get("correct_answer") is not None]
+            if not subs:
+                continue
+            total += 1
+            if all(user.get(s.get("label")) == s.get("correct_answer") for s in subs):
+                correct += 1
 
     p3 = secs.get("PHẦN III")
     if p3:

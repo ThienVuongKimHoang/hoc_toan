@@ -4,7 +4,7 @@ import MarkerText, { InlineImage, referencedImageIds } from './MarkerText.jsx'
 
 const CONTENT_EDITABLE_TAG = /<(strong|em|u|b|i|div|br|span|p)\b/i
 
-function toPassageHTML(text) {
+export function toPassageHTML(text) {
   if (!text) return ''
   if (CONTENT_EDITABLE_TAG.test(text)) {
     return text
@@ -18,7 +18,7 @@ function toPassageHTML(text) {
     .replace(/\n/g, '<br>')
 }
 
-function FigureImages({ path }) {
+export function FigureImages({ path }) {
   if (!path) return null
   const src = `/images/${path.replace('images/', '')}`
   return (
@@ -31,7 +31,7 @@ function FigureImages({ path }) {
 // Render question_text với [img:id] markers → ảnh thật.
 // Ảnh đính kèm không được marker nào (kể cả trong các đáp án choices) tham chiếu
 // vẫn hiển thị ở cuối đề bài, tránh mất ảnh nếu marker bị xoá nhầm.
-function QuestionText({ q }) {
+export function QuestionText({ q }) {
   const text = q?.question_text || ''
   const images = q?.images || []
   const referenced = new Set([
