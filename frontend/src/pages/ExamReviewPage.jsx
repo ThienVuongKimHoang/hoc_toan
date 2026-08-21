@@ -701,12 +701,7 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
             </div>
           </header>
 
-          {shuffled && (
-            <p className="rv-callout">
-              Lượt làm này bật <b>trộn đề</b>. Bên dưới là <b>đề gốc</b> — thứ tự câu và nhãn A/B/C/D theo
-              đề gốc, mỗi câu có ghi chú vị trí bạn đã thấy lúc làm bài.
-            </p>
-          )}
+
           {pendingEssay && (
             <p className="rv-callout rv-callout--warn">
               ✍️ Phần tự luận đang chờ giáo viên chấm — điểm ở trên đã tính trên tổng điểm toàn đề
