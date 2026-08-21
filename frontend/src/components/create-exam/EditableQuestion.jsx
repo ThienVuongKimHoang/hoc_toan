@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import MathText from '../MathText.jsx'
 import MarkerText, { referencedImageIds } from '../MarkerText.jsx'
 import { DIFFICULTY_LEVELS, subjectHasLabels } from '../../data/labels.js'
@@ -1018,8 +1019,13 @@ export default function EditableQuestion({
     if (!editingText) return
     const onDocMouseDown = (e) => {
       if (latexEditorRef.current && !latexEditorRef.current.contains(e.target)) {
-        commitText()
-        setEditingText(false)
+        // flushSync: cú click ra ngoài thường LÀ thao tác kế tiếp (bấm 💾 Lưu lại,
+        // đổi tab phần, xoá câu…). Nếu để React gộp cập nhật vào microtask thì
+        // handler click chạy trước khi nháp kịp cập nhật → lưu ra đề vẫn rỗng.
+        flushSync(() => {
+          commitText()
+          setEditingText(false)
+        })
       }
     }
     document.addEventListener('mousedown', onDocMouseDown)

@@ -220,6 +220,9 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
   const updateQuestion = (sec, idx, updated) => {
     setSections(prev => {
       const qs = [...prev[sec].questions]
+      // Chốt theo _uid: cập nhật đến muộn (vd: ô soạn thảo lưu nháp lúc card bị gỡ
+      // vì vừa xoá/di chuyển câu) không được ghi đè lên câu khác đang nằm ở vị trí đó.
+      if (!qs[idx] || (updated._uid && qs[idx]._uid !== updated._uid)) return prev
       qs[idx] = updated
       return { ...prev, [sec]: { ...prev[sec], questions: qs } }
     })
