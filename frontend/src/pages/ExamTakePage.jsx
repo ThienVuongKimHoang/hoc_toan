@@ -7,12 +7,12 @@ import { buildShuffleMap, reorderByQuestionNumber } from '../utils/shuffle.js'
 import './ExamTakePage.css'
 
 const SECTION_LABELS = {
-  'PHẦN I':    { label: 'Phần I – Trắc nghiệm',         short: 'Phần I',    color: '#2563eb' },
-  'PHẦN II':   { label: 'Phần II – Đúng / Sai',          short: 'Phần II',   color: '#7c3aed' },
-  'PHẦN III':  { label: 'Phần III – Trả lời ngắn',       short: 'Phần III',  color: '#059669' },
-  'TỰ LUẬN':   { label: 'Tự luận – Upload bài làm',      short: 'Tự luận',   color: '#d97706' },
-  'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm',      short: 'Tiếng Anh', color: '#0f766e' },
-  'READING':   { label: 'Reading – Bài đọc',            short: 'Reading',   color: '#0e7490' },
+  'PHẦN I': { label: 'Phần I – Trắc nghiệm', short: 'Phần I', color: '#2563eb' },
+  'PHẦN II': { label: 'Phần II – Đúng / Sai', short: 'Phần II', color: '#7c3aed' },
+  'PHẦN III': { label: 'Phần III – Trả lời ngắn', short: 'Phần III', color: '#059669' },
+  'TỰ LUẬN': { label: 'Tự luận – Upload bài làm', short: 'Tự luận', color: '#d97706' },
+  'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm', short: 'Tiếng Anh', color: '#0f766e' },
+  'READING': { label: 'Reading – Bài đọc', short: 'Reading', color: '#0e7490' },
 }
 
 /* Câu này đã trả lời chưa — dùng tô màu ô số trong bảng điều hướng.
@@ -25,7 +25,7 @@ function answerStateOf(sec, q, val) {
     if (!subs.length || done === 0) return 'none'
     return done === subs.length ? 'done' : 'partial'
   }
-  if (sec === 'TỰ LUẬN')  return Array.isArray(val) && val.length > 0 ? 'done' : 'none'
+  if (sec === 'TỰ LUẬN') return Array.isArray(val) && val.length > 0 ? 'done' : 'none'
   if (sec === 'PHẦN III') return String(val ?? '').trim() ? 'done' : 'none'
   return val != null && val !== '' ? 'done' : 'none'
 }
@@ -96,12 +96,12 @@ function releaseKeyboard() {
 
 function useExamLock(enabled) {
   const [violations, setViolations] = useState(0)
-  const [warning,    setWarning]    = useState('')
-  const [blocked,    setBlocked]    = useState(false)   // đề bị che, phải quay lại mới làm tiếp
-  const [askUnlock,  setAskUnlock]  = useState(false)   // đang hỏi mật khẩu thoát
-  const [unlocked,   setUnlocked]   = useState(false)   // đã thoát khóa bằng mật khẩu
+  const [warning, setWarning] = useState('')
+  const [blocked, setBlocked] = useState(false)   // đề bị che, phải quay lại mới làm tiếp
+  const [askUnlock, setAskUnlock] = useState(false)   // đang hỏi mật khẩu thoát
+  const [unlocked, setUnlocked] = useState(false)   // đã thoát khóa bằng mật khẩu
   const countRef = useRef(0)
-  const lastRef  = useRef(0)
+  const lastRef = useRef(0)
 
   useEffect(() => {
     if (!enabled || unlocked) return
@@ -119,8 +119,8 @@ function useExamLock(enabled) {
     }
 
     const onVisibility = () => { if (document.hidden) flag('Bạn đã rời khỏi màn hình làm bài!') }
-    const onBlur       = () => flag('Cửa sổ làm bài bị mất tiêu điểm!')
-    const onFsChange   = () => {
+    const onBlur = () => flag('Cửa sổ làm bài bị mất tiêu điểm!')
+    const onFsChange = () => {
       if (!isFs()) {
         flag('Bạn đã thoát chế độ toàn màn hình!')
         enterFsLock()   // cố tự ép lại (nếu trình duyệt cần thao tác thì nút "Quay lại" sẽ xử lý)
@@ -268,9 +268,9 @@ function ExpiredView({ exam, onGoHome }) {
 
 /* ── Ô nhập mật khẩu thoát khóa (Shift + 1 + 3) ── */
 function UnlockPrompt({ onSubmit, onClose }) {
-  const [pwd, setPwd]         = useState('')
-  const [err, setErr]         = useState('')
-  const [busy, setBusy]       = useState(false)
+  const [pwd, setPwd] = useState('')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
   const submit = async (e) => {
     e.preventDefault()
     if (busy) return
@@ -304,8 +304,8 @@ function UnlockPrompt({ onSubmit, onClose }) {
 
 /* ── Password gate ── */
 function PasswordGate({ exam, onCorrect }) {
-  const [pwd, setPwd]   = useState('')
-  const [err, setErr]   = useState('')
+  const [pwd, setPwd] = useState('')
+  const [err, setErr] = useState('')
   const [show, setShow] = useState(false)
   const submit = (e) => {
     e.preventDefault()
@@ -345,14 +345,14 @@ function PasswordGate({ exam, onCorrect }) {
 
 /* ── Main exam view ── */
 function ExamView({ exam, studentName, studentId, className, classId, assignmentId, onGoHome, onGoClass }) {
-  const hideResults    = exam.settings?.hideResults || false
-  const sectionList    = getSectionList(exam)
+  const hideResults = exam.settings?.hideResults || false
+  const sectionList = getSectionList(exam)
   // Đề có phần tự luận: điểm chấm tay đến sau (0đ cho đến khi giáo viên chấm), nhưng
   // điểm hiển thị luôn tính trên TỔNG điểm toàn đề (kể cả tự luận) — khớp với điểm
   // giáo viên thấy, tránh 2 màn hình ra 2 điểm khác nhau cho cùng 1 bài.
-  const hasEssay       = sectionList.includes('TỰ LUẬN')
+  const hasEssay = sectionList.includes('TỰ LUẬN')
   // Lượt làm bài đang dở (nếu có) — đọc 1 lần lúc mount để khôi phục giờ bắt đầu + đáp án đã chọn
-  const attemptKeyStr  = attemptKey(exam.id, classId, assignmentId, studentId)
+  const attemptKeyStr = attemptKey(exam.id, classId, assignmentId, studentId)
   const savedAttemptRef = useRef(undefined)
   if (savedAttemptRef.current === undefined) savedAttemptRef.current = loadAttempt(attemptKeyStr)
   const savedAttempt = savedAttemptRef.current
@@ -363,18 +363,18 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   )
 
   const [activeSection, setActiveSection] = useState(sectionList[0] || 'PHẦN I')
-  const [answers,       setAnswers]       = useState(() => savedAttempt?.answers || {})
-  const [submitted,     setSubmitted]     = useState(false)
-  const [submitting,    setSubmitting]    = useState(false)
-  const [submitErr,     setSubmitErr]     = useState('')
-  const [finalScore,    setFinalScore]    = useState(null)
-  const [finalMax,      setFinalMax]      = useState(null)
+  const [answers, setAnswers] = useState(() => savedAttempt?.answers || {})
+  const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitErr, setSubmitErr] = useState('')
+  const [finalScore, setFinalScore] = useState(null)
+  const [finalMax, setFinalMax] = useState(null)
   // Câu đánh dấu "xem lại sau" — lưu cùng lượt làm bài để F5 không mất
-  const [flags,      setFlags]      = useState(() => savedAttempt?.flags || [])
-  const [focusMode,  setFocusMode]  = useState(false)   // chế độ tập trung: 1 câu / màn hình
-  const [focusKey,   setFocusKey]   = useState(null)
-  const [sideOpen,   setSideOpen]   = useState(false)   // ngăn kéo bảng câu hỏi (mobile)
-  const [scrollTo,   setScrollTo]   = useState(null)    // key câu cần cuộn tới sau khi đổi phần
+  const [flags, setFlags] = useState(() => savedAttempt?.flags || [])
+  const [focusMode, setFocusMode] = useState(false)   // chế độ tập trung: 1 câu / màn hình
+  const [focusKey, setFocusKey] = useState(null)
+  const [sideOpen, setSideOpen] = useState(false)   // ngăn kéo bảng câu hỏi (mobile)
+  const [scrollTo, setScrollTo] = useState(null)    // key câu cần cuộn tới sau khi đổi phần
 
   // Danh sách phẳng mọi câu theo đúng thứ tự học sinh thấy — dùng cho bảng số
   // câu, chế độ tập trung và đếm tiến độ.
@@ -382,11 +382,11 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
     const out = []
     for (const sec of sectionList) {
       const raw = exam.sections?.[sec]?.questions ?? []
-      const qs  = reorderByQuestionNumber(raw, shuffleMap?.sections?.[sec])
+      const qs = reorderByQuestionNumber(raw, shuffleMap?.sections?.[sec])
       qs.forEach((q, i) => {
         out.push({
           sec, q, i,
-          no:  i + 1,                                        // số hiển thị trong phần
+          no: i + 1,                                        // số hiển thị trong phần
           key: `${SECTION_PREFIX[sec] || 'I'}_${q.question_number}`,
         })
       })
@@ -400,9 +400,9 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   // Khóa màn hình (chống gian lận) — bật theo cài đặt của giáo viên
   const lockOn = !!exam.settings?.lockScreen
   const [lockStarted, setLockStarted] = useState(!lockOn)
-  const [startedAt,   setStartedAt]   = useState(() => savedAttempt?.startedAt ?? (lockOn ? null : Date.now()))
+  const [startedAt, setStartedAt] = useState(() => savedAttempt?.startedAt ?? (lockOn ? null : Date.now()))
   const { violations, warning, blocked, resume, unlocked,
-          askUnlock, closeUnlock, tryUnlock, dismissWarning } = useExamLock(lockOn && lockStarted && !submitted)
+    askUnlock, closeUnlock, tryUnlock, dismissWarning } = useExamLock(lockOn && lockStarted && !submitted)
   const lockActive = lockOn && !unlocked
 
   const beginLocked = async () => {
@@ -411,12 +411,12 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
     setLockStarted(true)
   }
 
-  const effStart   = startedAt ?? Date.now()
-  const endByDur   = effStart + exam.settings.duration * 60_000
+  const effStart = startedAt ?? Date.now()
+  const endByDur = effStart + exam.settings.duration * 60_000
   const endByClose = new Date(exam.settings.closeTime).getTime()
-  const endTime    = Math.min(endByDur, endByClose)
-  const endIso     = new Date(endTime).toISOString()
-  const msLeft     = useCountdown(endIso)
+  const endTime = Math.min(endByDur, endByClose)
+  const endIso = new Date(endTime).toISOString()
+  const msLeft = useCountdown(endIso)
 
   // Hết giờ → tự động nộp bài
   useEffect(() => {
@@ -449,9 +449,11 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
     try {
       // Điểm do SERVER chấm (client không còn nhận đáp án đúng qua GET đề nữa,
       // nên không thể tự tính điểm ở đây như trước).
-      const result = await submitResult(exam.id, { studentName, studentId, answers, className, classId, assignmentId,
-                                    startedAt: new Date(effStart).toISOString(), timeSpent,
-                                    violationCount: lockOn ? violations : null, shuffleMap })
+      const result = await submitResult(exam.id, {
+        studentName, studentId, answers, className, classId, assignmentId,
+        startedAt: new Date(effStart).toISOString(), timeSpent,
+        violationCount: lockOn ? violations : null, shuffleMap
+      })
       setFinalScore(result.score)
       setFinalMax(result.maxScore)
       setSubmitted(true)
@@ -536,16 +538,16 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
     )
   }
 
-  const items      = flatQuestions.filter(f => f.sec === activeSection)
-  const doneCount  = flatQuestions.filter(f => answerStateOf(f.sec, f.q, answers[f.key]) === 'done').length
-  const focusItem  = focusMode
+  const items = flatQuestions.filter(f => f.sec === activeSection)
+  const doneCount = flatQuestions.filter(f => answerStateOf(f.sec, f.q, answers[f.key]) === 'done').length
+  const focusItem = focusMode
     ? (flatQuestions.find(f => f.key === focusKey) || items[0] || flatQuestions[0] || null)
     : null
-  const focusIdx   = focusItem ? flatQuestions.indexOf(focusItem) : -1
-  const secIdx     = sectionList.indexOf(activeSection)
+  const focusIdx = focusItem ? flatQuestions.indexOf(focusItem) : -1
+  const secIdx = sectionList.indexOf(activeSection)
   const nextSection = sectionList[secIdx + 1]
 
-  const pctLeft  = Math.max(0, Math.min(100, (msLeft / (exam.settings.duration * 60_000)) * 100))
+  const pctLeft = Math.max(0, Math.min(100, (msLeft / (exam.settings.duration * 60_000)) * 100))
   // Dưới 5 phút → cam, dưới 1 phút → đỏ (kèm nhấp nháy) để học sinh không lỡ giờ
   const timeTone = msLeft <= 60_000 ? 'is-urgent' : msLeft <= 5 * 60_000 ? 'is-warn' : ''
 
@@ -701,7 +703,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
 
           <div className="etx-legend">
             <span><i className="etx-lg etx-lg--done" /> Đã làm</span>
-            <span><i className="etx-lg etx-lg--partial" /> Làm dở</span>
+            <span><i className="etx-lg etx-lg--partial" /> Đang làm</span>
             <span><i className="etx-lg etx-lg--none" /> Chưa làm</span>
             <span><i className="etx-lg etx-lg--flag" /> Đánh dấu</span>
           </div>
@@ -743,7 +745,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
               {sectionList.length > 1 && (
                 <div className="etx-tabs">
                   {sectionList.map(sec => {
-                    const meta  = SECTION_LABELS[sec] ?? { short: sec, color: '#475569' }
+                    const meta = SECTION_LABELS[sec] ?? { short: sec, color: '#475569' }
                     const count = exam.sections?.[sec]?.questions?.length ?? 0
                     return (
                       <button key={sec}
@@ -801,9 +803,9 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
 
 /* ── Root component ── */
 export default function ExamTakePage({ examId, classId, assignmentId, user, onGoHome, onGoClass, onGoLogin }) {
-  const [exam,        setExam]        = useState(null)
-  const [notFound,    setNotFound]    = useState(false)
-  const [status,      setStatus]      = useState('pending')
+  const [exam, setExam] = useState(null)
+  const [notFound, setNotFound] = useState(false)
+  const [status, setStatus] = useState('pending')
   const [pwdUnlocked, setPwdUnlocked] = useState(false)
 
   // Vào trang này bằng điều hướng MỚI (bấm "Làm bài"/"Làm lại") luôn là 1 lượt làm bài
@@ -814,50 +816,50 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
 
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      const e = await fetchExamById(examId)
-      if (cancelled) return
-      if (!e) { setNotFound(true); return }
-
-      // Làm bài qua LỚP: dùng cửa sổ thời gian của bài được giao, không cần link công khai.
-      let keepClassTag = false   // lớp cũ giao qua "Phát đề" (không có assignment) — vẫn gắn lớp nếu là thành viên
-      if (classId) {
-        const win = await getExamWindow(classId, examId, user?.id, user?.email, assignmentId)
+      ; (async () => {
+        const e = await fetchExamById(examId)
         if (cancelled) return
-        if (win && win.assigned && win.isMember !== false) {
-          const merged = {
-            ...e,
-            published: true,
-            settings: {
-              ...e.settings,
-              openTime:  win.openTime  || e.settings?.openTime,
-              closeTime: win.closeTime || e.settings?.closeTime,
-              duration:  win.duration  ?? e.settings?.duration,
-              password:  null,   // lớp học là cổng vào — không cần mật khẩu công khai
-              lockScreen: win.lockScreen ?? e.settings?.lockScreen ?? false,
-              shuffleQuestions: win.shuffleQuestions ?? e.settings?.shuffleQuestions ?? false,
-            },
-            _classGated:   true,
-            _className:    win.className,
-            _assignmentId: win.assignmentId || assignmentId || null,
-            _maxAttempts:  win.maxAttempts ?? null,
-            _attemptsUsed: win.attemptsUsed ?? 0,
-            _scoreMode:    win.scoreMode || 'highest',
-          }
-          setExam(merged)
-          setStatus(examStatus(merged))
-          return
-        }
-        // Lớp không giao bài này nhưng học sinh LÀ thành viên → cho phép gắn lớp (luồng cũ).
-        // Không thuộc lớp / lớp đã xóa → làm như link công khai, KHÔNG gắn lớp.
-        keepClassTag = !!(win && win.isMember === true)
-      }
+        if (!e) { setNotFound(true); return }
 
-      // Link công khai (như cũ): cần đề đã xuất bản.
-      if (!e.published) { setNotFound(true); return }
-      setExam({ ...e, _classTag: keepClassTag })
-      setStatus(examStatus(e))
-    })()
+        // Làm bài qua LỚP: dùng cửa sổ thời gian của bài được giao, không cần link công khai.
+        let keepClassTag = false   // lớp cũ giao qua "Phát đề" (không có assignment) — vẫn gắn lớp nếu là thành viên
+        if (classId) {
+          const win = await getExamWindow(classId, examId, user?.id, user?.email, assignmentId)
+          if (cancelled) return
+          if (win && win.assigned && win.isMember !== false) {
+            const merged = {
+              ...e,
+              published: true,
+              settings: {
+                ...e.settings,
+                openTime: win.openTime || e.settings?.openTime,
+                closeTime: win.closeTime || e.settings?.closeTime,
+                duration: win.duration ?? e.settings?.duration,
+                password: null,   // lớp học là cổng vào — không cần mật khẩu công khai
+                lockScreen: win.lockScreen ?? e.settings?.lockScreen ?? false,
+                shuffleQuestions: win.shuffleQuestions ?? e.settings?.shuffleQuestions ?? false,
+              },
+              _classGated: true,
+              _className: win.className,
+              _assignmentId: win.assignmentId || assignmentId || null,
+              _maxAttempts: win.maxAttempts ?? null,
+              _attemptsUsed: win.attemptsUsed ?? 0,
+              _scoreMode: win.scoreMode || 'highest',
+            }
+            setExam(merged)
+            setStatus(examStatus(merged))
+            return
+          }
+          // Lớp không giao bài này nhưng học sinh LÀ thành viên → cho phép gắn lớp (luồng cũ).
+          // Không thuộc lớp / lớp đã xóa → làm như link công khai, KHÔNG gắn lớp.
+          keepClassTag = !!(win && win.isMember === true)
+        }
+
+        // Link công khai (như cũ): cần đề đã xuất bản.
+        if (!e.published) { setNotFound(true); return }
+        setExam({ ...e, _classTag: keepClassTag })
+        setStatus(examStatus(e))
+      })()
     return () => { cancelled = true }
   }, [examId, classId, assignmentId, user?.id])
 
@@ -907,9 +909,9 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
           <button className="etl-action-btn etl-action-btn--login" onClick={onGoLogin}>
             <span className="etl-action-icon">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-                <polyline points="10 17 15 12 10 7"/>
-                <line x1="15" y1="12" x2="3" y2="12"/>
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                <polyline points="10 17 15 12 10 7" />
+                <line x1="15" y1="12" x2="3" y2="12" />
               </svg>
             </span>
             Đăng nhập
@@ -917,8 +919,8 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
           <button className="etl-action-btn etl-action-btn--home" onClick={onGoHome}>
             <span className="etl-action-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                <polyline points="9 22 9 12 15 12 15 22"/>
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
               </svg>
             </span>
             Trang chủ
@@ -929,7 +931,7 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
   )
 
   if (status === 'expired') return <ExpiredView exam={exam} onGoHome={onGoHome} />
-  if (status === 'pending') return <LockedView  exam={exam} onGoHome={onGoHome} />
+  if (status === 'pending') return <LockedView exam={exam} onGoHome={onGoHome} />
 
   // Hết lượt làm (giao theo lớp có giới hạn số lần)
   if (exam._classGated && exam._maxAttempts && exam._attemptsUsed >= exam._maxAttempts) {
