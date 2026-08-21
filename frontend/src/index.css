@@ -3178,7 +3178,6 @@ button { font-family: inherit; }
 }
 
 .eq-edit-actions { display: flex; gap: 8px; margin-top: 8px; }
-.eq-save-btn   { padding: 6px 14px; background: #2563eb; color: #fff; border: none; border-radius: 7px; font-size: 0.82rem; font-weight: 700; cursor: pointer; }
 .eq-cancel-btn { padding: 6px 14px; background: #f1f5f9; color: #64748b; border: none; border-radius: 7px; font-size: 0.82rem; cursor: pointer; }
 .eq-hint { font-size: 0.72rem; color: #94a3b8; margin-top: 6px; font-style: italic; }
 

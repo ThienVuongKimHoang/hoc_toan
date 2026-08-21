@@ -865,6 +865,15 @@ export default function EditableQuestion({
   const cardRef = useRef(null)
   const taRef = useRef(null)
   const aiFileRef = useRef(null)
+  const latexEditorRef = useRef(null)
+  // Ref hoá những gì listener "click ra ngoài" cần đọc — listener gắn 1 lần khi mở
+  // editor nên nếu đọc thẳng state/prop sẽ bắt phải giá trị cũ (stale closure).
+  const localTextRef = useRef(localText)
+  const qRef         = useRef(q)
+  const onUpdateRef  = useRef(onUpdate)
+  localTextRef.current = localText
+  qRef.current         = q
+  onUpdateRef.current  = onUpdate
 
   const autoClassify = async () => {
     if (!q.question_text?.trim()) return
@@ -992,11 +1001,33 @@ export default function EditableQuestion({
   }, [editingText])
 
   const startEdit = () => { setEditingText(true); setLocalText(q.question_text || '') }
-  const saveText = () => {
-    setEditingText(false)
-    if (localText !== q.question_text) onUpdate({ ...q, question_text: localText })
+  // Ghi nội dung đang soạn vào bản nháp của đề. So sánh trước khi ghi nên gọi lại
+  // nhiều lần cũng không sinh cập nhật thừa (quan trọng: cleanup lúc unmount và
+  // StrictMode ở dev đều gọi lại hàm này).
+  const commitText = () => {
+    const text = localTextRef.current
+    const cur  = qRef.current
+    if (text !== cur.question_text) onUpdateRef.current({ ...cur, question_text: text })
   }
   const cancelEdit = () => { setEditingText(false); setLocalText(q.question_text || '') }
+
+  // Click ra ngoài khung soạn thảo = lưu vào nháp rồi đóng editor — cùng cách các ô
+  // đáp án (MathEditField) và ô bài đọc (PassageEditor) phía trên đang làm. Cleanup
+  // cũng commit để đổi tab phần / rời trang giữa chừng không mất chữ vừa gõ.
+  useEffect(() => {
+    if (!editingText) return
+    const onDocMouseDown = (e) => {
+      if (latexEditorRef.current && !latexEditorRef.current.contains(e.target)) {
+        commitText()
+        setEditingText(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocMouseDown)
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown)
+      commitText()
+    }
+  }, [editingText])
 
   // Thêm ảnh vào gallery VÀ chèn marker [img:id] ở CUỐI nội dung (luôn append) —
   // thiếu marker thì QuestionCard phía học sinh không hiển thị ảnh inline.
@@ -1409,6 +1440,7 @@ export default function EditableQuestion({
             <span className="eq-question-label">Nội dung câu hỏi</span>
             {editingText ? (
               <div
+                ref={latexEditorRef}
                 className={`eq-latex-editor ${isDraggingOver ? 'eq-drop-active' : ''}`}
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
@@ -1431,6 +1463,7 @@ export default function EditableQuestion({
                       className="eq-le-raw"
                       value={localText}
                       onChange={e => setLocalText(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); cancelEdit() } }}
                       onPaste={handleRawPaste}
                       placeholder={`Nhập nội dung. Bao công thức bằng $...$\nVí dụ: Cho hàm số $f(x)=\\frac{2x+1}{x}$\nToạ độ: $M(-500; 300; 500)$`}
                       rows={6}
@@ -1451,9 +1484,9 @@ export default function EditableQuestion({
                     onClick={() => setShowPreview(v => !v)}>
                     {showPreview ? '⊟ Ẩn xem trước' : '⊞ Hiện xem trước'}
                   </button>
+                  <span className="eq-fmt-hint">Click ra ngoài để lưu · Esc để huỷ</span>
                   <span style={{ flex: 1 }} />
                   <button className="eq-cancel-btn" onClick={cancelEdit} type="button">✕ Huỷ</button>
-                  <button className="eq-save-btn" onClick={saveText} type="button">✓ Lưu</button>
                 </div>
               </div>
             ) : (

@@ -20,24 +20,24 @@ import './ExamReviewPage.css'
 const SECTION_ORDER = ['PHẦN I', 'PHẦN II', 'PHẦN III', 'TIẾNG ANH', 'READING', 'TỰ LUẬN']
 
 const SECTION_META = {
-  'PHẦN I':    { label: 'Phần I – Trắc nghiệm',     color: '#2563eb', ppq: 0.25 },
-  'PHẦN II':   { label: 'Phần II – Đúng / Sai',     color: '#7c3aed', ppq: 1 },
-  'PHẦN III':  { label: 'Phần III – Trả lời ngắn',  color: '#059669', ppq: 0.5 },
-  'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm',  color: '#0f766e', ppq: 0.25 },
-  'READING':   { label: 'Reading – Bài đọc',        color: '#0e7490', ppq: 0.25 },
-  'TỰ LUẬN':   { label: 'Tự luận',                  color: '#d97706', ppq: 0 },
+  'PHẦN I': { label: 'Phần I – Trắc nghiệm', color: '#2563eb', ppq: 0.25 },
+  'PHẦN II': { label: 'Phần II – Đúng / Sai', color: '#7c3aed', ppq: 1 },
+  'PHẦN III': { label: 'Phần III – Trả lời ngắn', color: '#059669', ppq: 0.5 },
+  'TIẾNG ANH': { label: 'Tiếng Anh – Trắc nghiệm', color: '#0f766e', ppq: 0.25 },
+  'READING': { label: 'Reading – Bài đọc', color: '#0e7490', ppq: 0.25 },
+  'TỰ LUẬN': { label: 'Tự luận', color: '#d97706', ppq: 0 },
 }
 
 const MC_SECTIONS = ['PHẦN I', 'TIẾNG ANH', 'READING']
 
 const STATUS_META = {
-  right:   { label: 'Đúng',          icon: '✓' },
-  wrong:   { label: 'Sai',           icon: '✗' },
+  right: { label: 'Đúng', icon: '✓' },
+  wrong: { label: 'Sai', icon: '✗' },
   partial: { label: 'Đúng một phần', icon: '◐' },
-  skipped: { label: 'Chưa trả lời',  icon: '—' },
-  nokey:   { label: 'Chưa có đáp án', icon: '?' },
-  essay:   { label: 'Đã chấm',        icon: '✓' },
-  pending: { label: 'Chờ chấm',       icon: '⏳' },
+  skipped: { label: 'Chưa trả lời', icon: '—' },
+  nokey: { label: 'Chưa có đáp án', icon: '?' },
+  essay: { label: 'Đã chấm', icon: '✓' },
+  pending: { label: 'Chờ chấm', icon: '⏳' },
 }
 
 const round2 = n => Math.round(n * 100) / 100
@@ -60,8 +60,8 @@ const bandOf = v => (v == null ? 'none' : v >= 8 ? 'high' : v >= 5 ? 'mid' : 'lo
 const BAND_COLOR = { high: '#059669', mid: '#f59e0b', low: '#ef4444', none: '#94a3b8' }
 const BAND_MSG = {
   high: 'Tuyệt vời! Bạn đang làm rất tốt.',
-  mid:  'Khá rồi đấy! Xem lại vài câu sai bên dưới là điểm sẽ lên ngay.',
-  low:  'Đừng nản chí, hãy xem lại lời giải bên dưới nhé!',
+  mid: 'Khá rồi đấy! Xem lại vài câu sai bên dưới là điểm sẽ lên ngay.',
+  low: 'Đừng nản chí, hãy xem lại lời giải bên dưới nhé!',
   none: 'Bài này chưa có điểm.',
 }
 
@@ -166,54 +166,54 @@ function MiniTrend({ points, currentId }) {
 /* ── Dựng kết quả từng câu theo ĐỀ GỐC (giữ nguyên thứ tự câu trong exam.sections) ── */
 function buildReview(exam, submission) {
   const answers = submission?.answers || {}
-  const manual  = submission?.manualScores || {}
+  const manual = submission?.manualScores || {}
   const shuffle = submission?.shuffleMap || null
 
   const blocks = []
   for (const sec of SECTION_ORDER) {
     const data = exam?.sections?.[sec]
-    const qs   = data?.questions || []
+    const qs = data?.questions || []
     if (!qs.length) continue
 
     const prefix = SECTION_PREFIX[sec] || 'I'
-    const ppq    = data.points_per_q || SECTION_META[sec].ppq
-    const order  = shuffle?.sections?.[sec] || null   // thứ tự học sinh đã thấy
+    const ppq = data.points_per_q || SECTION_META[sec].ppq
+    const order = shuffle?.sections?.[sec] || null   // thứ tự học sinh đã thấy
 
     const items = qs.map(q => {
-      const key    = `${prefix}_${q.question_number}`
+      const key = `${prefix}_${q.question_number}`
       const picked = answers[key]
       // Vị trí câu này trong bản trộn học sinh đã làm (0 = đề không trộn)
       const seenAt = order ? order.indexOf(q.question_number) + 1 : 0
-      const base   = { q, key, picked, seenAt }
+      const base = { q, key, picked, seenAt }
 
       if (MC_SECTIONS.includes(sec)) {
         // PHẦN I tính điểm tối đa cho mọi câu; TIẾNG ANH/READING chỉ tính câu có đáp án
         const max = sec === 'PHẦN I' ? ppq : (q.answer ? ppq : 0)
         const status = !q.answer ? 'nokey'
           : picked == null ? 'skipped'
-          : picked === q.answer ? 'right' : 'wrong'
+            : picked === q.answer ? 'right' : 'wrong'
         return { ...base, kind: 'mc', status, max, earned: status === 'right' ? max : 0 }
       }
 
       if (sec === 'PHẦN II') {
-        const subs   = q.sub_questions || []
-        const user   = (picked && typeof picked === 'object') ? picked : {}
+        const subs = q.sub_questions || []
+        const user = (picked && typeof picked === 'object') ? picked : {}
         const nRight = subs.filter(s => user[s.label] === s.correct_answer).length
-        const nDone  = subs.filter(s => user[s.label] !== undefined).length
-        const total  = subs.length
+        const nDone = subs.filter(s => user[s.label] !== undefined).length
+        const total = subs.length
         const earned = !total ? 0
-          : nRight === total     ? ppq
-          : nRight === total - 1 ? ppq * 0.5
-          : nRight === total - 2 ? ppq * 0.25
-          : nRight === total - 3 ? ppq * 0.1 : 0
+          : nRight === total ? ppq
+            : nRight === total - 1 ? ppq * 0.5
+              : nRight === total - 2 ? ppq * 0.25
+                : nRight === total - 3 ? ppq * 0.1 : 0
         const status = nDone === 0 ? 'skipped'
           : nRight === total ? 'right'
-          : nRight === 0 ? 'wrong' : 'partial'
+            : nRight === 0 ? 'wrong' : 'partial'
         return { ...base, kind: 'tf', status, max: ppq, earned: round2(earned), nRight, total, user }
       }
 
       if (sec === 'TỰ LUẬN') {
-        const max    = Number(q.points) || 0
+        const max = Number(q.points) || 0
         const scored = manual[key]
         return {
           ...base, kind: 'essay', max,
@@ -226,7 +226,7 @@ function buildReview(exam, submission) {
       // PHẦN III — trả lời ngắn
       const status = !norm(q.answer) ? 'nokey'
         : !norm(picked) ? 'skipped'
-        : norm(picked) === norm(q.answer) ? 'right' : 'wrong'
+          : norm(picked) === norm(q.answer) ? 'right' : 'wrong'
       return { ...base, kind: 'short', status, max: ppq, earned: status === 'right' ? ppq : 0 }
     })
 
@@ -235,7 +235,7 @@ function buildReview(exam, submission) {
       items,
       nRight: items.filter(i => i.status === 'right').length,
       earned: round2(items.reduce((s, i) => s + i.earned, 0)),
-      max:    round2(items.reduce((s, i) => s + i.max, 0)),
+      max: round2(items.reduce((s, i) => s + i.max, 0)),
     })
   }
   return blocks
@@ -273,9 +273,7 @@ function ReviewQuestion({ item, showPassage }) {
             {status === 'pending' ? `— / ${round2(max)}đ` : `${round2(earned)} / ${round2(max)}đ`}
           </span>
         )}
-        {seenAt > 0 && seenAt !== q.question_number && (
-          <span className="rv-q-seen">lúc làm là Câu {seenAt}</span>
-        )}
+
       </header>
 
       {showPassage && <PassageBox title={q.passage_title} text={q.passage_text} />}
@@ -286,7 +284,7 @@ function ReviewQuestion({ item, showPassage }) {
       {kind === 'mc' && (
         <div className="rv-choices">
           {Object.entries(q.choices || {}).map(([key, val]) => {
-            const isKey  = q.answer != null && key === q.answer
+            const isKey = q.answer != null && key === q.answer
             const isPick = picked === key
             const cls = isKey && isPick ? 'is-right' : isPick ? 'is-wrong' : isKey ? 'is-key' : ''
             return (
@@ -303,7 +301,7 @@ function ReviewQuestion({ item, showPassage }) {
             )
           })}
           {status === 'skipped' && <p className="rv-note rv-note--warn">Bạn đã bỏ trống câu này.</p>}
-          {status === 'nokey'   && <p className="rv-note">Đề gốc chưa có đáp án cho câu này.</p>}
+          {status === 'nokey' && <p className="rv-note">Đề gốc chưa có đáp án cho câu này.</p>}
         </div>
       )}
 
@@ -313,7 +311,7 @@ function ReviewQuestion({ item, showPassage }) {
             const ua = item.user?.[sub.label]
             const st = sub.correct_answer == null ? 'nokey'
               : ua === undefined ? 'skipped'
-              : ua === sub.correct_answer ? 'right' : 'wrong'
+                : ua === sub.correct_answer ? 'right' : 'wrong'
             return (
               <div key={sub.label} className={`rv-tf-row rv-tf-row--${st}`}>
                 <span className="rv-tf-label">{sub.label})</span>
@@ -365,19 +363,19 @@ function ReviewQuestion({ item, showPassage }) {
 
 /* ── Trang xem lại một bài đã làm, đối chiếu với đề gốc ── */
 export default function ExamReviewPage({ examId, subId, onGoHome }) {
-  const [state, setState]           = useState('loading')  // loading | error | hidden | ready
-  const [errMsg, setErrMsg]         = useState('')
-  const [exam, setExam]             = useState(null)
+  const [state, setState] = useState('loading')  // loading | error | hidden | ready
+  const [errMsg, setErrMsg] = useState('')
+  const [exam, setExam] = useState(null)
   const [submission, setSubmission] = useState(null)
-  const [history, setHistory]       = useState([])
-  const [onlyWrong, setOnlyWrong]   = useState(false)
+  const [history, setHistory] = useState([])
+  const [onlyWrong, setOnlyWrong] = useState(false)
   // Tiêu đề trên thanh sticky chỉ hiện khi đã cuộn qua khối tiêu đề lớn —
   // tránh in cùng một tên đề 2 lần ngay đầu trang.
-  const [compact, setCompact]       = useState(false)
-  const headRef                     = useRef(null)
+  const [compact, setCompact] = useState(false)
+  const headRef = useRef(null)
   // Nút "Làm lại bài này" chỉ bấm được khi đề THỰC SỰ đang mở cho học sinh đó
   // (trong giờ + còn lượt làm); các trường hợp khác để disabled kèm tooltip.
-  const [retake, setRetake]         = useState({ status: 'loading', tip: 'Đang kiểm tra tình trạng đề…' })
+  const [retake, setRetake] = useState({ status: 'loading', tip: 'Đang kiểm tra tình trạng đề…' })
 
   useEffect(() => {
     let alive = true
@@ -458,11 +456,11 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
   const totals = useMemo(() => {
     const items = blocks.flatMap(b => b.items)
     return {
-      count:   items.length,
-      right:   items.filter(i => i.status === 'right').length,
-      wrong:   items.filter(i => ['wrong', 'partial', 'skipped'].includes(i.status)).length,
+      count: items.length,
+      right: items.filter(i => i.status === 'right').length,
+      wrong: items.filter(i => ['wrong', 'partial', 'skipped'].includes(i.status)).length,
       // Số câu chấm tự động (bỏ tự luận + câu chưa có đáp án) — dùng làm mẫu số "đúng/tổng"
-      auto:    items.filter(i => i.kind !== 'essay' && i.status !== 'nokey').length,
+      auto: items.filter(i => i.kind !== 'essay' && i.status !== 'nokey').length,
       essayMax: items.filter(i => i.kind === 'essay').reduce((s, i) => s + i.max, 0),
       essayPending: items.some(i => i.status === 'pending'),
     }
@@ -478,7 +476,7 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
       .map(s => ({ ...s, scaled: scaledScore(s.score, s.maxScore) }))
       .sort((a, b) => new Date(a.submittedAt || 0) - new Date(b.submittedAt || 0))
 
-    const idx  = attempts.findIndex(s => String(s.id) === String(subId))
+    const idx = attempts.findIndex(s => String(s.id) === String(subId))
     const prev = idx > 0 ? attempts[idx - 1] : null
     const rank = attempts.length
       ? [...attempts].sort((a, b) => b.scaled - a.scaled).findIndex(s => String(s.id) === String(subId)) + 1
@@ -536,25 +534,25 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
     </div>
   )
 
-  const scaled       = scaledScore(submission.score, submission.maxScore)
-  const band         = bandOf(scaled)
-  const shuffled     = !!submission.shuffleMap
+  const scaled = scaledScore(submission.score, submission.maxScore)
+  const band = bandOf(scaled)
+  const shuffled = !!submission.shuffleMap
   // Điểm hiển thị luôn tính trên TỔNG điểm toàn đề (kể cả tự luận chưa chấm — tạm 0đ)
   // để khớp với điểm giáo viên thấy, tránh 2 màn hình ra 2 điểm khác nhau.
   const pendingEssay = totals.essayPending && totals.essayMax > 0
 
-  const subjectKey   = SUBJECTS[exam.subject] ? exam.subject : null
+  const subjectKey = SUBJECTS[exam.subject] ? exam.subject : null
   const subjectLabel = subjectKey ? SUBJECTS[subjectKey].label : null
-  const accuracy     = totals.auto ? Math.round((totals.right / totals.auto) * 100) : null
-  const paceSec      = submission.timeSpent && totals.count ? Math.round(submission.timeSpent / totals.count) : null
-  const pace         = paceSec == null ? '—'
+  const accuracy = totals.auto ? Math.round((totals.right / totals.auto) * 100) : null
+  const paceSec = submission.timeSpent && totals.count ? Math.round(submission.timeSpent / totals.count) : null
+  const pace = paceSec == null ? '—'
     : paceSec >= 60 ? `${Math.floor(paceSec / 60)}p${String(paceSec % 60).padStart(2, '0')}/câu`
-    : `${paceSec}s/câu`
+      : `${paceSec}s/câu`
   // "Làm lại": đề giao trong lớp thì quay về lớp để vào lại đúng luồng (giữ
   // nguyên luật số lần làm / thời gian mở); đề lẻ thì vào sảnh đề thi.
   const retakeHref = submission.classId ? `#class/${submission.classId}/exam` : `#lobby/${examId}`
-  const nextHref   = submission.classId ? `#class/${submission.classId}` : '#my-classes'
-  const goDetail   = () => document.getElementById('rv-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const nextHref = submission.classId ? `#class/${submission.classId}` : '#my-classes'
+  const goDetail = () => document.getElementById('rv-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   return (
     <div className="rv-page">
@@ -716,40 +714,40 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
             </p>
           )}
 
-        {blocks.map(block => {
-          const items = onlyWrong
-            ? block.items.filter(i => ['wrong', 'partial', 'skipped'].includes(i.status))
-            : block.items
-          if (!items.length) return null
-          const meta = SECTION_META[block.sec] || { label: block.sec, color: '#475569' }
-          // READING: đoạn văn in 1 lần cho cả nhóm câu hỏi dùng chung passage_group
-          const seenPassage = new Set()
-          return (
-            <section key={block.sec} className="rv-section" style={{ '--sec-color': meta.color }}>
-              <header className="rv-section-head">
-                <h2>{meta.label}</h2>
-                <span className="rv-section-stat">
-                  {block.sec === 'TỰ LUẬN'
-                    ? `${round2(block.earned)}/${round2(block.max)}đ`
-                    : `${block.nRight}/${block.items.length} câu đúng · ${round2(block.earned)}/${round2(block.max)}đ`}
-                </span>
-              </header>
-              {items.map(item => {
-                let showPassage = !!item.q.passage_text
-                if (showPassage && block.sec === 'READING') {
-                  const gid = item.q.passage_group ?? 1
-                  showPassage = !seenPassage.has(gid)
-                  seenPassage.add(gid)
-                }
-                return <ReviewQuestion key={item.key} item={item} showPassage={showPassage} />
-              })}
-            </section>
-          )
-        })}
+          {blocks.map(block => {
+            const items = onlyWrong
+              ? block.items.filter(i => ['wrong', 'partial', 'skipped'].includes(i.status))
+              : block.items
+            if (!items.length) return null
+            const meta = SECTION_META[block.sec] || { label: block.sec, color: '#475569' }
+            // READING: đoạn văn in 1 lần cho cả nhóm câu hỏi dùng chung passage_group
+            const seenPassage = new Set()
+            return (
+              <section key={block.sec} className="rv-section" style={{ '--sec-color': meta.color }}>
+                <header className="rv-section-head">
+                  <h2>{meta.label}</h2>
+                  <span className="rv-section-stat">
+                    {block.sec === 'TỰ LUẬN'
+                      ? `${round2(block.earned)}/${round2(block.max)}đ`
+                      : `${block.nRight}/${block.items.length} câu đúng · ${round2(block.earned)}/${round2(block.max)}đ`}
+                  </span>
+                </header>
+                {items.map(item => {
+                  let showPassage = !!item.q.passage_text
+                  if (showPassage && block.sec === 'READING') {
+                    const gid = item.q.passage_group ?? 1
+                    showPassage = !seenPassage.has(gid)
+                    seenPassage.add(gid)
+                  }
+                  return <ReviewQuestion key={item.key} item={item} showPassage={showPassage} />
+                })}
+              </section>
+            )
+          })}
 
-        {onlyWrong && totals.wrong === 0 && (
-          <p className="rv-empty">🎉 Bạn làm đúng toàn bộ các câu có đáp án. Quá tuyệt!</p>
-        )}
+          {onlyWrong && totals.wrong === 0 && (
+            <p className="rv-empty">🎉 Bạn làm đúng toàn bộ các câu có đáp án. Quá tuyệt!</p>
+          )}
         </section>
 
         <div className="rv-foot">
