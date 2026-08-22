@@ -310,7 +310,10 @@ function ExamStudentRow({ row, examId, classId, assignment, hasEssay, defaultOpe
           </button>
         )}
         <span className="sub-badge sub-badge--done">{row.score}/{row.maxScore ?? '—'} điểm</span>
-        <button className="sub-del-btn" title="Xóa bài làm của học sinh này" onClick={onDelete}>✕</button>
+        {/* Nút xoá đặt sau cùng và chỉ hiện khi rê vào hàng — tránh bấm nhầm khi
+            đang chấm điểm (đã có lần xoá nhầm mất bài của học sinh). */}
+        <button className="sub-del-btn egr-del" title="Xoá toàn bộ bài làm của học sinh này"
+          onClick={onDelete}>✕</button>
       </div>
 
       {open && (
@@ -386,7 +389,9 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
         : assignment.id
       Promise.all([
         getExamSubmissions(assignment.examId, teacherId),
-        fetchExamById(assignment.examId, teacherId),
+        // fresh: luôn lấy đề MỚI NHẤT từ server. Dùng bản cache có thể ra thang điểm cũ →
+        // ô chấm tự luận chặn theo điểm tối đa cũ, chấm xong lệch với đề thật.
+        fetchExamById(assignment.examId, teacherId, { fresh: true }),
       ])
         .then(([d, examObj]) => {
           const all = (d.submissions || []).filter(s =>
@@ -673,10 +678,14 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
             <div className="sub-del-icon">{IC.trash(32)}</div>
             <h3 className="sub-del-title">Xóa bài làm?</h3>
             <p className="sub-del-text">
-              Bạn có muốn xóa bài làm của học sinh{' '}
-              <strong>{confirmDel.studentName || 'học sinh này'}</strong> hay không?
-              {isExam && confirmDel.attempts > 1 && ` Tất cả ${confirmDel.attempts} lần làm sẽ bị xóa.`}
-              {' '}Hành động này không thể hoàn tác.
+              Xoá bài làm của <strong>{confirmDel.studentName || 'học sinh này'}</strong>
+              {isExam && confirmDel.attempts > 0 && (
+                <> — <strong>{confirmDel.attempts} lượt làm</strong>
+                  {confirmDel.score != null && <> (điểm hiện tại {confirmDel.score}/{confirmDel.maxScore ?? 10})</>}
+                </>
+              )}?
+              {' '}Toàn bộ bài làm và điểm của {confirmDel.attempts > 1 ? 'các lượt này' : 'lượt này'} sẽ
+              bị xoá khỏi hệ thống, <strong>không khôi phục lại được</strong>.
             </p>
             <div className="sub-del-actions">
               <button className="mec-btn" disabled={delBusy} onClick={() => setConfirmDel(null)}>Hủy</button>
@@ -1662,7 +1671,9 @@ function ExamBankPanel({ classId, teacherId, user, subject, grade, onAssign }) {
   useEffect(() => { load() }, [load])
 
   const handleEdit = async (exam) => {
-    const full = exam.sections ? exam : await fetchExamById(exam.id, teacherId)
+    // Luôn lấy bản mới nhất từ server trước khi mở trình soạn: mở từ bản cache cũ rồi
+    // bấm Lưu sẽ ghi đè mất thay đổi mà người khác (hoặc máy khác) vừa sửa.
+    const full = await fetchExamById(exam.id, teacherId, { fresh: true })
     if (full) setEditor({ editingExam: full, manualMode: false, mixResult: null })
     else alert('Không tải được nội dung đề thi từ server.')
   }

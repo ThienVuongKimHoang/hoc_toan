@@ -152,8 +152,11 @@ export function classShareUrl(examId, classId) {
  * không truyền thì server tự ẩn đáp án (học sinh làm bài thật). Cache localStorage
  * chỉ dùng cho lượt fetch có teacherId, tránh lộ/kẹt bản đã ẩn đáp án giữa các vai trò
  * dùng chung trình duyệt. */
-export async function fetchExamById(id, teacherId) {
-  if (teacherId) {
+export async function fetchExamById(id, teacherId, { fresh = false } = {}) {
+  // fresh=true: BỎ QUA bản cache localStorage. Bắt buộc dùng khi chấm điểm/xem kết
+  // quả — bản cache có thể là đề CŨ (giáo viên vừa sửa thang điểm ở tab khác), khiến
+  // ô chấm tự luận lấy điểm tối đa cũ và chấm lệch thang so với đề thật.
+  if (teacherId && !fresh) {
     const local = getExamById(id)
     if (local) return local
   }

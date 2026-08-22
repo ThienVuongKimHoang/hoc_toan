@@ -269,8 +269,16 @@ function ReviewQuestion({ item, showPassage }) {
         <span className="rv-q-num">Câu {q.question_number}</span>
         <span className={`rv-badge rv-badge--${status}`}>{meta.icon} {meta.label}</span>
         {max > 0 && (
-          <span className="rv-q-pts" title="Điểm được / điểm tối đa của câu này">
-            {status === 'pending' ? `chờ chấm · tối đa ${round2(max)}đ` : `${round2(earned)}đ / ${round2(max)}đ`}
+          // Câu tự luận: nói rõ con số là ĐIỂM GIÁO VIÊN ĐÃ CHẤM, kèm điểm tối đa của
+          // câu đó trong đề — tránh đọc nhầm thành "được 1 trên thang 1.5 của bài chấm".
+          <span className="rv-q-pts" title={kind === 'essay'
+            ? 'Điểm giáo viên chấm cho câu này / điểm tối đa của câu trong đề'
+            : 'Điểm được / điểm tối đa của câu này'}>
+            {kind === 'essay'
+              ? (status === 'pending'
+                  ? `Chờ giáo viên chấm · tối đa ${round2(max)}đ`
+                  : `Giáo viên chấm ${round2(earned)}đ · tối đa ${round2(max)}đ`)
+              : (status === 'pending' ? `chờ chấm · tối đa ${round2(max)}đ` : `${round2(earned)}đ / ${round2(max)}đ`)}
           </span>
         )}
 

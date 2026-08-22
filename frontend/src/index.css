@@ -5392,6 +5392,10 @@ button { font-family: inherit; }
 .egr-att-btn.is-primary:hover { background: #1d4ed8; color: #fff; }
 
 .egr-toggle { font-size: 0.8rem; font-weight: 800; }
+/* Nút xoá bài làm: mờ đi lúc bình thường, chỉ rõ khi rê vào đúng hàng đó —
+   giảm nguy cơ bấm nhầm trong lúc chấm điểm (xoá bài là không hoàn tác được). */
+.egr .egr-del { opacity: 0.25; transition: opacity .15s ease; }
+.egr:hover .egr-del, .egr .egr-del:focus-visible { opacity: 1; }
 
 @media (max-width: 620px) {
   .egr-attempts { padding-left: 12px; }
