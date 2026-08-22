@@ -5341,6 +5341,63 @@ button { font-family: inherit; }
 .sub-del-btn:hover { background: #fee2e2; transform: scale(1.1); }
 .sub-del-btn { margin-left: 8px; }
 
+/* ─── Bảng điểm đề thi: 1 học sinh = 1 nhóm xổ ra từng lượt làm ─── */
+.egr {
+  background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 10px;
+  margin-bottom: 6px; overflow: hidden;
+  transition: border-color .18s ease, background .18s ease;
+}
+.egr.is-open { background: #fff; border-color: #dbeafe; box-shadow: 0 10px 22px -18px rgba(37,99,235,0.6); }
+.egr-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.egr-toggle {
+  width: 24px; height: 24px; flex-shrink: 0;
+  border: 1px solid #e2e8f0; background: #fff; color: #64748b;
+  border-radius: 7px; cursor: pointer; font-size: 0.72rem; line-height: 1;
+  transition: all .15s ease;
+}
+.egr-toggle:hover { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+.egr-pending { color: #b45309; font-weight: 700; }
+
+.egr-attempts {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 0 12px 12px 46px;
+}
+.egr-att {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+  padding: 7px 10px; border-radius: 9px;
+  background: #f8fafc; border: 1px solid #eef2f7;
+  font-size: 0.76rem; color: #64748b;
+}
+.egr-att:hover { border-color: #cbd5e1; background: #fff; }
+.egr-att-no    { font-weight: 800; color: #0f172a; min-width: 46px; }
+.egr-att-date  { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.72rem; white-space: nowrap; }
+.egr-att-dur   { white-space: nowrap; }
+.egr-att-acts  { display: inline-flex; gap: 6px; margin-left: auto; flex-shrink: 0; }
+.egr-att-score { font-weight: 800; color: #0f172a; font-size: 0.9rem; }
+.egr-att-score i { font-size: 0.7rem; font-style: normal; color: #94a3b8; }
+.egr-att-state {
+  font-size: 0.7rem; font-weight: 700; border-radius: 99px; padding: 2px 9px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.egr-att-state.is-ok   { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+.egr-att-state.is-wait { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+.egr-att-btn {
+  border: 1px solid #e2e8f0; background: #fff; color: #475569;
+  border-radius: 8px; padding: 4px 11px; cursor: pointer; font-family: inherit;
+  font-size: 0.75rem; font-weight: 700; text-decoration: none; white-space: nowrap;
+  transition: all .15s ease;
+}
+.egr-att-btn:hover { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+.egr-att-btn.is-primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+.egr-att-btn.is-primary:hover { background: #1d4ed8; color: #fff; }
+
+.egr-toggle { font-size: 0.8rem; font-weight: 800; }
+
+@media (max-width: 620px) {
+  .egr-attempts { padding-left: 12px; }
+  .egr-att-acts { margin-left: 0; }
+}
+
 .er-del-modal,
 .sub-del-modal {
   max-width: 420px;

@@ -1,0 +1,88 @@
+/* ═══ Chấm tự luận: điều hướng lượt làm / học sinh, so sánh lượt trước ═══
+   Các class .ge-modal, .ge-header, .ge-item, .ge-imgs… gốc nằm ở index.css;
+   file này chỉ bổ sung phần điều hướng + split view mới. */
+
+.ge-modal { max-width: 760px; }
+.ge-head-main { min-width: 0; }
+.ge-sub-dim { color: #94a3b8; font-weight: 500; }
+
+/* ─── Thanh điều hướng lượt làm + học sinh ─── */
+.ge-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px;
+  margin-top: 12px; padding: 9px 12px;
+  background: #f8fafc; border: 1px solid #eef2f7; border-radius: 12px;
+}
+.ge-nav-attempts { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.ge-nav-label { font-size: 0.78rem; font-weight: 700; color: #64748b; margin-right: 2px; }
+.ge-att {
+  border: 1.5px solid #e2e8f0; background: #fff; color: #475569;
+  border-radius: 99px; padding: 5px 12px; cursor: pointer; font-family: inherit;
+  font-size: 0.8rem; font-weight: 700; white-space: nowrap;
+  transition: all .15s ease;
+}
+.ge-att:hover     { border-color: #2563eb; color: #2563eb; }
+.ge-att.is-graded { border-color: #a7f3d0; background: #ecfdf5; color: #047857; }
+.ge-att.is-cur    { background: #2563eb; border-color: #2563eb; color: #fff; }
+.ge-nav-status { font-size: 0.76rem; color: #64748b; margin-left: 4px; white-space: nowrap; }
+
+.ge-nav-students { display: flex; gap: 6px; flex-shrink: 0; }
+.ge-navbtn {
+  border: 1px solid #e2e8f0; background: #fff; color: #475569;
+  border-radius: 9px; padding: 6px 11px; cursor: pointer; font-family: inherit;
+  font-size: 0.78rem; font-weight: 700; white-space: nowrap;
+  transition: all .15s ease;
+}
+.ge-navbtn:hover:not(:disabled) { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+.ge-navbtn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ─── Dòng thông tin lượt đang chấm ─── */
+.ge-attempt-meta {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
+  margin-top: 10px; font-size: 0.8rem; color: #64748b;
+}
+.ge-attempt-meta b { color: #0f172a; }
+.ge-chip-ok   { color: #047857; font-weight: 700; }
+.ge-chip-wait { color: #b45309; font-weight: 700; }
+.ge-tool {
+  border: 1px solid #e2e8f0; background: #fff; color: #475569;
+  border-radius: 99px; padding: 4px 11px; cursor: pointer; font-family: inherit;
+  font-size: 0.76rem; font-weight: 700;
+  transition: all .15s ease;
+}
+.ge-tool:hover  { border-color: #7c3aed; color: #7c3aed; background: #f5f3ff; }
+.ge-tool.is-on  { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+
+/* ─── So sánh song song lượt trước / lượt đang chấm ─── */
+.ge-split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ge-split-pane {
+  border: 1px solid #eef2f7; border-radius: 10px; padding: 8px;
+  background: #fff; min-width: 0;
+}
+.ge-split-pane--old { background: #f8fafc; }
+.ge-split-label {
+  font-size: 0.72rem; font-weight: 700; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 6px;
+}
+.ge-split-label--cur { color: #2563eb; }
+.ge-imgs--compact .ge-img { width: 96px; height: 96px; }
+
+/* Nút chép nhanh điểm của câu đó từ lượt trước */
+.ge-mini-copy {
+  border: 1px dashed #cbd5e1; background: #fff; color: #64748b;
+  border-radius: 8px; padding: 4px 9px; cursor: pointer; font-family: inherit;
+  font-size: 0.74rem; font-weight: 700; white-space: nowrap;
+}
+.ge-mini-copy:hover { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+
+/* ─── Cụm nút lưu ─── */
+.ge-actions { flex-wrap: wrap; align-items: center; }
+.ge-btn-next { border: 1.5px solid #2563eb !important; color: #2563eb !important; background: #fff !important; font-weight: 700; }
+.ge-btn-next:hover:not(:disabled) { background: #eff6ff !important; }
+
+@media (max-width: 700px) {
+  .ge-split { grid-template-columns: 1fr; }
+  .ge-nav { flex-direction: column; align-items: stretch; }
+  .ge-nav-students .ge-navbtn { flex: 1; }
+  .ge-actions .mec-btn { flex: 1 1 auto; }
+}

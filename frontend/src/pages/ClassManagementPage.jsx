@@ -250,6 +250,89 @@ function FileChip({ file, onRemove, onView }) {
   )
 }
 
+/* ─── Một học sinh trong bảng điểm đề thi: dòng tổng + xổ ra từng lượt làm ─── */
+const isEssayGraded = (s) => !!s?.manualScores && Object.keys(s.manualScores).length > 0
+
+function ExamStudentRow({ row, examId, assignment, hasEssay, onGrade, onDelete }) {
+  const [open, setOpen] = useState(false)
+  const attempts = row.list || []
+  const ungraded = hasEssay ? attempts.filter(a => !isEssayGraded(a)) : []
+  const formatDt = iso => iso ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
+  // Dòng lượt làm dùng bản gọn (bỏ năm) cho vừa một hàng
+  const formatDtShort = iso => iso ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
+  const fmtDur = sec => (sec == null || sec < 0) ? '—' : (sec < 60 ? `${sec} giây` : `${Math.floor(sec / 60)} phút`)
+  const limitSec = assignment.duration ? assignment.duration * 60 : 0
+
+  return (
+    <div className={`egr ${open ? 'is-open' : ''}`}>
+      <div className="egr-head">
+        <button className="egr-toggle" onClick={() => setOpen(v => !v)}
+          title={open ? 'Thu gọn các lượt làm' : 'Xem từng lượt làm'}>
+          {open ? '▾' : '▸'}
+        </button>
+        <div className="sub-avatar">{row.studentName?.[0] ?? '?'}</div>
+        <div className="sub-info">
+          <div className="sub-name">
+            {row.studentName}
+            {row.violations > 0 && (
+              <span className="sub-violation-chip" title="Số lần vi phạm khóa màn hình">⚠️ {row.violations}</span>
+            )}
+          </div>
+          <div className="sub-time">
+            {IC.clock(11)} {row.attempts} lượt làm bài · gần nhất {formatDt(row.submittedAt)}
+            {hasEssay && ungraded.length > 0 && (
+              <span className="egr-pending"> · {ungraded.length} lượt chờ chấm TL</span>
+            )}
+          </div>
+        </div>
+        {hasEssay && (
+          <button className={`er-grade-btn ${ungraded.length === 0 ? 'graded' : ''}`}
+            title={ungraded.length ? 'Chấm lượt chưa chấm đầu tiên' : 'Xem/sửa điểm tự luận đã chấm'}
+            onClick={() => onGrade(ungraded[0] || attempts[attempts.length - 1])}>
+            {ungraded.length === 0 ? '✅ Đã chấm'
+              : ungraded.length === attempts.length ? '✍️ Chấm TL'
+              : `✍️ Chấm tiếp (${ungraded.length})`}
+          </button>
+        )}
+        <span className="sub-badge sub-badge--done">{row.score}/{row.maxScore ?? '—'} điểm</span>
+        <button className="sub-del-btn" title="Xóa bài làm của học sinh này" onClick={onDelete}>✕</button>
+      </div>
+
+      {open && (
+        <div className="egr-attempts">
+          {attempts.map((a, i) => ({ a, no: i + 1 })).reverse().map(({ a, no }) => {
+            const graded = isEssayGraded(a)
+            const pct = limitSec > 0 && a.timeSpent != null ? Math.min(100, Math.round((a.timeSpent / limitSec) * 100)) : null
+            return (
+              <div key={a.id} className="egr-att">
+                <span className="egr-att-no">Lượt {no}</span>
+                <span className="egr-att-date">{formatDtShort(a.submittedAt)}</span>
+                <span className="egr-att-dur" title={pct != null ? `${pct}% thời gian cho phép` : 'Thời gian làm bài'}>
+                  ⏱ {fmtDur(a.timeSpent)}
+                </span>
+                <span className="egr-att-score">{scaledScore(a.score, a.maxScore)}<i>/10</i></span>
+                {hasEssay && (
+                  <span className={`egr-att-state ${graded ? 'is-ok' : 'is-wait'}`}>
+                    {graded ? 'Đã chấm TL' : 'Chờ chấm TL'}
+                  </span>
+                )}
+                <span className="egr-att-acts">
+                  <a className="egr-att-btn" href={`#results/${examId}/${a.id}`}>Xem</a>
+                  {hasEssay && (
+                    <button className={`egr-att-btn ${graded ? '' : 'is-primary'}`} onClick={() => onGrade(a)}>
+                      {graded ? 'Sửa điểm' : 'Chấm ngay'}
+                    </button>
+                  )}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── Submissions panel ─── */
 function SubmissionsPanel({ classId, assignment, members, allAssignments, teacherId, onClose }) {
   const [data, setData] = useState(null)
@@ -307,6 +390,9 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
             return {
               studentId: last.studentId, studentName: last.studentName,
               score, maxScore: 10, attempts: list.length,
+              // Từng lượt làm (đã sắp tăng dần theo thời gian) — bảng điểm xổ ra
+              // chi tiết từng lượt và màn chấm tự luận chuyển lượt dựa vào đây.
+              list,
               submittedAt: last.submittedAt,
               timeSpent: last.timeSpent,
               violations: list.reduce((n, s) => n + (s.violationCount || 0), 0),
@@ -356,14 +442,7 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
   const submittedIds = new Set(submissions.map(s => String(s.studentId)))
   const notSubmitted = members.filter(m => !submittedIds.has(String(m.userId)))
   const hasEssay = (data?.examObj?.sections?.['TỰ LUẬN']?.questions?.length ?? 0) > 0
-  // Bài nộp mới nhất (đầy đủ answers/ảnh) của một học sinh — dùng để chấm tự luận
-  const latestRawSub = (studentId) => {
-    const list = (data?.rawSubs || []).filter(r => String(r.studentId) === String(studentId))
-    list.sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt))
-    return list[list.length - 1] || null
-  }
   const formatDt = iso => iso ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
-  const fmtDur = sec => (sec == null || sec < 0) ? null : (sec < 60 ? `${sec} giây` : (sec % 60 ? `${Math.floor(sec / 60)} phút ${sec % 60} giây` : `${Math.floor(sec / 60)} phút`))
 
   return (
     <>
@@ -422,33 +501,24 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
             {submissions.length > 0 && (
               <>
                 <h4 className="sub-section-title">✅ Đã nộp ({submissions.length})</h4>
-                {submissions.map(s => (
+                {isExam ? submissions.map(s => (
+                  <ExamStudentRow
+                    key={s.studentId}
+                    row={s}
+                    examId={assignment.examId}
+                    assignment={assignment}
+                    hasEssay={hasEssay}
+                    onGrade={(sub) => sub && setGradingSub(sub)}
+                    onDelete={() => setConfirmDel(s)}
+                  />
+                )) : submissions.map(s => (
                   <div key={s.studentId} className="sub-row">
                     <div className="sub-avatar">{s.studentName?.[0] ?? '?'}</div>
                     <div className="sub-info">
-                      <div className="sub-name">
-                        {s.studentName}
-                        {isExam && s.violations > 0 && (
-                          <span className="sub-violation-chip" title="Số lần vi phạm khóa màn hình">
-                            ⚠️ {s.violations}
-                          </span>
-                        )}
-                      </div>
+                      <div className="sub-name">{s.studentName}</div>
                       <div className="sub-time">
                         {IC.clock(11)} {formatDt(s.submittedAt)}
-                        {isExam && s.attempts > 1 && <span> · {s.attempts} lần làm</span>}
                       </div>
-                      {isExam && fmtDur(s.timeSpent) && (() => {
-                        const limitSec = assignment.duration ? assignment.duration * 60 : 0
-                        const pct = limitSec > 0 ? Math.min(100, Math.round((s.timeSpent / limitSec) * 100)) : 100
-                        const color = !limitSec ? '#6366f1' : pct >= 85 ? '#ef4444' : pct >= 60 ? '#f59e0b' : '#22c55e'
-                        return (
-                          <div className="sub-timebar" title="Thời gian làm bài">
-                            <div className="sub-timebar-fill" style={{ width: `${pct}%`, background: color }} />
-                            <span className="sub-timebar-label">⏱ {fmtDur(s.timeSpent)}</span>
-                          </div>
-                        )
-                      })()}
                       {s.note && <div className="sub-note">"{s.note}"</div>}
                       {s.files?.length > 0 && (
                         <div className="file-chip-list" style={{ marginTop: 6 }}>
@@ -474,23 +544,6 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
                           studentId={s.studentId} hasGrade={s.aiGrade?.status === 'done'}
                           onDone={() => { reload(); setStatsKey(k => k + 1) }} />
                       </div>
-                    ) : isExam && s.score != null ? (
-                      <>
-                        {hasEssay && (() => {
-                          const r = latestRawSub(s.studentId)
-                          const graded = r?.manualScores && Object.keys(r.manualScores).length > 0
-                          return (
-                            <button className={`er-grade-btn ${graded ? 'graded' : ''}`}
-                              title="Chấm câu tự luận (xem ảnh bài làm)"
-                              onClick={() => { if (r) setGradingSub(r) }}>
-                              {graded ? '✅ Đã chấm' : '✍️ Chấm TL'}
-                            </button>
-                          )
-                        })()}
-                        <span className="sub-badge sub-badge--done">
-                          {s.score}/{s.maxScore ?? '—'} điểm
-                        </span>
-                      </>
                     ) : (
                       <span className="sub-badge sub-badge--done">{IC.check(11)} Đã nộp</span>
                     )}
@@ -557,10 +610,14 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
       {gradingSub && data?.examObj && (
         <GradeEssayModal
           exam={data.examObj}
-          submission={gradingSub}
+          // Cả lớp + từng lượt làm → modal tự chuyển lượt/học sinh mà không phải đóng lại
+          students={submissions.map(r => ({
+            studentId: r.studentId, studentName: r.studentName, attempts: r.list || [],
+          }))}
+          initialSubId={gradingSub.id}
           teacherId={teacherId}
           onClose={() => setGradingSub(null)}
-          onSaved={() => { setGradingSub(null); reload() }}
+          onSaved={() => { reload(); setStatsKey(k => k + 1) }}
         />
       )}
       {confirmDel && (
