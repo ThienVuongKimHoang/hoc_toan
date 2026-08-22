@@ -113,7 +113,7 @@ function SectionTotalEditor({ total, ppq, onChange }) {
   return (
     <span className="rs-section-pts rs-section-pts-edit" onClick={open}
       title="Click để chỉnh tổng điểm phần — điểm mỗi câu sẽ tự chia lại theo tổng này">
-      Tổng {total}đ ({ppq}đ/câu) <span className="rs-pts-pen">✏</span>
+      Tổng {total}đ ({typeof ppq === 'number' ? `${ppq}đ/câu` : ppq}) <span className="rs-pts-pen">✏</span>
     </span>
   )
 }
@@ -193,6 +193,21 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
   }, [])
 
   const totalQ = sectionList.reduce((s, sec) => s + (sections[sec]?.questions?.length ?? 0), 0)
+
+  /* Tổng điểm của một phần — phải khớp với cách server tính điểm tối đa của đề
+     (_calc_max_score): trắc nghiệm lấy điểm/câu × số câu, TỰ LUẬN cộng điểm từng câu. */
+  const sectionTotalOf = (sec) => {
+    const qs = sections[sec]?.questions || []
+    const sum = sec === 'TỰ LUẬN'
+      ? qs.reduce((s, q) => s + (Number(q.points) || 0), 0)
+      : (sections[sec]?.points_per_q || 0) * qs.length
+    return Math.round(sum * 100) / 100
+  }
+  /* Nhãn "…đ/câu" chỉ đúng khi mọi câu tự luận cùng điểm; lệch nhau thì nói thẳng. */
+  const essayPpqLabel = (qs) => {
+    const pts = qs.map(q => Number(q.points) || 0)
+    return pts.every(p => p === pts[0]) ? pts[0] : 'điểm mỗi câu khác nhau'
+  }
 
   const unansweredList = sectionList.flatMap(sec =>
     (sections[sec]?.questions || [])
@@ -525,10 +540,13 @@ export default function ReviewStep({ result, title, onTitleChange, onPreview, on
       <div className="rs-content">
         <div className="rs-section-header">
           <h2 style={{ color: meta.color }}>{meta.shortLabel} — {meta.label}</h2>
-          {sections[activeSection]?.points_per_q && questions.length > 0 ? (
+          {questions.length > 0 && (activeSection === 'TỰ LUẬN' || sections[activeSection]?.points_per_q) ? (
             <SectionTotalEditor
-              total={Math.round(sections[activeSection].points_per_q * questions.length * 100) / 100}
-              ppq={sections[activeSection].points_per_q}
+              // TỰ LUẬN chấm tay theo ĐIỂM TỪNG CÂU (q.points) — server cũng cộng tổng
+              // từ đó. Lấy points_per_q × số câu như các phần trắc nghiệm sẽ ra tổng
+              // khác hẳn tổng thật khi các câu có điểm lệch nhau.
+              total={sectionTotalOf(activeSection)}
+              ppq={activeSection === 'TỰ LUẬN' ? essayPpqLabel(questions) : sections[activeSection].points_per_q}
               onChange={(total) => updateSectionTotal(activeSection, total)}
             />
           ) : (

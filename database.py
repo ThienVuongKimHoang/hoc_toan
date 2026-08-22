@@ -1021,18 +1021,27 @@ def update_submission_score(sub_id, score, max_score) -> bool:
     return row is not None
 
 
-def update_submission_grade(sub_id, manual_scores: dict, score) -> bool:
-    """Lưu điểm chấm tay câu tự luận + điểm tổng đã cộng cho 1 bài nộp."""
+def update_submission_grade(sub_id, manual_scores: dict, score, max_score=None) -> bool:
+    """Lưu điểm chấm tay câu tự luận + điểm tổng đã cộng cho 1 bài nộp.
+    max_score: điểm tối đa của đề TẠI THỜI ĐIỂM CHẤM — phải ghi lại cùng lúc, nếu
+    không thì bài đã chấm giữ mẫu số cũ (đề sửa lại thang điểm sau khi học sinh nộp)
+    và mỗi màn hình quy về thang 10 ra một con số khác nhau."""
     try:
         sid = int(sub_id)
     except (TypeError, ValueError):
         return False
     with _C() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE submissions SET manual_scores=%s, score=%s WHERE id=%s RETURNING id",
-                (json.dumps(manual_scores or {}, ensure_ascii=False), score, sid),
-            )
+            if max_score is None:
+                cur.execute(
+                    "UPDATE submissions SET manual_scores=%s, score=%s WHERE id=%s RETURNING id",
+                    (json.dumps(manual_scores or {}, ensure_ascii=False), score, sid),
+                )
+            else:
+                cur.execute(
+                    "UPDATE submissions SET manual_scores=%s, score=%s, max_score=%s WHERE id=%s RETURNING id",
+                    (json.dumps(manual_scores or {}, ensure_ascii=False), score, max_score, sid),
+                )
             row = cur.fetchone()
         conn.commit()
     return row is not None

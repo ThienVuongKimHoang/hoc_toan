@@ -1136,9 +1136,12 @@ async def grade_essay_submission(exam_id: str, sub_id: str, request: Request, ca
 
     auto  = _calc_score(exam, sub.get("answers") or {})
     total = _round2(auto + _manual_total(clean))
-    if not db.update_submission_grade(sub_id, clean, total):
+    # Ghi lại cả maxScore theo đề hiện tại: đề có thể đã đổi thang điểm sau khi học
+    # sinh nộp, giữ mẫu số cũ thì điểm quy về thang 10 mỗi màn hình một khác.
+    max_score = _calc_max_score(exam)
+    if not db.update_submission_grade(sub_id, clean, total, max_score):
         return JSONResponse({"error": "Không cập nhật được điểm"}, status_code=500)
-    return {"ok": True, "score": total, "maxScore": _calc_max_score(exam), "manualScores": clean}
+    return {"ok": True, "score": total, "maxScore": max_score, "manualScores": clean}
 
 
 @app.delete("/api/exams/{exam_id}/submissions/{sub_id}")

@@ -269,8 +269,8 @@ function ReviewQuestion({ item, showPassage }) {
         <span className="rv-q-num">Câu {q.question_number}</span>
         <span className={`rv-badge rv-badge--${status}`}>{meta.icon} {meta.label}</span>
         {max > 0 && (
-          <span className="rv-q-pts">
-            {status === 'pending' ? `— / ${round2(max)}đ` : `${round2(earned)} / ${round2(max)}đ`}
+          <span className="rv-q-pts" title="Điểm được / điểm tối đa của câu này">
+            {status === 'pending' ? `chờ chấm · tối đa ${round2(max)}đ` : `${round2(earned)}đ / ${round2(max)}đ`}
           </span>
         )}
 
@@ -723,8 +723,8 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
                   <h2>{meta.label}</h2>
                   <span className="rv-section-stat">
                     {block.sec === 'TỰ LUẬN'
-                      ? `${round2(block.earned)}/${round2(block.max)}đ`
-                      : `${block.nRight}/${block.items.length} câu đúng · ${round2(block.earned)}/${round2(block.max)}đ`}
+                      ? `Được ${round2(block.earned)}đ · tối đa ${round2(block.max)}đ`
+                      : `${block.nRight}/${block.items.length} câu đúng · được ${round2(block.earned)}đ / tối đa ${round2(block.max)}đ`}
                   </span>
                 </header>
                 {items.map(item => {

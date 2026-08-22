@@ -14,6 +14,7 @@ import './GradeEssayModal.css'
  *   teacherId, onClose, onSaved (gọi sau mỗi lần lưu để danh sách ngoài tải lại — KHÔNG đóng modal)
  */
 
+const round2 = (n) => Math.round(n * 100) / 100
 const isGraded = (s) => !!s?.manualScores && Object.keys(s.manualScores).length > 0
 
 const formatDt = iso => iso
@@ -98,6 +99,19 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
   const currentKeys = new Set(essayQs.map(q => `TL_${q.question_number}`))
   const orphanedEntries = Object.entries(sub?.manualScores || {}).filter(([k]) => !currentKeys.has(k))
 
+  /* Tách rõ 2 phần điểm. `sub.score` là ĐIỂM TỔNG đã cộng cả tự luận đã chấm, nên
+     phần trắc nghiệm = tổng − điểm tự luận đã lưu; nếu lấy thẳng sub.score ghi là
+     "trắc nghiệm" thì cộng với ô tự luận bên dưới sẽ ra số vô lý (tính 2 lần). */
+  const savedManual = Object.entries(sub?.manualScores || {})
+    .reduce((s, [, v]) => s + (Number(v) || 0), 0)
+  const subMax    = Number(sub?.maxScore) || 0
+  const autoScore = Math.max(0, round2((Number(sub?.score) || 0) - savedManual))
+  const autoMax   = round2(subMax - totalMax)
+  const projected = round2(autoScore + total)   // tổng sau khi lưu điểm đang gõ
+  // Bài cũ có thể mang maxScore của thang điểm cũ (đề sửa sau khi nộp) — lúc đó tách
+  // trắc nghiệm/tự luận sẽ ra số vô lý, thà chỉ hiện điểm tổng còn hơn hiện số sai.
+  const breakdownOk = subMax > 0 && autoMax >= 0 && projected <= subMax + 0.001
+
   const setScore = (key, raw, max) => {
     if (raw === '') return setScores(p => ({ ...p, [key]: '' }))
     let v = parseFloat(raw)
@@ -174,7 +188,7 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
             </p>
           </div>
           <div className="ge-total">
-            {Math.round(total * 100) / 100}<span> / {totalMax}đ tự luận</span>
+            {round2(total)}<span> / {totalMax}đ tự luận</span>
           </div>
         </div>
 
@@ -208,7 +222,12 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
         <div className="ge-attempt-meta">
           <span>🗓 {formatDt(sub.submittedAt)}</span>
           <span>⏱ {fmtDur(sub.timeSpent)}</span>
-          <span>📝 Trắc nghiệm (tự động): <b>{scaledScore(sub.score, sub.maxScore)}</b>/10</span>
+          {breakdownOk && <span>📝 Trắc nghiệm: <b>{autoScore}</b>/{autoMax}đ</span>}
+          <span>✍️ Tự luận: <b>{round2(total)}</b>/{totalMax}đ</span>
+          <span title="Điểm tổng sau khi lưu, quy về thang 10">
+            🎯 Tổng: <b>{breakdownOk ? projected : round2(Number(sub.score) || 0)}</b>/{subMax}đ
+            {' = '}<b>{scaledScore(breakdownOk ? projected : Number(sub.score) || 0, subMax)}</b>/10
+          </span>
           <span className={isGraded(sub) ? 'ge-chip-ok' : 'ge-chip-wait'}>
             {isGraded(sub) ? '✅ Đã chấm tự luận' : '⏳ Chưa chấm tự luận'}
           </span>
