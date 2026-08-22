@@ -315,17 +315,27 @@ export default function App() {
     }
   }, [view, user, classId])
 
+  /* Xoá tham số của route cũ khi điều hướng bằng NÚT (setHash chỉ pushState, không
+     phát hashchange nên applyHash không chạy để dọn hộ). Thiếu bước này thì classId
+     của "#take/<đề>/<lớp>/<lượt giao>" còn nguyên, mà ở màn "Lớp của tôi" ô đó lại
+     mang nghĩa MÃ THAM GIA LỚP → vừa bấm "Trang chủ" đã bật ngay bảng nhập mã lớp. */
+  const clearRouteParams = () => {
+    setExamId(null); setClassId(null); setAssignmentId(null); setSubId(null)
+    setOpenClassId(null); setOpenAsgnTab(null)
+  }
+
   // Với giáo viên/học sinh, "trang chủ" luôn là phần lớp học của họ — bấm logo/nút
   // Trang chủ ở bất kỳ đâu cũng đưa họ về đó, không phải trang chủ marketing.
   const goHome = () => {
+    clearRouteParams()
     if (user?.role === ROLES.TEACHER) { setHash('classes'); setView('class-mgmt'); return }
     if (user?.role === ROLES.STUDENT) { setHash('my-classes'); setView('my-classes'); return }
     setHash(''); setView('home')
   }
-  const goProfile = () => user ? (setHash(''), setView('profile')) : goLogin()
-  const goHistory = () => user ? (setHash('history'), setView('exam-history')) : goLogin()
-  const goLogin = () => { setHash(''); setView('login') }
-  const goExam = () => user ? (setHash(''), setView('exam')) : goLogin()
+  const goProfile = () => user ? (clearRouteParams(), setHash(''), setView('profile')) : goLogin()
+  const goHistory = () => user ? (clearRouteParams(), setHash('history'), setView('exam-history')) : goLogin()
+  const goLogin = () => { clearRouteParams(); setHash(''); setView('login') }
+  const goExam = () => user ? (clearRouteParams(), setHash(''), setView('exam')) : goLogin()
   const goAdmin = () => {
     if (!user) { goLogin(); return }
     if (!hasAdminAccess(user.role)) return
