@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { examStatus, fetchExamById, submitResult, scaledScore, verifyLockEscape } from '../store/examStore.js'
+import { examStatus, fetchExamById, startAttempt, submitResult, scaledScore, verifyLockEscape } from '../store/examStore.js'
 import { getExamWindow } from '../store/classStore.js'
 import QuestionCard, { SECTION_PREFIX } from '../components/QuestionCard.jsx'
 import ReadingTakeView from '../components/ReadingTakeView.jsx'
@@ -50,6 +50,24 @@ function saveAttempt(key, data) {
 }
 function clearAttempt(key) {
   try { localStorage.removeItem(key) } catch { /* ignore */ }
+}
+
+/* ── Vé "đã bấm Bắt đầu làm bài" do server cấp cho lượt này ──
+   Giữ trong sessionStorage (chỉ sống trong tab đang thi, F5 không mất) — không có
+   vé thì màn hình làm bài KHÔNG mở, dù URL #take/... đúng hay bấm Back về history
+   cũ. Vé bị xoá ngay khi nộp bài, nên muốn vào lại phải xin vé mới (server kiểm
+   tra lại thành viên lớp / giờ mở / số lượt còn lại). */
+function ticketKey(examId, classId, assignmentId, studentId) {
+  return attemptKey(examId, classId, assignmentId, studentId) + '_ticket'
+}
+function loadTicket(key) {
+  try { return sessionStorage.getItem(key) || null } catch { return null }
+}
+function saveTicket(key, val) {
+  try { sessionStorage.setItem(key, val) } catch { /* ignore */ }
+}
+function clearTicket(key) {
+  try { sessionStorage.removeItem(key) } catch { /* ignore */ }
 }
 
 /* ── Đánh dấu 1 lượt làm bài "vừa nộp xong" (trong tab hiện tại), để App.jsx chặn
@@ -343,8 +361,56 @@ function PasswordGate({ exam, onCorrect }) {
   )
 }
 
+/* ── Cổng xác nhận vào làm bài ──
+   Bấm nút ở đây mới gọi server xin vé; server kiểm tra lại thành viên lớp, giờ mở
+   và số lượt còn lại. Không qua bước này thì đề không hiện, dù có URL. */
+function AttemptStartGate({ exam, examId, classId, assignmentId, resuming, onStarted, onGoHome }) {
+  const [busy, setBusy] = useState(false)
+  const [err,  setErr]  = useState('')
+
+  const start = async () => {
+    setBusy(true); setErr('')
+    try {
+      const res = await startAttempt(examId, { classId, assignmentId })
+      onStarted(res.ticket)
+    } catch (e) {
+      setErr(e.message || 'Không vào được đề thi.')
+      setBusy(false)
+    }
+  }
+
+  const used = exam._attemptsUsed ?? 0
+  const max  = exam._maxAttempts ?? null
+
+  return (
+    <div className="et-locked">
+      <div className="etl-card">
+        <div className="etl-icon">📝</div>
+        <h1 className="etl-title">{exam.title}</h1>
+        <div className="etl-meta">
+          <span>📋 {exam.totalQuestions} câu hỏi</span>
+          <span>⏱ {exam.settings?.duration} phút</span>
+          {exam._className && <span>🏫 {exam._className}</span>}
+        </div>
+        <div className="etl-divider" />
+        <p style={{ color: '#64748b', margin: '12px 0' }}>
+          {resuming
+            ? 'Bạn đang có một lượt làm dở — bấm để tiếp tục đúng bài và đúng giờ còn lại.'
+            : 'Bấm nút bên dưới để bắt đầu. Đồng hồ chạy ngay khi vào đề.'}
+          {max ? ` Bạn đã làm ${used}/${max} lượt.` : (used > 0 ? ` Bạn đã làm ${used} lượt (không giới hạn).` : '')}
+        </p>
+        {err && <div className="etl-expired-msg">{err}</div>}
+        <button className="btn-submit-exam" style={{ marginTop: 8 }} disabled={busy} onClick={start}>
+          {busy ? '⏳ Đang vào đề…' : resuming ? '▶️ Tiếp tục làm bài' : '🚀 Bắt đầu làm bài'}
+        </button>
+        <button className="btn-primary" style={{ marginTop: 10 }} onClick={onGoHome}>← Trang chủ</button>
+      </div>
+    </div>
+  )
+}
+
 /* ── Main exam view ── */
-function ExamView({ exam, studentName, studentId, className, classId, assignmentId, onGoHome, onGoClass }) {
+function ExamView({ exam, studentName, studentId, className, classId, assignmentId, ticket, onTicketUsed, onGoHome, onGoClass }) {
   const hideResults = exam.settings?.hideResults || false
   const sectionList = getSectionList(exam)
   // Đề có phần tự luận: điểm chấm tay đến sau (0đ cho đến khi giáo viên chấm), nhưng
@@ -452,12 +518,15 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
       const result = await submitResult(exam.id, {
         studentName, studentId, answers, className, classId, assignmentId,
         startedAt: new Date(effStart).toISOString(), timeSpent,
-        violationCount: lockOn ? violations : null, shuffleMap
+        violationCount: lockOn ? violations : null, shuffleMap, ticket
       })
       setFinalScore(result.score)
       setFinalMax(result.maxScore)
       setSubmitted(true)
       clearAttempt(attemptKeyStr)
+      // Vé đã tiêu: muốn vào lại đề (kể cả bấm Back) phải bấm "Bắt đầu làm bài"
+      // lần nữa và server sẽ kiểm tra lại giờ mở + số lượt còn lại.
+      onTicketUsed?.()
       // Đánh dấu lượt này "vừa nộp" — App.jsx dựa vào cờ này để chặn bấm Back trên
       // trình duyệt quay lại được màn hình làm bài (chỉ chặn khi Back/Forward, không
       // chặn khi bấm "Làm bài"/"Làm lại" để bắt đầu lượt mới).
@@ -807,11 +876,22 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
   const [notFound, setNotFound] = useState(false)
   const [status, setStatus] = useState('pending')
   const [pwdUnlocked, setPwdUnlocked] = useState(false)
+  // Vé của lượt làm này — server cấp khi học sinh bấm "Bắt đầu làm bài"
+  const [ticket, setTicket] = useState(null)
+  useEffect(() => {
+    if (user?.id == null) return
+    setTicket(loadTicket(ticketKey(examId, classId, assignmentId, String(user.id))))
+  }, [examId, classId, assignmentId, user?.id])
 
   // Vào trang này bằng điều hướng MỚI (bấm "Làm bài"/"Làm lại") luôn là 1 lượt làm bài
   // hợp lệ — xoá cờ "vừa nộp" của lượt trước để không bị App.jsx chặn nhầm lượt mới này.
+  // Cleanup: RỜI khỏi màn hình làm bài cũng xoá cờ. Cờ chỉ có nhiệm vụ chặn bấm Back
+  // NGAY tại màn hình vừa nộp; để sót lại thì lần vào sau (đề còn lượt) bị đá ngược về
+  // lớp học mà không tải đề — đúng lỗi "làm xong lần 1 không vào lần 2 được".
   useEffect(() => {
-    if (user?.id != null) clearExamJustSubmitted(examId, classId, assignmentId, user.id)
+    if (user?.id == null) return
+    clearExamJustSubmitted(examId, classId, assignmentId, user.id)
+    return () => clearExamJustSubmitted(examId, classId, assignmentId, user.id)
   }, [examId, classId, assignmentId, user?.id])
 
   useEffect(() => {
@@ -954,6 +1034,23 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
     return <PasswordGate exam={exam} onCorrect={() => setPwdUnlocked(true)} />
   }
 
+  // Cổng xác nhận: phải bấm "Bắt đầu làm bài" (server cấp vé) mới mở đề — dán URL
+  // #take/... hay bấm Back về history cũ đều dừng ở đây chứ không nhảy thẳng vào đề.
+  if (!ticket) {
+    return (
+      <AttemptStartGate
+        exam={exam}
+        resuming={!!loadAttempt(attemptKey(examId, classId, assignmentId, String(user.id)))}
+        examId={examId} classId={classId} assignmentId={assignmentId}
+        onStarted={(t) => {
+          saveTicket(ticketKey(examId, classId, assignmentId, String(user.id)), t)
+          setTicket(t)
+        }}
+        onGoHome={onGoHome}
+      />
+    )
+  }
+
   // Chỉ gắn bài nộp vào lớp khi: được giao qua lớp (đã xác minh thành viên)
   // hoặc luồng cũ mà học sinh là thành viên. Lớp đã xóa / bị mời ra khỏi lớp
   // → nộp như link công khai (không classId).
@@ -971,6 +1068,8 @@ export default function ExamTakePage({ examId, classId, assignmentId, user, onGo
       className={resolvedClassName}
       classId={effectiveClassId}
       assignmentId={exam._classGated ? (exam._assignmentId || null) : null}
+      ticket={ticket}
+      onTicketUsed={() => clearTicket(ticketKey(examId, classId, assignmentId, String(user.id)))}
       onGoHome={onGoHome}
       onGoClass={onGoClass}
     />

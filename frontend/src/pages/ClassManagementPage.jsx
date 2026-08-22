@@ -250,11 +250,26 @@ function FileChip({ file, onRemove, onView }) {
   )
 }
 
+/* ─── Nhớ chỗ đang xem trong bảng điểm khi bấm "Xem" một lượt làm ───
+   Mở bài làm là điều hướng sang trang khác (#results/...), Back quay lại sẽ dựng
+   lại lớp → bảng điểm → đúng học sinh đang mở → đúng vị trí cuộn, thay vì bắt
+   giáo viên bấm lại từ đầu. Lưu trong sessionStorage nên chỉ sống trong tab đó. */
+const SUBS_RETURN_KEY = 'hoctoan_subs_return'
+function saveSubsReturn(data) {
+  try { sessionStorage.setItem(SUBS_RETURN_KEY, JSON.stringify(data)) } catch { /* quota */ }
+}
+function readSubsReturn() {
+  try { return JSON.parse(sessionStorage.getItem(SUBS_RETURN_KEY)) } catch { return null }
+}
+function clearSubsReturn() {
+  try { sessionStorage.removeItem(SUBS_RETURN_KEY) } catch { /* ignore */ }
+}
+
 /* ─── Một học sinh trong bảng điểm đề thi: dòng tổng + xổ ra từng lượt làm ─── */
 const isEssayGraded = (s) => !!s?.manualScores && Object.keys(s.manualScores).length > 0
 
-function ExamStudentRow({ row, examId, assignment, hasEssay, onGrade, onDelete }) {
-  const [open, setOpen] = useState(false)
+function ExamStudentRow({ row, examId, classId, assignment, hasEssay, defaultOpen = false, onGrade, onDelete }) {
+  const [open, setOpen] = useState(defaultOpen)
   const attempts = row.list || []
   const ungraded = hasEssay ? attempts.filter(a => !isEssayGraded(a)) : []
   const formatDt = iso => iso ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
@@ -317,7 +332,13 @@ function ExamStudentRow({ row, examId, assignment, hasEssay, onGrade, onDelete }
                   </span>
                 )}
                 <span className="egr-att-acts">
-                  <a className="egr-att-btn" href={`#results/${examId}/${a.id}`}>Xem</a>
+                  <a className="egr-att-btn" href={`#results/${examId}/${a.id}`}
+                    onClick={(e) => saveSubsReturn({
+                      classId, assignmentId: assignment.id, studentId: String(row.studentId),
+                      scroll: e.currentTarget.closest('.cm-subs')?.scrollTop || 0,
+                    })}>
+                    Xem
+                  </a>
                   {hasEssay && (
                     <button className={`egr-att-btn ${graded ? '' : 'is-primary'}`} onClick={() => onGrade(a)}>
                       {graded ? 'Sửa điểm' : 'Chấm ngay'}
@@ -342,6 +363,10 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
   const [viewGrade, setViewGrade] = useState(null)     // submission đang xem kết quả AI
   const [gradingSub, setGradingSub] = useState(null)   // bài nộp đang chấm tự luận
   const [statsKey, setStatsKey] = useState(0)          // refresh bảng thống kê sau khi chấm
+  // Quay lại từ trang xem bài làm → mở sẵn đúng học sinh + cuộn về đúng chỗ cũ
+  const restoreRef  = useRef(readSubsReturn())
+  const restore     = restoreRef.current?.assignmentId === assignment.id ? restoreRef.current : null
+  const scrollBoxRef = useRef(null)
   const isExam = !!assignment.examId
   const isWriting = !!assignment.writingTask
   const isListening = !!assignment.listeningTask
@@ -411,6 +436,26 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
 
   useEffect(() => { reload() }, [reload])
 
+  // Dữ liệu về xong mới cuộn được (trước đó khung còn rỗng) — cuộn 1 lần rồi bỏ cờ,
+  // để lần mở bảng điểm sau không bị nhảy về chỗ cũ nữa.
+  useEffect(() => {
+    if (!data || !restore?.scroll) return
+    // Biểu đồ điểm/thống kê câu hỏi render sau nên khung còn thấp: đặt scrollTop lúc
+    // này sẽ bị kẹp về 0. Thử lại vài nhịp cho tới khi cuộn đúng chỗ.
+    let tries = 0
+    let timer = 0
+    const apply = () => {
+      const box = scrollBoxRef.current
+      if (box) box.scrollTop = restore.scroll
+      if (++tries < 8 && (!box || Math.abs(box.scrollTop - restore.scroll) > 2)) {
+        timer = setTimeout(apply, 100)
+      }
+    }
+    apply()
+    clearSubsReturn()
+    return () => clearTimeout(timer)
+  }, [data])
+
   const handleDelete = async () => {
     if (!confirmDel) return
     setDelBusy(true)
@@ -447,7 +492,7 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
   return (
     <>
       <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-        <div className="modal-box cm-subs" style={{ maxWidth: 680, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="modal-box cm-subs" ref={scrollBoxRef} style={{ maxWidth: 680, maxHeight: '90vh', overflowY: 'auto' }}>
           <div className="modal-header">
             <h2>📊 {isExam ? 'Kết quả' : 'Bài nộp'} — {assignment.title}</h2>
             <button className="modal-close" onClick={onClose}>✕</button>
@@ -506,8 +551,10 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
                     key={s.studentId}
                     row={s}
                     examId={assignment.examId}
+                    classId={classId}
                     assignment={assignment}
                     hasEssay={hasEssay}
+                    defaultOpen={restore?.studentId === String(s.studentId)}
                     onGrade={(sub) => sub && setGradingSub(sub)}
                     onDelete={() => setConfirmDel(s)}
                   />
@@ -1774,6 +1821,17 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
   const fileInputRef = useRef(null)
 
   const refresh = () => onUpdated()
+
+  /* Back từ trang xem bài làm → mở lại đúng bảng điểm vừa xem (tab Đề thi + panel
+     bài nộp). Việc cuộn về đúng chỗ và bung đúng học sinh do SubmissionsPanel lo. */
+  useEffect(() => {
+    const ret = readSubsReturn()
+    if (!ret || String(ret.classId) !== String(cls.id)) return
+    const asgn = (cls.assignments || []).find(a => String(a.id) === String(ret.assignmentId))
+    if (!asgn) { clearSubsReturn(); return }
+    setAsgnTab(asgn.examId ? 'exam' : 'homework')
+    setViewSubs(asgn)
+  }, [cls.id])
 
   /* Chỉ dữ liệu thuộc MÔN đang xem */
   const subjMembers = (cls.members || []).filter(m => inSubject(m, subject, cls))

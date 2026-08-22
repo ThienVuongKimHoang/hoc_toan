@@ -170,7 +170,21 @@ export async function fetchExamById(id, teacherId) {
 }
 
 /** Học sinh nộp bài */
-export async function submitResult(examId, { studentName, studentId, answers, score, maxScore, className, classId, assignmentId, startedAt, timeSpent, violationCount, shuffleMap }) {
+/** Xác nhận bắt đầu một lượt làm bài — server kiểm tra thành viên lớp / giờ mở /
+ *  số lượt còn lại rồi cấp "vé". Màn hình làm bài chỉ mở khi có vé này, nên chỉ
+ *  dán URL #take/... hay bấm Back về history cũ sẽ không vào thẳng được đề. */
+export async function startAttempt(examId, { classId, assignmentId } = {}) {
+  const res = await fetch(`/api/exams/${examId}/attempt-start`, {
+    method:  'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body:    JSON.stringify({ classId: classId || null, assignmentId: assignmentId || null }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data?.error || 'Không vào được đề thi.')
+  return data
+}
+
+export async function submitResult(examId, { studentName, studentId, answers, score, maxScore, className, classId, assignmentId, startedAt, timeSpent, violationCount, shuffleMap, ticket }) {
   const body = {
     studentName,
     studentId,
@@ -187,6 +201,7 @@ export async function submitResult(examId, { studentName, studentId, answers, sc
     // Đề bật "Trộn thứ tự": gửi kèm bản đồ trộn để server lưu lại, dùng khi học sinh
     // xem lại bài làm (khớp đúng thứ tự/nhãn câu đã thấy lúc làm, xem ExamReviewPage).
     shuffleMap: shuffleMap || null,
+    ticket: ticket || null,   // vé của lượt làm này (tiêu khi nộp)
   }
   const res = await fetch(`/api/exams/${examId}/submit`, {
     method:  'POST',

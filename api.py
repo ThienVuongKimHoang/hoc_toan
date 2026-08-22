@@ -853,6 +853,106 @@ def _exam_assignment(cls_id, exam_id, asgn_id=None):
     return cls, cands[0], legacy
 
 
+# ─── Vé bắt đầu làm bài (xác nhận học sinh bấm "Bắt đầu", không chỉ có URL) ───
+ATTEMPT_TICKETS: dict[str, dict] = {}
+ATTEMPT_TICKET_TTL = 8 * 3600     # đủ dài cho một lượt thi bất kỳ
+
+
+def _purge_attempt_tickets():
+    now = datetime.now(_tz.utc).timestamp()
+    for key in [k for k, v in ATTEMPT_TICKETS.items() if v.get("exp", 0) < now]:
+        ATTEMPT_TICKETS.pop(key, None)
+
+
+def _count_attempts(exam_id: str, student_id, cls_id, asgn_id, legacy_owner) -> int:
+    """Số lượt học sinh đã nộp cho ĐÚNG lần giao bài này."""
+    try:
+        return sum(
+            1 for s in db.get_submissions(exam_id)
+            if str(s.get("studentId")) == str(student_id)
+            and str(s.get("classId")) == str(cls_id)
+            and _sub_belongs_to_asgn(s, asgn_id, legacy_owner)
+        )
+    except Exception:
+        return 0
+
+
+@app.post("/api/exams/{exam_id}/attempt-start")
+async def start_exam_attempt(exam_id: str, request: Request, caller: dict = Depends(require_auth)):
+    """Xác nhận học sinh THỰC SỰ bấm "Bắt đầu làm bài" cho một lượt cụ thể.
+
+    Màn hình làm bài chỉ mở khi có vé do route này cấp, nên chỉ dán lại URL
+    #take/... hay bấm Back về history cũ sẽ không nhảy thẳng vào đề — luôn phải
+    qua một lần server kiểm tra: còn là thành viên lớp, đề đang trong giờ, và
+    còn lượt làm. Vé chỉ dùng được một lần (tiêu khi nộp bài)."""
+    body    = await request.json()
+    cls_id  = body.get("classId") or None
+    asgn_id = body.get("assignmentId") or None
+
+    exam = db.get_exam(exam_id)
+    if not exam:
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+
+    student_id = caller["id"]
+    now = datetime.now(_tz.utc)
+
+    def _parse(iso):
+        try:
+            return datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    used = None
+    max_attempts = None
+
+    if cls_id:
+        cls, asgn, legacy_owner = _exam_assignment(cls_id, exam_id, asgn_id)
+        if not cls:
+            return JSONResponse({"error": "Lớp học không còn tồn tại."}, status_code=403)
+        # Giáo viên của lớp vẫn mở được để xem thử đề bằng link; học sinh phải còn là thành viên.
+        if not _is_class_member(cls, student_id, caller.get("email")) and not _is_class_teacher(cls, student_id):
+            return JSONResponse({"error": "Bạn không (còn) thuộc lớp này nên không vào làm bài được."}, status_code=403)
+        if asgn_id and not asgn:
+            return JSONResponse({"error": "Bài tập này đã bị gỡ khỏi lớp."}, status_code=403)
+        if asgn:
+            asgn_id = asgn.get("id")
+            open_t = _parse(asgn.get("openTime"))
+            close  = _parse(asgn.get("closeTime") or asgn.get("dueDate"))
+            if open_t and now < open_t:
+                return JSONResponse({"error": "Đề thi chưa mở."}, status_code=403)
+            if close and now > close:
+                return JSONResponse({"error": "Đã quá thời hạn làm bài."}, status_code=403)
+            max_attempts = asgn.get("maxAttempts")
+            used = _count_attempts(exam_id, student_id, cls_id, asgn_id, legacy_owner)
+            if max_attempts and used >= int(max_attempts):
+                return JSONResponse({"error": f"Bạn đã làm đủ {max_attempts} lần cho phép."}, status_code=403)
+    else:
+        # Đề mở bằng link công khai: phải đã phát hành và đang trong giờ
+        settings = exam.get("settings") or {}
+        if not exam.get("published"):
+            return JSONResponse({"error": "Đề thi chưa được phát hành."}, status_code=403)
+        open_t = _parse(settings.get("openTime"))
+        close  = _parse(settings.get("closeTime"))
+        if open_t and now < open_t:
+            return JSONResponse({"error": "Đề thi chưa mở."}, status_code=403)
+        if close and now > close:
+            return JSONResponse({"error": "Đề thi đã đóng."}, status_code=403)
+
+    _purge_attempt_tickets()
+    ticket = secrets.token_urlsafe(24)
+    ATTEMPT_TICKETS[ticket] = {
+        "examId": exam_id, "studentId": str(student_id),
+        "classId": str(cls_id) if cls_id else None,
+        "assignmentId": str(asgn_id) if asgn_id else None,
+        "startedAt": now.isoformat(),
+        "exp": now.timestamp() + ATTEMPT_TICKET_TTL,
+    }
+    return {
+        "ok": True, "ticket": ticket, "startedAt": now.isoformat(),
+        "attemptsUsed": used, "maxAttempts": max_attempts,
+    }
+
+
 @app.post("/api/exams/{exam_id}/submit")
 async def submit_exam(exam_id: str, request: Request, caller: Optional[dict] = Depends(get_current_user)):
     """Học sinh nộp bài thi. Route công khai (luyện tập/đề public không cần đăng
@@ -921,6 +1021,14 @@ async def submit_exam(exam_id: str, request: Request, caller: Optional[dict] = D
         # thay vì tụt về thứ tự/số câu gốc (gây lệch với lúc làm bài thật).
         "shuffleMap":   body.get("shuffleMap") or None,
     }
+    # Tiêu vé bắt đầu làm bài (nếu client gửi kèm) — mỗi lần bấm "Bắt đầu làm bài"
+    # chỉ nộp được một bài; bài cũ/luyện tập không gửi vé thì vẫn nộp bình thường.
+    ticket = body.get("ticket")
+    if ticket:
+        info = ATTEMPT_TICKETS.get(ticket)
+        if info and str(info.get("studentId")) == str(student_id) and info.get("examId") == exam_id:
+            ATTEMPT_TICKETS.pop(ticket, None)
+
     # Đếm số lần đã làm + insert trong CÙNG transaction (khóa advisory) — hai
     # request nộp song song không thể cùng lách qua giới hạn maxAttempts.
     ok, result = db.add_submission_guarded(exam_id, submission, max_attempts, legacy_owner)

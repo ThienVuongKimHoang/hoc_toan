@@ -3,7 +3,7 @@ import { ROLES, hasAdminAccess, hasTeacherAccess, hasVocabAccess, authHeaders, g
 import Header from './components/Header.jsx'
 import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
-import ExamTakePage, { wasExamJustSubmitted } from './pages/ExamTakePage.jsx'
+import ExamTakePage, { wasExamJustSubmitted, clearExamJustSubmitted } from './pages/ExamTakePage.jsx'
 import PracticeExamPage from './pages/PracticeExamPage.jsx'
 import ExamLobbyPage from './pages/ExamLobbyPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
@@ -280,6 +280,10 @@ export default function App() {
           else { setView('home'); targetHash = '' }
         }
         window.history.replaceState(null, '', targetHash ? `#${targetHash}` : window.location.pathname)
+        // Chỉ chặn ĐÚNG MỘT lần (cú Back ngay sau khi nộp). Xoá cờ ngay để lần vào
+        // đề sau đó — bấm "Làm lại", mở lại link đề — luôn tải được màn hình làm bài,
+        // kể cả khi trình duyệt phát popstate cho điều hướng đổi hash thường.
+        clearExamJustSubmitted(parsed.examId, parsed.classId, parsed.assignmentId, uid)
         return
       }
       applyHash()
