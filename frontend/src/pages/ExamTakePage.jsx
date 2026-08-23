@@ -411,7 +411,6 @@ function AttemptStartGate({ exam, examId, classId, assignmentId, resuming, onSta
 
 /* ── Main exam view ── */
 function ExamView({ exam, studentName, studentId, className, classId, assignmentId, ticket, onTicketUsed, onGoHome, onGoClass }) {
-  const hideResults = exam.settings?.hideResults || false
   const sectionList = getSectionList(exam)
   // Đề có phần tự luận: điểm chấm tay đến sau (0đ cho đến khi giáo viên chấm), nhưng
   // điểm hiển thị luôn tính trên TỔNG điểm toàn đề (kể cả tự luận) — khớp với điểm
@@ -435,6 +434,9 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   const [submitErr, setSubmitErr] = useState('')
   const [finalScore, setFinalScore] = useState(null)
   const [finalMax, setFinalMax] = useState(null)
+  // Cài đặt hiển thị của đề, do SERVER quyết định lúc nộp bài: có được xem điểm
+  // ngay không, nếu chưa thì mở lúc nào.
+  const [finalVis, setFinalVis] = useState(null)
   // Câu đánh dấu "xem lại sau" — lưu cùng lượt làm bài để F5 không mất
   const [flags, setFlags] = useState(() => savedAttempt?.flags || [])
   const [focusMode, setFocusMode] = useState(false)   // chế độ tập trung: 1 câu / màn hình
@@ -522,6 +524,12 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
       })
       setFinalScore(result.score)
       setFinalMax(result.maxScore)
+      setFinalVis({
+        scoreVisible:   result.scoreVisible !== false,
+        scoreUnlockAt:  result.scoreUnlockAt || null,
+        answerVisible:  result.answerVisible === true,
+        answerUnlockAt: result.answerUnlockAt || null,
+      })
       setSubmitted(true)
       clearAttempt(attemptKeyStr)
       // Vé đã tiêu: muốn vào lại đề (kể cả bấm Back) phải bấm "Bắt đầu làm bài"
@@ -543,6 +551,9 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   const scrollTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
 
   if (submitted) {
+    // Server đã áp "Cài đặt hiển thị" của đề: chưa tới lúc mở điểm thì không có
+    // điểm trong response, chỉ có mốc sẽ mở (nếu hẹn giờ được).
+    const scoreHidden = finalVis ? !finalVis.scoreVisible : !!exam.settings?.hideResults
     return (
       <div className="et-locked">
         <div className="etl-card">
@@ -550,9 +561,13 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
           <h1 className="etl-title">
             {msLeft === 0 ? 'Hết giờ — Đã nộp tự động' : 'Đã nộp bài!'}
           </h1>
-          {hideResults ? (
+          {scoreHidden ? (
             <div className="etl-hide-msg">
-              <p>Kết quả sẽ được công bố bởi giáo viên.</p>
+              <p>
+                {finalVis?.scoreUnlockAt
+                  ? <>Điểm sẽ mở lúc <strong>{fmtDate(finalVis.scoreUnlockAt)}</strong>.</>
+                  : 'Kết quả sẽ được công bố bởi giáo viên.'}
+              </p>
               <p className="etl-name-tag">Bài làm của: <strong>{studentName}</strong></p>
             </div>
           ) : (
@@ -565,6 +580,13 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
               <div className="etl-score-num">{scaledScore(finalScore, finalMax)} <span>/ 10</span></div>
               <div className="etl-score-label">điểm</div>
               <p className="etl-name-tag">Bài làm của: <strong>{studentName}</strong></p>
+              {finalVis && !finalVis.answerVisible && (
+                <p className="etl-answer-note">
+                  🔒 Đáp án chi tiết {finalVis.answerUnlockAt
+                    ? <>sẽ mở lúc <strong>{fmtDate(finalVis.answerUnlockAt)}</strong></>
+                    : 'sẽ mở khi giáo viên công bố'}.
+                </p>
+              )}
             </div>
           )}
           {classId && onGoClass ? (

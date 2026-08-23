@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchExamsByClass, getSubmissions as getExamSubmissions, fetchExamById, scaledScore,
-  deleteStudentSubmissions, deleteExam, setExamPublic,
+  deleteStudentSubmissions, deleteExam, setExamPublic, SHOW, showTypeLabel,
 } from '../store/examStore.js'
+import ResultDisplayModal, { gearIcon, eyeOffIcon } from '../components/ResultDisplayModal.jsx'
 import QuestionStats from '../components/QuestionStats.jsx'
 import ScoreDistribution from '../components/ScoreDistribution.jsx'
 import StudentProgressModal from '../components/StudentProgressModal.jsx'
@@ -1819,6 +1820,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
   const [uploading, setUploading] = useState(false)
   const [viewSubs, setViewSubs] = useState(null)
   const [extendingAsgn, setExtendingAsgn] = useState(null)
+  const [displayAsgn, setDisplayAsgn] = useState(null)   // bài tập đang mở modal cài đặt hiển thị
   const [viewingFile, setViewingFile] = useState(null)
   const [copiedJoin, setCopiedJoin] = useState(false)
   const [openFolder, setOpenFolder] = useState(null)
@@ -1850,6 +1852,17 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
   const subjDocs = (cls.documents || []).filter(d => inSubject(d, subject, cls))
   const homeworks = subjAssignments.filter(a => !a.examId)
   const exams = subjAssignments.filter(a => !!a.examId)
+
+  /* Cài đặt hiển thị (Điểm & Đáp án) của từng đề trong lớp — nạp một lần cho cả
+     danh sách để mỗi thẻ bài tập biết đang khoá điểm/đáp án hay không, khỏi phải
+     gọi server riêng cho từng thẻ. */
+  const [examCfg, setExamCfg] = useState({})
+  const loadExamCfg = useCallback(() => {
+    fetchExamsByClass(cls.id, teacherId)
+      .then(list => setExamCfg(Object.fromEntries(list.map(e => [e.id, e]))))
+      .catch(() => { })
+  }, [cls.id, teacherId])
+  useEffect(() => { loadExamCfg() }, [loadExamCfg])
 
   const copyJoin = () => {
     navigator.clipboard.writeText(joinUrl(cls.joinCode))
@@ -1996,6 +2009,11 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
     const winSt = isExam
       ? (winOpen && now < winOpen ? 'pending' : (winClose && now > winClose ? 'closed' : 'open'))
       : null
+    // Cấu hình hiển thị điểm/đáp án của đề — chỉ báo lên thẻ khi KHÁC mặc định
+    // "hiện ngay sau khi nộp", để giáo viên nhận ra ngay đề nào đang khoá.
+    const cfg = isExam ? examCfg[a.examId] : null
+    const scoreLocked  = cfg && cfg.showScoreType !== SHOW.AFTER_SUBMIT
+    const answerLocked = cfg && cfg.showAnswerType !== SHOW.AFTER_SUBMIT
     return (
       <div key={a.id} className={`cm-assignment-card ${past && !isExam ? 'cm-assignment-card--past' : ''}`}>
         <div className="cm-asgn-left">
@@ -2032,6 +2050,18 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
               </span>
             )}
             {a.attachments?.length > 0 && <span className="cm-exam-chip">{IC.clip(12)} {a.attachments.length} file</span>}
+            {scoreLocked && (
+              <span className={`cm-display-chip ${cfg.showScoreType === SHOW.NEVER ? 'cm-display-chip--off' : ''}`}
+                title={`Điểm: ${showTypeLabel(cfg.showScoreType)} · Đáp án: ${showTypeLabel(cfg.showAnswerType)}`}>
+                {eyeOffIcon(12)} Điểm: {showTypeLabel(cfg.showScoreType).toLowerCase()}
+              </span>
+            )}
+            {!scoreLocked && answerLocked && (
+              <span className="cm-display-chip cm-display-chip--off"
+                title={`Đáp án: ${showTypeLabel(cfg.showAnswerType)}`}>
+                {eyeOffIcon(12)} Đáp án: {showTypeLabel(cfg.showAnswerType).toLowerCase()}
+              </span>
+            )}
           </div>
           {a.attachments?.length > 0 && (
             <div className="file-chip-list" style={{ marginTop: 6 }}>
@@ -2045,8 +2075,14 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
           <button className="mec-btn mec-btn--results" onClick={() => setViewSubs(a)}>
             {IC.chart(14)} {isExam ? 'Xem điểm' : `${subCount}/${total} nộp`}
           </button>
-          <button className="cm-remove-btn" title="Gia hạn nộp bài" onClick={() => setExtendingAsgn(a)}>{IC.pencil(14)}</button>
-          <button className="cm-remove-btn" onClick={() => handleRemoveAssignment(a.id)}>{IC.trash(14)}</button>
+          <div className="cm-asgn-actions">
+            {isExam && (
+              <button className="cm-remove-btn cm-gear-btn" title="Cấu hình hiển thị điểm & đáp án"
+                onClick={() => setDisplayAsgn(a)}>{gearIcon(14)}</button>
+            )}
+            <button className="cm-remove-btn" title="Gia hạn nộp bài" onClick={() => setExtendingAsgn(a)}>{IC.pencil(14)}</button>
+            <button className="cm-remove-btn" title="Xoá bài tập" onClick={() => handleRemoveAssignment(a.id)}>{IC.trash(14)}</button>
+          </div>
         </div>
       </div>
     )
@@ -2416,6 +2452,15 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
       {extendingAsgn && (
         <ExtendDeadlineModal assignment={extendingAsgn} onClose={() => setExtendingAsgn(null)}
           onSave={(iso) => handleExtendDeadline(extendingAsgn.id, iso)} />
+      )}
+      {displayAsgn && (
+        <ResultDisplayModal
+          examId={displayAsgn.examId}
+          examTitle={displayAsgn.title}
+          /* Hạn đóng của ĐÚNG lần giao bài này — mốc "sau khi đóng đề" tính theo nó */
+          closeTime={displayAsgn.closeTime || displayAsgn.dueDate}
+          onClose={() => setDisplayAsgn(null)}
+          onSaved={() => loadExamCfg()} />
       )}
       {viewingFile && <FileViewerModal file={viewingFile} onClose={() => setViewingFile(null)} />}
       {pendingUploadFile && (

@@ -747,6 +747,15 @@ async def upsert_exam(exam_id: str, request: Request, caller: dict = Depends(req
     elif not _can_manage_exam(existing, caller_id):
         return JSONResponse({"error": "Không có quyền sửa đề thi này"}, status_code=403)
     body.setdefault("resultsRevealed", existing.get("resultsRevealed", False))
+    # Cài đặt hiển thị (Điểm & Đáp án): payload không kèm thì GIỮ cấu hình đang có
+    # (lưu đề sau khi sửa câu hỏi không được reset cài đặt của giáo viên). Đề mới
+    # mặc định: hiện điểm ngay sau khi nộp, mở đáp án sau khi đóng đề.
+    if "showScoreType" not in body:
+        body["showScoreType"] = existing.get("showScoreType") if existing else SHOW_AFTER_SUBMIT
+    if "showAnswerType" not in body:
+        body["showAnswerType"] = existing.get("showAnswerType") if existing else SHOW_AFTER_CLOSE
+    if "answerMinScore" not in body:
+        body["answerMinScore"] = existing.get("answerMinScore") if existing else None
     body.pop("submissions", None)
     db.upsert_exam(exam_id, body)
 
@@ -851,6 +860,103 @@ def _exam_assignment(cls_id, exam_id, asgn_id=None):
         return cls, asgn, legacy
     cands.sort(key=lambda a: a.get("createdAt") or "", reverse=True)
     return cls, cands[0], legacy
+
+
+# ─── Cài đặt hiển thị (Điểm & Đáp án) ─────────────────────────────────────────
+# Cùng một thang giá trị cho cả điểm lẫn đáp án:
+SHOW_NEVER        = 0   # không cho học sinh xem
+SHOW_AFTER_SUBMIT = 1   # ngay sau khi nộp bài
+SHOW_AFTER_CLOSE  = 2   # sau khi hết hạn / đóng đề
+SHOW_MANUAL       = 3   # khi giáo viên chủ động công bố (cờ resultsRevealed)
+
+
+def _parse_iso(value):
+    """ISO string → datetime (aware, UTC). Không parse được → None."""
+    if not value:
+        return None
+    try:
+        d = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=_tz.utc)
+
+
+def _close_time_for(exam: dict, sub: Optional[dict] = None) -> Optional[str]:
+    """Thời điểm "đóng đề" áp dụng cho một bài nộp.
+    Bài nộp trong lớp lấy hạn của ĐÚNG lần giao bài đó (một đề giao cho nhiều lớp
+    có thể đóng vào các giờ khác nhau); bài nộp qua link lẻ lấy settings.closeTime."""
+    if sub and sub.get("classId"):
+        _, asgn, _ = _exam_assignment(sub.get("classId"), sub.get("examId") or exam.get("id"),
+                                      sub.get("assignmentId"))
+        if asgn:
+            return asgn.get("closeTime") or asgn.get("dueDate")
+    # examCloseTime: bản rút gọn kèm sẵn trong danh sách bài nộp của học sinh
+    # (get_submissions_by_student không nạp cả đề để lấy settings).
+    return (exam.get("settings") or {}).get("closeTime") or exam.get("examCloseTime")
+
+
+def _gate(kind: int, exam: dict, close_iso, now) -> tuple[bool, Optional[str]]:
+    """(đã mở chưa, mở lúc nào). unlockAt chỉ có với mốc "sau khi đóng đề" —
+    các mốc còn lại không hẹn trước được giờ mở."""
+    if kind == SHOW_AFTER_SUBMIT:
+        return True, None
+    if kind == SHOW_AFTER_CLOSE:
+        close = _parse_iso(close_iso)
+        if not close:
+            return False, None          # chưa đặt hạn đóng → coi như chưa tới lúc mở
+        return now >= close, close_iso
+    if kind == SHOW_MANUAL:
+        return bool(exam.get("resultsRevealed")), None
+    return False, None                   # SHOW_NEVER
+
+
+def _display_state(exam: dict, sub: Optional[dict] = None) -> dict:
+    """Học sinh được xem gì với bài nộp này, và nếu chưa thì bao giờ mở.
+    Quy ước: ĐÁP ÁN chỉ mở khi ĐIỂM đã mở — tránh cảnh thấy lời giải mà không
+    biết mình được mấy điểm (và để mọi màn hình xem lại bài luôn có đủ dữ liệu)."""
+    # Thiếu cấu hình (dữ liệu cũ, dict dựng tay) thì hiểu là "hiện ngay sau khi nộp"
+    # — không được rơi về 0 (= khoá sạch), vì đó là hành vi sai lệch nhất.
+    def _kind(v):
+        return SHOW_AFTER_SUBMIT if v is None else int(v)
+
+    score_type  = _kind(exam.get("showScoreType"))
+    answer_type = _kind(exam.get("showAnswerType"))
+    min_score   = exam.get("answerMinScore")
+    now   = datetime.now(_tz.utc)
+    close = _close_time_for(exam, sub)
+
+    score_ok,  score_at  = _gate(score_type,  exam, close, now)
+    answer_ok, answer_at = _gate(answer_type, exam, close, now)
+    answer_ok = answer_ok and score_ok
+
+    # Ngưỡng điểm: chỉ mở đáp án cho bài đạt từ X/10 trở lên (khuyến khích học lại).
+    below_min = False
+    if answer_ok and min_score is not None and sub is not None:
+        scaled = _scaled_score(sub.get("score"), sub.get("maxScore"))
+        below_min = scaled is None or scaled < float(min_score)
+        if below_min:
+            answer_ok = False
+
+    return {
+        "showScoreType":  score_type,
+        "showAnswerType": answer_type,
+        "answerMinScore": min_score,
+        "scoreVisible":   score_ok,
+        "answerVisible":  answer_ok,
+        "scoreUnlockAt":  None if score_ok  else score_at,
+        "answerUnlockAt": None if answer_ok else answer_at,
+        "answerBelowMin": below_min,
+        "closeTime":      close,
+    }
+
+
+def _scaled_score(score, max_score):
+    """Quy điểm về thang 10 (khớp scaledScore ở frontend). None nếu chưa có điểm."""
+    if score is None:
+        return None
+    if not max_score or max_score <= 0:
+        return _round2(score)
+    return _round2(score / max_score * 10)
 
 
 # ─── Vé bắt đầu làm bài (xác nhận học sinh bấm "Bắt đầu", không chỉ có URL) ───
@@ -1037,7 +1143,20 @@ async def submit_exam(exam_id: str, request: Request, caller: Optional[dict] = D
             {"error": f"Bạn đã làm đủ {max_attempts} lần cho phép."}, status_code=403)
     # Trả kèm điểm SERVER đã chấm để client hiển thị ngay — client không còn nhận
     # được đáp án đúng qua GET /api/exams/{id} nên không thể tự tính điểm nữa.
-    return {"ok": True, "submissionIndex": result, "score": score, "maxScore": max_score}
+    # Đề đặt "chỉ xem điểm sau khi đóng đề / khi GV công bố" thì KHÔNG trả điểm về
+    # ở đây, chỉ trả mốc sẽ mở để màn hình nộp bài báo lại cho học sinh.
+    vis = _display_state(exam, {**submission, "examId": exam_id})
+    return {
+        "ok": True, "submissionIndex": result,
+        "score":    score     if vis["scoreVisible"] else None,
+        "maxScore": max_score if vis["scoreVisible"] else None,
+        "scoreVisible":   vis["scoreVisible"],
+        "scoreUnlockAt":  vis["scoreUnlockAt"],
+        "showScoreType":  vis["showScoreType"],
+        "answerVisible":  vis["answerVisible"],
+        "answerUnlockAt": vis["answerUnlockAt"],
+        "showAnswerType": vis["showAnswerType"],
+    }
 
 
 @app.get("/api/exams/{exam_id}/submissions")
@@ -1054,20 +1173,27 @@ async def get_submissions(exam_id: str, caller: dict = Depends(require_auth)):
         "resultsRevealed": exam.get("resultsRevealed", False),
         "hideResults":     (exam.get("settings") or {}).get("hideResults", False),
         "classes":         exam.get("classes", []),
+        "showScoreType":   exam.get("showScoreType"),
+        "showAnswerType":  exam.get("showAnswerType"),
+        "answerMinScore":  exam.get("answerMinScore"),
     }
 
 
 @app.get("/api/students/{student_id}/submissions")
 async def get_student_submissions(student_id: str, caller: dict = Depends(require_auth)):
-    """Học sinh xem lịch sử làm bài của chính mình (mọi đề đã nộp). Đề nào đang
-    bật ẩn kết quả và GV chưa công bố thì ẩn điểm/đáp án của lần làm đó —
-    tránh lộ điểm/đáp án trước khi GV công bố cho cả lớp."""
+    """Học sinh xem lịch sử làm bài của chính mình (mọi đề đã nộp). Điểm/đáp án của
+    từng lần làm bị che theo "Cài đặt hiển thị" của đề (chưa tới mốc mở, GV chưa
+    công bố, hoặc chưa đạt ngưỡng điểm) — kèm mốc sẽ mở để màn hình báo lại."""
     if str(caller["id"]) != str(student_id):
         return JSONResponse({"error": "Không có quyền xem lịch sử làm bài của người khác"}, status_code=403)
     subs = db.get_submissions_by_student(student_id)
     exam_cache: dict[str, dict] = {}   # 1 lần đọc/đề, nhiều lần làm dùng chung
     for s in subs:
-        if s.get("hideResults") and not s.get("resultsRevealed"):
+        # get_submissions_by_student đã kèm sẵn cấu hình hiển thị của đề
+        vis = _display_state(s, s)
+        s.update({k: vis[k] for k in ("scoreVisible", "answerVisible", "scoreUnlockAt",
+                                      "answerUnlockAt", "answerBelowMin")})
+        if not vis["scoreVisible"]:
             s["score"] = None
             s["maxScore"] = None
             s["answers"] = {}
@@ -1084,8 +1210,8 @@ async def get_student_submissions(student_id: str, caller: dict = Depends(requir
 async def review_submission(exam_id: str, sub_id: int, caller: dict = Depends(require_auth)):
     """Xem lại chi tiết một bài đã làm: đề thi (kèm đáp án đúng), đáp án học sinh
     đã chọn và điểm — cho chính học sinh đã nộp bài đó, hoặc giáo viên sở hữu đề.
-    Nếu đề bật "ẩn kết quả" và giáo viên chưa công bố, học sinh (không phải GV)
-    chỉ nhận được cờ revealed=False, chưa thấy đáp án đúng/điểm."""
+    Học sinh chỉ nhận đủ dữ liệu khi "Cài đặt hiển thị" của đề đã mở đáp án; chưa
+    tới lúc thì trả về cờ revealed=False kèm mốc sẽ mở (và điểm, nếu điểm đã mở)."""
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
@@ -1098,11 +1224,22 @@ async def review_submission(exam_id: str, sub_id: int, caller: dict = Depends(re
     if not is_manager and not is_owner:
         return JSONResponse({"error": "Không có quyền xem bài nộp này"}, status_code=403)
 
-    hidden = (exam.get("settings") or {}).get("hideResults", False) and not exam.get("resultsRevealed", False)
-    if hidden and not is_manager:
-        return {"revealed": False, "submission": {"score": None, "maxScore": None}}
+    vis = _display_state(exam, {**sub, "examId": exam_id})
+    if is_manager:
+        # Giáo viên luôn xem được — cấu hình hiển thị chỉ áp cho học sinh.
+        return {"revealed": True, "exam": exam, "submission": sub,
+                **vis, "scoreVisible": True, "answerVisible": True}
+    if not vis["answerVisible"]:
+        return {
+            "revealed": False,
+            "submission": {
+                "score":    sub.get("score")    if vis["scoreVisible"] else None,
+                "maxScore": sub.get("maxScore") if vis["scoreVisible"] else None,
+            },
+            **vis,
+        }
 
-    return {"revealed": True, "exam": exam, "submission": sub}
+    return {"revealed": True, "exam": exam, "submission": sub, **vis}
 
 
 @app.post("/api/exams/{exam_id}/submissions/{sub_id}/grade")
@@ -1185,6 +1322,62 @@ async def delete_student_submissions(exam_id: str, request: Request, caller: dic
             include_legacy = not cands or str(_legacy_owner_id(cands)) == str(asgn_id)
     n = db.delete_submissions_for_student(exam_id, student_id, class_id, asgn_id, include_legacy)
     return {"ok": True, "deleted": n}
+
+
+@app.get("/api/exams/{exam_id}/display-settings")
+async def get_display_settings(exam_id: str, caller: dict = Depends(require_auth)):
+    """Cấu hình hiển thị điểm/đáp án hiện tại của đề (cho modal cài đặt của GV)."""
+    exam = db.get_exam(exam_id)
+    if not exam:
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    if not _can_manage_exam(exam, caller["id"]):
+        return JSONResponse({"error": "Không có quyền xem cài đặt đề này"}, status_code=403)
+    return {
+        "showScoreType":   exam.get("showScoreType", SHOW_AFTER_SUBMIT),
+        "showAnswerType":  exam.get("showAnswerType", SHOW_AFTER_SUBMIT),
+        "answerMinScore":  exam.get("answerMinScore"),
+        "resultsRevealed": bool(exam.get("resultsRevealed")),
+        "closeTime":       (exam.get("settings") or {}).get("closeTime"),
+        "title":           exam.get("title", ""),
+    }
+
+
+@app.post("/api/exams/{exam_id}/display-settings")
+async def save_display_settings(exam_id: str, request: Request, caller: dict = Depends(require_auth)):
+    """Giáo viên lưu "Cài đặt hiển thị (Điểm & Đáp án)".
+    body: { showScoreType, showAnswerType, answerMinScore, resultsRevealed? }"""
+    body = await request.json()
+    exam = db.get_exam(exam_id)
+    if not exam:
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    if not _can_manage_exam(exam, caller["id"]):
+        return JSONResponse({"error": "Không có quyền sửa cài đặt đề này"}, status_code=403)
+
+    def _kind(v, default):
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return default
+        return n if n in (SHOW_NEVER, SHOW_AFTER_SUBMIT, SHOW_AFTER_CLOSE, SHOW_MANUAL) else default
+
+    score_type  = _kind(body.get("showScoreType"),  SHOW_AFTER_SUBMIT)
+    answer_type = _kind(body.get("showAnswerType"), SHOW_AFTER_CLOSE)
+    min_score = body.get("answerMinScore")
+    if min_score in ("", None, False):
+        min_score = None
+    else:
+        min_score = max(0.0, min(10.0, _to_float(min_score)))
+
+    if not db.update_exam_display(exam_id, score_type, answer_type, min_score):
+        return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    # Gạt luôn công tắc "đã công bố" khi GV bấm ngay trong modal (mốc thủ công).
+    if "resultsRevealed" in body:
+        db.update_exam_field(exam_id, "resultsRevealed", bool(body["resultsRevealed"]))
+    return {
+        "ok": True, "showScoreType": score_type, "showAnswerType": answer_type,
+        "answerMinScore": min_score,
+        "resultsRevealed": bool(body.get("resultsRevealed", exam.get("resultsRevealed"))),
+    }
 
 
 @app.post("/api/exams/{exam_id}/reveal")
@@ -1275,6 +1468,8 @@ async def get_public_exams():
                 "closeTime":   s.get("closeTime"),
                 "hideResults": s.get("hideResults", False),
             },
+            "showScoreType":  exam.get("showScoreType"),
+            "showAnswerType": exam.get("showAnswerType"),
             "practiceEnabled": ps.get("enabled", False),
         })
     result.sort(key=lambda e: (e.get("submissionCount", 0), e.get("createdAt") or ""), reverse=True)

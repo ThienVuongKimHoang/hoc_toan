@@ -103,10 +103,16 @@ export async function publishExam(examId, settings, teacherId) {
       openTime:    settings.openTime,
       closeTime:   settings.closeTime,
       password:    settings.password || null,
-      hideResults: settings.hideResults || false,
+      // hideResults là cờ CŨ, nay suy ra từ cấu hình hiển thị (điểm không hiện ngay
+      // sau khi nộp = ẩn kết quả) — giữ lại cho dữ liệu/màn hình cũ còn đọc nó.
+      hideResults: settings.showScoreType !== SHOW.AFTER_SUBMIT,
       lockScreen:  settings.lockScreen || false,
       shuffleQuestions: settings.shuffleQuestions || false,
     },
+    showScoreType:  settings.showScoreType,
+    showAnswerType: settings.showAnswerType,
+    answerMinScore: settings.answerMinScore ?? null,
+    resultsRevealed: settings.resultsRevealed ?? exam.resultsRevealed ?? false,
     classes: settings.classes || exam.classes || [],
   }
   saveExam(updated)
@@ -266,6 +272,55 @@ export async function deleteStudentSubmissions(examId, studentId, classId = null
   })
   if (!res.ok) throw new Error('Không thể xóa bài làm của học sinh')
   return res.json()
+}
+
+/* ═══════════════════════════════════════════
+   Cài đặt hiển thị (Điểm & Đáp án)
+   Cùng một thang giá trị cho cả điểm lẫn đáp án — xem database.py / api.py.
+═══════════════════════════════════════════ */
+export const SHOW = {
+  NEVER:        0,   // không cho học sinh xem
+  AFTER_SUBMIT: 1,   // ngay sau khi nộp bài
+  AFTER_CLOSE:  2,   // sau khi hết hạn / đóng đề
+  MANUAL:       3,   // khi giáo viên chủ động công bố
+}
+
+/** Nhãn ngắn cho một mốc hiển thị (dùng ở chip trạng thái trên thẻ bài tập) */
+export function showTypeLabel(type) {
+  return {
+    [SHOW.NEVER]:        'Không cho xem',
+    [SHOW.AFTER_SUBMIT]: 'Ngay sau khi nộp',
+    [SHOW.AFTER_CLOSE]:  'Sau khi đóng đề',
+    [SHOW.MANUAL]:       'Khi GV công bố',
+  }[type] ?? 'Ngay sau khi nộp'
+}
+
+/** Giáo viên đọc cấu hình hiển thị hiện tại của đề */
+export async function fetchDisplaySettings(examId) {
+  const res = await fetch(`/api/exams/${examId}/display-settings`, { headers: authHeaders() })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || 'Không tải được cài đặt hiển thị')
+  }
+  return res.json()
+}
+
+/** Giáo viên lưu cấu hình hiển thị điểm/đáp án */
+export async function saveDisplaySettings(examId, cfg) {
+  const res = await fetch(`/api/exams/${examId}/display-settings`, {
+    method:  'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body:    JSON.stringify(cfg),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || 'Lưu cài đặt hiển thị thất bại')
+  }
+  const data = await res.json()
+  // Đồng bộ bản cache localStorage để danh sách đề khỏi hiện cấu hình cũ
+  const exam = getExamById(examId)
+  if (exam) saveExam({ ...exam, ...data })
+  return data
 }
 
 /** Giáo viên công bố kết quả */

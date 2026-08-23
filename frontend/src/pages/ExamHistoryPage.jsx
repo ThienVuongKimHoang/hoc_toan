@@ -459,9 +459,21 @@ export default function ExamHistoryPage({ user, onGoHome, onGoProfile }) {
                               </>}
                         </span>
                         <span className="eh-cell eh-cell--act">
-                          <a className="eh-review-btn" href={`#results/${s.examId}/${s.id}`}>
-                            {IcEye(14)} Xem lại
-                          </a>
+                          {/* Đề chưa tới lúc mở đáp án → nút xám, kèm mốc sẽ mở */}
+                          {s.answerVisible === false ? (
+                            <span className="eh-review-btn eh-review-btn--locked"
+                              title={s.answerBelowMin
+                                ? `Cần đạt từ ${s.answerMinScore} điểm trở lên mới xem được đáp án`
+                                : s.answerUnlockAt
+                                  ? `Đáp án mở lúc ${formatDt(s.answerUnlockAt)}`
+                                  : 'Giáo viên chưa công bố đáp án'}>
+                              {IcEye(14)} {s.answerUnlockAt ? `Mở ${formatDt(s.answerUnlockAt)}` : 'Chưa mở'}
+                            </span>
+                          ) : (
+                            <a className="eh-review-btn" href={`#results/${s.examId}/${s.id}`}>
+                              {IcEye(14)} Xem lại
+                            </a>
+                          )}
                         </span>
                       </div>
                     )

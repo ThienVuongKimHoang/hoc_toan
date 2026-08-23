@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { classShareUrl, lobbyUrl, publishExam, shareUrl } from '../store/examStore.js'
+import { DEFAULT_DISPLAY_CFG, ResultDisplayFields, displaySummary } from './ResultDisplayModal.jsx'
 
 function CopyIcon() {
   return (
@@ -68,7 +69,8 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
   const [closeManual, setCloseManual] = useState(false)
   const [password,    setPassword]    = useState('')
   const [showPwd,     setShowPwd]     = useState(false)
-  const [hideResults, setHideResults] = useState(false)
+  // Cài đặt hiển thị (Điểm & Đáp án) — cùng form với modal bánh răng ở lớp học
+  const [display,     setDisplay]     = useState(DEFAULT_DISPLAY_CFG)
   const [lockScreen,  setLockScreen]  = useState(false)
   const [shuffleQuestions, setShuffleQuestions] = useState(true)
   const [classes,          setClasses]          = useState([])
@@ -100,10 +102,15 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
   // Điền sẵn nếu đề đã published
   useEffect(() => {
     if (exam.settings) {
-      setHideResults(exam.settings.hideResults || false)
       setLockScreen(exam.settings.lockScreen || false)
       setShuffleQuestions(exam.settings.shuffleQuestions ?? true)
     }
+    setDisplay({
+      showScoreType:   exam.showScoreType  ?? DEFAULT_DISPLAY_CFG.showScoreType,
+      showAnswerType:  exam.showAnswerType ?? DEFAULT_DISPLAY_CFG.showAnswerType,
+      answerMinScore:  exam.answerMinScore ?? null,
+      resultsRevealed: !!exam.resultsRevealed,
+    })
   }, [exam])
 
   const validate = () => {
@@ -127,9 +134,9 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
       openTime:    new Date(openTime).toISOString(),
       closeTime:   new Date(closeTime).toISOString(),
       password:    password.trim() || null,
-      hideResults,
       lockScreen,
       shuffleQuestions,
+      ...display,
       classes:     validClasses,
     }, teacherId)
     setPublishedClasses(validClasses)
@@ -221,23 +228,15 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
               </div>
             </div>
 
-            {/* Ẩn kết quả */}
-            <div className="pm-row pm-row--toggle">
+            {/* Cài đặt hiển thị (Điểm & Đáp án) */}
+            <div className="pm-row pm-row--col">
               <div className="pm-label">
-                🔏 Ẩn kết quả
-                <span className="pm-optional"> (học sinh không biết đúng/sai sau khi nộp)</span>
+                👁 Hiển thị kết quả
+                <span className="pm-optional"> (khi nào học sinh được xem điểm & đáp án)</span>
               </div>
-              <label className="pm-toggle-switch">
-                <input type="checkbox" checked={hideResults}
-                  onChange={e => setHideResults(e.target.checked)} />
-                <span className="pm-toggle-slider" />
-              </label>
+              <ResultDisplayFields cfg={display} onChange={setDisplay}
+                closeTime={closeTime ? new Date(closeTime).toISOString() : null} compact />
             </div>
-            {hideResults && (
-              <div className="pm-hide-note">
-                Học sinh sẽ thấy "Bài đã nộp" nhưng không thấy điểm cho đến khi bạn công bố kết quả.
-              </div>
-            )}
 
             {/* Khóa màn hình */}
             <div className="pm-row pm-row--toggle">
@@ -306,7 +305,7 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
                   {password && <div className="pm-sum-row"><span>Mật khẩu:</span><strong>Có</strong></div>}
                   <div className="pm-sum-row">
                     <span>Kết quả:</span>
-                    <strong>{hideResults ? '🔏 Ẩn đến khi GV công bố' : '👁 Hiện ngay sau khi nộp'}</strong>
+                    <strong>{displaySummary(display)}</strong>
                   </div>
                 </>
               )}
@@ -381,7 +380,7 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
               <div>🔒 Đóng: <strong>{new Date(closeTime).toLocaleString('vi-VN')}</strong></div>
               <div>⏱ Thời gian: <strong>{durationMins} phút</strong></div>
               {password && <div>🔑 Mật khẩu: <strong>Có</strong></div>}
-              <div>{hideResults ? '🔏 Kết quả ẩn' : '👁 Kết quả hiện ngay'}</div>
+              <div>👁 {displaySummary(display)}</div>
             </div>
 
             <div className="pm-footer">

@@ -123,6 +123,20 @@ ALTER TABLE exams ADD COLUMN IF NOT EXISTS grade VARCHAR(20);
 -- năng này, hoặc chưa gắn lớp nào — vẫn hoạt động qua link công khai/luyện tập.
 ALTER TABLE exams ADD COLUMN IF NOT EXISTS class_id VARCHAR(50);
 CREATE INDEX IF NOT EXISTS idx_exams_class ON exams(class_id);
+-- Cài đặt hiển thị (Điểm & Đáp án). Cùng một thang giá trị cho cả hai:
+--   0 = không cho xem · 1 = ngay sau khi nộp · 2 = sau khi đóng đề (hạn chót)
+--   3 = khi giáo viên chủ động công bố (dùng cờ results_revealed)
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS show_score_type  SMALLINT;
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS show_answer_type SMALLINT;
+-- Chỉ mở đáp án/lời giải khi điểm (quy về thang 10) ≥ ngưỡng này. NULL = không đặt ngưỡng.
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS answer_min_score REAL;
+-- Đề cũ: suy từ cờ settings.hideResults để giữ NGUYÊN hành vi đang chạy
+-- (ẩn kết quả = chờ GV công bố; không ẩn = hiện ngay sau khi nộp).
+-- Chỉ chạm các dòng chưa có cấu hình nên chạy lại nhiều lần vẫn an toàn.
+UPDATE exams
+   SET show_score_type  = CASE WHEN COALESCE((settings->>'hideResults')::boolean, false) THEN 3 ELSE 1 END,
+       show_answer_type = CASE WHEN COALESCE((settings->>'hideResults')::boolean, false) THEN 3 ELSE 1 END
+ WHERE show_score_type IS NULL OR show_answer_type IS NULL;
 
 CREATE TABLE IF NOT EXISTS submissions (
     id           SERIAL       PRIMARY KEY,
@@ -647,9 +661,28 @@ def is_super_admin(uid: str) -> bool:
     return row is not None and row[0] == "super_admin"
 # ── Exams ──────────────────────────────────────────────────────────────────────
 
+# Thang giá trị dùng chung cho show_score_type / show_answer_type
+SHOW_NEVER, SHOW_AFTER_SUBMIT, SHOW_AFTER_CLOSE, SHOW_MANUAL = 0, 1, 2, 3
+
+
+def _display_cfg(r: dict) -> dict:
+    """Cấu hình "Cài đặt hiển thị (Điểm & Đáp án)" của một dòng exams.
+    Dòng chưa có cấu hình (đề cũ chưa qua bước migrate) suy ngược từ
+    settings.hideResults để giữ đúng hành vi trước đây."""
+    legacy = SHOW_MANUAL if (r.get("settings") or {}).get("hideResults") else SHOW_AFTER_SUBMIT
+    score  = r.get("show_score_type")
+    answer = r.get("show_answer_type")
+    return {
+        "showScoreType":  legacy if score  is None else int(score),
+        "showAnswerType": legacy if answer is None else int(answer),
+        "answerMinScore": r.get("answer_min_score"),
+    }
+
+
 def _exam_from_row(row: dict) -> dict:
     r = dict(row)
     return {
+        **_display_cfg(r),
         "id":               r["id"],
         "title":            r["title"] or "",
         "createdBy":        r["created_by"],
@@ -715,7 +748,8 @@ def get_submissions_by_student(student_id: str) -> list:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
                 SELECT s.*, e.title AS exam_title, e.subject AS exam_subject,
-                       e.results_revealed AS exam_results_revealed, e.settings AS exam_settings
+                       e.results_revealed AS exam_results_revealed, e.settings AS exam_settings,
+                       e.show_score_type, e.show_answer_type, e.answer_min_score
                 FROM submissions s
                 JOIN exams e ON e.id = s.exam_id
                 WHERE s.student_id = %s
@@ -731,6 +765,13 @@ def get_submissions_by_student(student_id: str) -> list:
         sub["examSubject"]     = rd.get("exam_subject")
         sub["resultsRevealed"] = bool(rd.get("exam_results_revealed"))
         sub["hideResults"]     = bool((rd.get("exam_settings") or {}).get("hideResults", False))
+        # Cấu hình hiển thị điểm/đáp án của đề + hạn đóng đề (đề lẻ) — api.py dựa vào
+        # đây để quyết định che điểm/đáp án và báo "sẽ mở lúc …" cho học sinh.
+        sub.update(_display_cfg({"settings": rd.get("exam_settings"),
+                                 "show_score_type":  rd.get("show_score_type"),
+                                 "show_answer_type": rd.get("show_answer_type"),
+                                 "answer_min_score": rd.get("answer_min_score")}))
+        sub["examCloseTime"] = (rd.get("exam_settings") or {}).get("closeTime")
         out.append(sub)
     return out
 
@@ -803,6 +844,7 @@ def load_exams_by_creator(uid: str) -> list:
                        e.is_public, e.featured, e.results_revealed, e.created_by,
                        e.subject, e.grade, e.created_at, e.updated_at, e.settings,
                        e.practice_settings, e.classes_data,
+                       e.show_score_type, e.show_answer_type, e.answer_min_score,
                        COALESCE(s.cnt, 0) AS submission_count
                 FROM exams e
                 LEFT JOIN (
@@ -816,6 +858,7 @@ def load_exams_by_creator(uid: str) -> list:
     for r in rows:
         rd = dict(r)
         out.append({
+            **_display_cfg(rd),
             "id":               rd["id"],
             "title":            rd["title"] or "",
             "source":           rd["source"] or "",
@@ -847,6 +890,7 @@ def load_exams_by_class(class_id: str) -> list:
                        e.is_public, e.featured, e.results_revealed, e.created_by,
                        e.subject, e.grade, e.created_at, e.updated_at, e.settings,
                        e.practice_settings, e.classes_data,
+                       e.show_score_type, e.show_answer_type, e.answer_min_score,
                        COALESCE(s.cnt, 0) AS submission_count
                 FROM exams e
                 LEFT JOIN (
@@ -860,6 +904,7 @@ def load_exams_by_class(class_id: str) -> list:
     for r in rows:
         rd = dict(r)
         out.append({
+            **_display_cfg(rd),
             "id":               rd["id"],
             "title":            rd["title"] or "",
             "source":           rd["source"] or "",
@@ -890,8 +935,9 @@ def upsert_exam(exam_id: str, exam: dict) -> None:
             cur.execute("""
                 INSERT INTO exams(id,title,created_by,class_id,subject,grade,created_at,updated_at,source,
                     total_questions,sections,published,is_public,featured,
-                    results_revealed,settings,practice_settings,classes_data)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    results_revealed,settings,practice_settings,classes_data,
+                    show_score_type,show_answer_type,answer_min_score)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT(id) DO UPDATE SET
                     title=EXCLUDED.title, created_by=EXCLUDED.created_by,
                     class_id=COALESCE(EXCLUDED.class_id, exams.class_id),
@@ -902,7 +948,13 @@ def upsert_exam(exam_id: str, exam: dict) -> None:
                     published=EXCLUDED.published, is_public=EXCLUDED.is_public,
                     featured=EXCLUDED.featured, results_revealed=EXCLUDED.results_revealed,
                     settings=EXCLUDED.settings, practice_settings=EXCLUDED.practice_settings,
-                    classes_data=EXCLUDED.classes_data
+                    classes_data=EXCLUDED.classes_data,
+                    -- Payload không kèm cấu hình hiển thị (client cũ, lưu đề sau khi
+                    -- sửa câu hỏi…) thì GIỮ cấu hình đang có, không reset về mặc định.
+                    show_score_type=COALESCE(EXCLUDED.show_score_type, exams.show_score_type),
+                    show_answer_type=COALESCE(EXCLUDED.show_answer_type, exams.show_answer_type),
+                    answer_min_score=CASE WHEN EXCLUDED.show_answer_type IS NULL
+                                          THEN exams.answer_min_score ELSE EXCLUDED.answer_min_score END
             """, (
                 exam_id, exam.get("title", ""), str(exam.get("createdBy", "")),
                 exam.get("classId") or None,
@@ -916,6 +968,7 @@ def upsert_exam(exam_id: str, exam: dict) -> None:
                 json.dumps(exam.get("settings"), ensure_ascii=False) if exam.get("settings") is not None else None,
                 json.dumps(exam.get("practiceSettings"), ensure_ascii=False) if exam.get("practiceSettings") is not None else None,
                 json.dumps(exam.get("classes") or [], ensure_ascii=False),
+                exam.get("showScoreType"), exam.get("showAnswerType"), exam.get("answerMinScore"),
             ))
         conn.commit()
 
@@ -1109,6 +1162,28 @@ def update_exam_field(exam_id: str, camel_field: str, value) -> bool:
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute(f"UPDATE exams SET {col}=%s WHERE id=%s RETURNING id", (value, exam_id))
+            found = cur.fetchone() is not None
+        conn.commit()
+    return found
+
+
+def update_exam_display(exam_id: str, score_type: int, answer_type: int,
+                        answer_min_score=None) -> bool:
+    """Lưu "Cài đặt hiển thị (Điểm & Đáp án)" của một đề. Ghi kèm settings.hideResults
+    để các màn hình/dữ liệu cũ còn đọc cờ này vẫn hiểu đúng (điểm không hiện ngay
+    sau khi nộp = ẩn kết quả). Trả False nếu không tìm thấy đề."""
+    hide = score_type != SHOW_AFTER_SUBMIT
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE exams
+                   SET show_score_type=%s, show_answer_type=%s, answer_min_score=%s,
+                       settings = CASE WHEN settings IS NULL THEN settings
+                                       ELSE jsonb_set(settings, '{hideResults}', %s::jsonb) END
+                 WHERE id=%s
+             RETURNING id
+            """, (int(score_type), int(answer_type), answer_min_score,
+                  json.dumps(hide), exam_id))
             found = cur.fetchone() is not None
         conn.commit()
     return found

@@ -453,6 +453,24 @@ function PracticeActiveBadge({ examId, closeTime }) {
 function examScoreBand(pct) {
   return pct >= 80 ? 'mc-score--high' : pct >= 60 ? 'mc-score--mid' : 'mc-score--low'
 }
+
+/* Ngày giờ ngắn gọn cho các dòng "sẽ mở lúc …" */
+const formatDtShort = iso => iso
+  ? new Date(iso).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+  : null
+
+/* Vì sao lần làm này chưa xem lại được — theo "Cài đặt hiển thị" của đề */
+function lockNote(a) {
+  if (a.answerBelowMin) return `Cần đạt ${a.answerMinScore}đ trở lên mới mở đáp án`
+  const at = formatDtShort(a.answerUnlockAt)
+  return at ? `Đáp án mở lúc ${at}` : 'Đáp án chưa được công bố'
+}
+
+/* Nhãn thay cho điểm khi điểm chưa mở */
+function scoreLockLabel(a) {
+  const at = formatDtShort(a.scoreUnlockAt)
+  return at ? `Mở ${at}` : 'Chờ công bố'
+}
 function ExamAttemptHistory({ attempts, examId }) {
   const [open, setOpen] = useState(false)
   const scored = attempts.filter(a => a.score != null)
@@ -461,12 +479,16 @@ function ExamAttemptHistory({ attempts, examId }) {
     : null
   const latest = attempts[0]
   const latestScore = latest?.score != null ? scaledScore(latest.score, latest.maxScore) : null
+  // Đáp án của đề này VỐN bị khoá theo lịch mà nay đã mở → phát sáng nhẹ để học
+  // sinh biết có cái mới để xem (đề luôn mở đáp án thì không cần nhấp nháy).
+  const justOpened = attempts.some(a => a.answerVisible !== false)
+    && attempts.some(a => a.showAnswerType != null && a.showAnswerType !== 1)
 
   return (
     <div className="mc-exam-history">
       <button
         type="button"
-        className={`mc-exam-history-toggle ${open ? 'mc-exam-history-toggle--open' : ''}`}
+        className={`mc-exam-history-toggle ${open ? 'mc-exam-history-toggle--open' : ''} ${justOpened && !open ? 'mc-exam-history-toggle--glow' : ''}`}
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
       >
@@ -484,20 +506,29 @@ function ExamAttemptHistory({ attempts, examId }) {
       </button>
       {open && (
         <div className="mc-exam-history-list">
-          {attempts.map((a, i) => (
-            <a key={a.id} className="mc-exam-history-item" href={`#results/${examId}/${a.id}`}>
-              <span className="mc-exam-history-item-left">
-                <span className="mc-exam-history-item-badge">Lần {attempts.length - i}</span>
-                {formatDt(a.submittedAt)}
-              </span>
-              <span className="mc-exam-history-item-right">
-                <span className={a.score != null ? `mc-exam-history-score ${examScoreBand(scaledScore(a.score, a.maxScore) * 10)}` : 'mc-exam-history-score'}>
-                  {a.score != null ? `${scaledScore(a.score, a.maxScore)}/10` : 'Chờ công bố'}
+          {attempts.map((a, i) => {
+            // Cài đặt hiển thị của đề (server quyết định): chưa mở đáp án thì hàng
+            // này không bấm vào được, kèm dòng chữ nhỏ báo lúc nào mở.
+            const canReview = a.answerVisible !== false
+            const Row = canReview ? 'a' : 'div'
+            return (
+              <Row key={a.id}
+                className={`mc-exam-history-item ${canReview ? '' : 'mc-exam-history-item--locked'}`}
+                {...(canReview ? { href: `#results/${examId}/${a.id}` } : {})}>
+                <span className="mc-exam-history-item-left">
+                  <span className="mc-exam-history-item-badge">Lần {attempts.length - i}</span>
+                  {formatDt(a.submittedAt)}
+                  {!canReview && <span className="mc-locked-note">{IC.lock(11)} {lockNote(a)}</span>}
                 </span>
-                {IC.chevronRight(13)}
-              </span>
-            </a>
-          ))}
+                <span className="mc-exam-history-item-right">
+                  <span className={a.score != null ? `mc-exam-history-score ${examScoreBand(scaledScore(a.score, a.maxScore) * 10)}` : 'mc-exam-history-score'}>
+                    {a.score != null ? `${scaledScore(a.score, a.maxScore)}/10` : scoreLockLabel(a)}
+                  </span>
+                  {canReview && IC.chevronRight(13)}
+                </span>
+              </Row>
+            )
+          })}
         </div>
       )}
     </div>

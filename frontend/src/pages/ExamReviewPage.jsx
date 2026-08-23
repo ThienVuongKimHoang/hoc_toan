@@ -373,6 +373,9 @@ function ReviewQuestion({ item, showPassage }) {
 export default function ExamReviewPage({ examId, subId, onGoHome }) {
   const [state, setState] = useState('loading')  // loading | error | hidden | ready
   const [errMsg, setErrMsg] = useState('')
+  // Đáp án chưa mở: server trả kèm mốc sẽ mở (+ điểm, nếu điểm đã mở) để
+  // màn hình báo rõ "chờ đến lúc nào" thay vì chỉ nói "chưa công bố".
+  const [lockInfo, setLockInfo] = useState(null)
   const [exam, setExam] = useState(null)
   const [submission, setSubmission] = useState(null)
   const [history, setHistory] = useState([])
@@ -391,7 +394,7 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
     fetchSubmissionReview(examId, subId)
       .then(res => {
         if (!alive) return
-        if (!res.revealed) { setState('hidden'); return }
+        if (!res.revealed) { setLockInfo(res); setState('hidden'); return }
         setExam(res.exam)
         setSubmission(res.submission)
         setState('ready')
@@ -531,16 +534,35 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
     </div>
   )
 
-  if (state === 'hidden') return (
-    <div className="et-locked">
-      <div className="etl-card">
-        <div className="etl-icon">⏳</div>
-        <h1 className="etl-title">Kết quả chưa được công bố</h1>
-        <p className="review-status-desc">Giáo viên chưa công bố đáp án/điểm cho đề này. Quay lại sau nhé.</p>
-        <button className="btn-primary" style={{ marginTop: 20 }} onClick={onGoHome}>← Trang chủ</button>
+  if (state === 'hidden') {
+    const lockScore = lockInfo?.submission?.score
+    const lockMax   = lockInfo?.submission?.maxScore
+    const hasScore  = lockInfo?.scoreVisible && lockScore != null
+    const unlockAt  = lockInfo?.answerUnlockAt
+    const desc = lockInfo?.answerBelowMin
+      ? `Đề này chỉ mở đáp án cho bài đạt từ ${lockInfo.answerMinScore} điểm trở lên. Làm lại để đạt mức đó rồi xem lời giải nhé.`
+      : unlockAt
+        ? `Đáp án chi tiết sẽ mở lúc ${formatDt(unlockAt)}. Quay lại sau nhé.`
+        : 'Giáo viên chưa công bố đáp án cho đề này. Quay lại sau nhé.'
+    return (
+      <div className="et-locked">
+        <div className="etl-card">
+          <div className="etl-icon">{lockInfo?.answerBelowMin ? '🎯' : '⏳'}</div>
+          <h1 className="etl-title">
+            {hasScore ? 'Đáp án chưa được mở' : 'Kết quả chưa được công bố'}
+          </h1>
+          {hasScore && (
+            <div className="etl-score" style={{ marginTop: 14 }}>
+              <div className="etl-score-num">{scaledScore(lockScore, lockMax)} <span>/ 10</span></div>
+              <div className="etl-score-label">điểm của bạn</div>
+            </div>
+          )}
+          <p className="review-status-desc">{desc}</p>
+          <button className="btn-primary" style={{ marginTop: 20 }} onClick={onGoHome}>← Trang chủ</button>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const scaled = scaledScore(submission.score, submission.maxScore)
   const band = bandOf(scaled)
