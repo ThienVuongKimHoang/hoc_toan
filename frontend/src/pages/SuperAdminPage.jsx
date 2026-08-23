@@ -1063,12 +1063,15 @@ export default function SuperAdminPage({ user, onGoHome, initialTab, navNonce })
     })
   }
 
+  // Số báo cáo hiện ngay cạnh tiêu đề tab — gọn hơn một badge riêng dưới bộ lọc
+  const [reportCount, setReportCount] = useState(null)
+
   const TabContent = {
     stats:  <StatsTab />,
     exams:  <ExamsTab />,
     users:  <UsersTab />,
     config: <ConfigTab />,
-    reports: <ReportsTab viewerId={user.id} />,
+    reports: <ReportsTab viewerId={user.id} onCount={setReportCount} />,
     security: <SecurityTab viewerId={user.id} />,
     site:   <SiteContentTab />,
   }[tab]
@@ -1117,6 +1120,9 @@ export default function SuperAdminPage({ user, onGoHome, initialTab, navNonce })
             <div>
               <h1 className="sa-topbar-title">
                 {visibleTabs.find(t => t.key === tab)?.label}
+                {tab === 'reports' && reportCount != null && (
+                  <span className="sa-title-count"> ({reportCount})</span>
+                )}
               </h1>
               <p className="sa-topbar-sub">
                 Đăng nhập: <strong>{user?.name}</strong> · {ROLE_META[user?.role]?.icon} {ROLE_META[user?.role]?.label}

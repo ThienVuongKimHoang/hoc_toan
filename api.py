@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from groq import Groq
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-from datetime import datetime, timezone as _tz
+from datetime import datetime, timedelta, timezone as _tz
 import random as _random
 import string as _string
 
@@ -3311,11 +3311,180 @@ async def class_progress_endpoint(cls_id: str, caller: dict = Depends(require_au
     return {"students": list(per_student.values())}
 
 
+def _report_date_range(date_from: str = None, date_to: str = None):
+    """Mốc lọc theo created_at. Client gửi ISO đầy đủ — nửa đêm THEO GIỜ MÁY người
+    dùng đã quy về UTC — nên "hôm nay" không bị lệch 7 tiếng như khi cắt theo ngày UTC.
+    Vẫn nhận dạng 'YYYY-MM-DD' cho tiện gọi tay: khi đó `to` lùi sang 00:00 ngày kế
+    tiếp để "đến ngày X" bao trọn cả ngày X (điều kiện là created_at < to)."""
+    def _one(s, end=False):
+        if not s:
+            return None
+        s = str(s)
+        if len(s) == 10:
+            try:
+                d = datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=_tz.utc)
+            except Exception:
+                return None
+            return d + timedelta(days=1) if end else d
+        return _parse_iso(s)
+    return _one(date_from), _one(date_to, end=True)
+
+
+_REPORT_STATUSES = ("moi", "da_xu_ly")
+_REPORT_LABELS = {"vang_hoc": "Vắng học", "bo_bai": "Bỏ bài", "diem_thap": "Điểm thấp"}
+
+
+def _report_context(r: dict) -> str:
+    """Tên bài tập / buổi học liên quan. Báo cáo cũ chưa có cột `context` thì lấy
+    phần sau dấu ':' trong tiêu đề ("Bỏ bài: <tên bài>")."""
+    if r.get("context"):
+        return r["context"]
+    title = r.get("title") or ""
+    _, sep, rest = title.partition(": ")
+    return rest if sep else ""
+
+
+def _strip_repeats(r: dict) -> str:
+    """Cắt phần lặp khỏi `detail` của báo cáo CŨ ("Học sinh X không nộp bài 'Y'
+    (lớp Z)…") — tên học sinh và lớp đã có cột riêng. Cắt theo đúng giá trị của
+    chính dòng đó chứ không đoán mò câu chữ."""
+    t = r.get("detail") or ""
+    if r.get("studentName"):
+        t = t.replace(f"Học sinh {r['studentName']} ", "")
+    if r.get("className"):
+        t = t.replace(f"(lớp {r['className']})", "").replace(f"của lớp {r['className']}", "")
+    # Cắt xong hay còn lại khoảng trắng lửng trước dấu câu: " , dưới ngưỡng" → ", dưới ngưỡng"
+    t = " ".join(t.split()).replace(" ,", ",").replace(" .", ".").strip().strip(",")
+    return t[0].upper() + t[1:] if t else ""
+
+
+def _report_summary(r: dict) -> str:
+    """CHUYỆN GÌ đã xảy ra, nói gọn. Tên bài/buổi liên quan nằm ở cột riêng
+    (_report_context) nên không nhắc lại ở đây; tên học sinh, lớp, ngày cũng vậy."""
+    if r["type"] == "diem_thap":
+        # detail của dòng mới đã là "25% — dưới ngưỡng 50% của lớp"; dòng cũ thì
+        # cắt bớt phần lặp. Điểm số nằm ở cột "Điểm" riêng nên không lặp ở đây.
+        return _strip_repeats(r) or "Dưới ngưỡng điểm của lớp"
+    if r["type"] == "bo_bai":
+        return "Không nộp bài đúng hạn"
+    if r["type"] == "vang_hoc":
+        return (r.get("note") or "").strip() or _strip_repeats(r) or "Vắng không phép"
+    return _strip_repeats(r) or r.get("title") or ""
+
+
+def _report_student_message(r: dict) -> str:
+    """Lời nhắc gửi CHO CHÍNH học sinh — xưng hô ngôi thứ hai, không phải câu mô tả
+    ngôi thứ ba dành cho admin đọc."""
+    ctx = _report_context(r)
+    if r["type"] == "bo_bai":
+        return f"Bạn chưa nộp bài “{ctx}” đúng hạn." if ctx else "Bạn có một bài chưa nộp đúng hạn."
+    if r["type"] == "diem_thap":
+        score = ""
+        if r.get("score") is not None and r.get("maxScore"):
+            score = f" ({_round2(r['score'])}/{_round2(r['maxScore'])} điểm)"
+        return (f"Bài “{ctx}”{score} của bạn dưới ngưỡng điểm của lớp. Hãy xem lại bài và hỏi giáo viên nếu cần."
+                if ctx else f"Bạn có một bài{score} dưới ngưỡng điểm của lớp.")
+    if r["type"] == "vang_hoc":
+        note = (r.get("note") or "").strip()
+        base = f"Bạn vắng {ctx.lower()}." if ctx else "Bạn vắng một buổi học."
+        return f"{base} Ghi chú của giáo viên: {note}" if note else base
+    return _report_summary(r)
+
+
 @app.get("/api/admin/reports")
 async def admin_reports_endpoint(type: str = None, classId: str = None,
                                   limit: int = 50, offset: int = 0,
+                                  q: str = None, dateFrom: str = None, dateTo: str = None,
+                                  status: str = None,
                                   caller: dict = Depends(require_super_admin)):
-    return db.list_reports(type_=type, class_id=classId, limit=limit, offset=offset)
+    d_from, d_to = _report_date_range(dateFrom, dateTo)
+    return db.list_reports(
+        type_=type, class_id=classId, limit=limit, offset=offset,
+        q=(q or "").strip() or None, date_from=d_from, date_to=d_to,
+        status=status if status in _REPORT_STATUSES else None,
+    )
+
+
+@app.post("/api/admin/reports/mark")
+async def admin_reports_mark(request: Request, caller: dict = Depends(require_super_admin)):
+    """Đánh dấu nhiều báo cáo đã xử lý / mở lại. body: { ids: [...], status: 'da_xu_ly'|'moi' }"""
+    body = await request.json()
+    ids = [str(i) for i in (body.get("ids") or []) if i]
+    status = body.get("status")
+    if status not in _REPORT_STATUSES:
+        return JSONResponse({"error": "Trạng thái không hợp lệ"}, status_code=400)
+    if not ids:
+        return JSONResponse({"error": "Chưa chọn báo cáo nào"}, status_code=400)
+    n = db.mark_reports(ids, status, caller["id"])
+    return {"ok": True, "updated": n, "status": status}
+
+
+@app.post("/api/admin/reports/notify")
+async def admin_reports_notify(request: Request, caller: dict = Depends(require_super_admin)):
+    """Gửi nhắc nhở tới HỌC SINH của các báo cáo được chọn (hệ thống chưa có tài
+    khoản phụ huynh, nên người nhận là chính học sinh). body: { ids: [...], message? }"""
+    body = await request.json()
+    ids = [str(i) for i in (body.get("ids") or []) if i]
+    extra = (body.get("message") or "").strip()
+    if not ids:
+        return JSONResponse({"error": "Chưa chọn báo cáo nào"}, status_code=400)
+
+    sent = 0
+    for r in db.get_reports_by_ids(ids):
+        if not r.get("studentId"):
+            continue
+        kind = _REPORT_LABELS.get(r["type"], "Nhắc nhở")
+        ctx = _report_context(r)
+        db.add_notif({
+            "id": _cls_id(), "type": "nhac_nho",
+            "targetUserId": str(r["studentId"]),
+            "classId": r.get("classId"), "className": r.get("className", ""),
+            "assignmentId": "",
+            "title": f"Nhắc nhở: {kind}" + (f" — {ctx}" if ctx else ""),
+            "message": extra or _report_student_message(r),
+            "createdAt": _now_iso(), "read": False,
+        })
+        sent += 1
+    return {"ok": True, "sent": sent}
+
+
+@app.get("/api/admin/reports/export")
+async def admin_reports_export(type: str = None, classId: str = None,
+                                q: str = None, dateFrom: str = None, dateTo: str = None,
+                                status: str = None,
+                                caller: dict = Depends(require_super_admin)):
+    """Xuất báo cáo đã lọc ra CSV (mở trực tiếp bằng Excel).
+    Có BOM UTF-8 để Excel trên Windows không vỡ tiếng Việt."""
+    import csv
+    import io
+
+    d_from, d_to = _report_date_range(dateFrom, dateTo)
+    rows = db.list_reports_for_export(
+        type_=type, class_id=classId, q=(q or "").strip() or None,
+        date_from=d_from, date_to=d_to,
+        status=status if status in _REPORT_STATUSES else None,
+    )
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Loại", "Học sinh", "Mã HS", "Lớp", "Nội dung", "Liên quan",
+                "Điểm", "Thời gian", "Trạng thái"])
+    for r in rows:
+        score = ""
+        if r.get("score") is not None and r.get("maxScore"):
+            score = f"{_round2(r['score'])}/{_round2(r['maxScore'])}"
+        created = (r.get("createdAt") or "").replace("T", " ")[:16]
+        w.writerow([
+            _REPORT_LABELS.get(r["type"], r["type"]), r.get("studentName", ""), r.get("studentId", ""),
+            r.get("className", ""), _report_summary(r), _report_context(r),
+            score, created,
+            "Đã xử lý" if r.get("status") == "da_xu_ly" else "Chưa xử lý",
+        ])
+    stamp = datetime.now(_tz.utc).strftime("%Y%m%d")
+    return StreamingResponse(
+        io.BytesIO("﻿".encode("utf-8") + buf.getvalue().encode("utf-8")),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="bao-cao-{stamp}.csv"'},
+    )
 
 
 _REPORT_SCAN_INTERVAL = 900  # 15 phút
@@ -3368,12 +3537,14 @@ def _scan_overdue_assignments() -> None:
                 sid = str(m.get("userId"))
                 sub = submitted_by.get(sid)
                 if not sub:
+                    # detail = thông tin THÊM; tên học sinh/lớp/ngày đã có cột riêng
+                    # trong bảng báo cáo nên không lặp lại ở đây.
                     if db.add_report({
                         "id": _cls_id(), "type": "bo_bai", "classId": cls_id, "className": class_name,
                         "studentId": sid, "studentName": m.get("name", ""), "refId": asgn["id"],
                         "title": f"Bỏ bài: {asgn.get('title','')}",
-                        "detail": f"Học sinh {m.get('name','')} không nộp bài '{asgn.get('title','')}' "
-                                  f"(lớp {class_name}) đúng hạn.",
+                        "detail": "Không nộp bài đúng hạn",
+                        "context": asgn.get("title", ""),
                     }):
                         missed.append(m.get("name", ""))
                 else:
@@ -3385,8 +3556,9 @@ def _scan_overdue_assignments() -> None:
                                 "id": _cls_id(), "type": "diem_thap", "classId": cls_id, "className": class_name,
                                 "studentId": sid, "studentName": m.get("name", ""), "refId": asgn["id"],
                                 "title": f"Điểm thấp: {asgn.get('title','')}",
-                                "detail": f"Học sinh {m.get('name','')} đạt {score}/{max_score} ({pct:.0f}%) "
-                                          f"bài '{asgn.get('title','')}' (lớp {class_name}), dưới ngưỡng {threshold}%.",
+                                "detail": f"{pct:.0f}% — dưới ngưỡng {threshold}% của lớp",
+                                "context": asgn.get("title", ""),
+                                "score": score, "maxScore": max_score,
                             }):
                                 low_score.append(f"{m.get('name','')} ({score}/{max_score})")
             scanned_ids.add(asgn["id"])

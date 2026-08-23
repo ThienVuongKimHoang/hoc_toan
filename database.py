@@ -230,6 +230,19 @@ CREATE TABLE IF NOT EXISTS reports (
 CREATE INDEX IF NOT EXISTS idx_reports_type  ON reports(type);
 CREATE INDEX IF NOT EXISTS idx_reports_class ON reports(class_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_dedupe ON reports(type, ref_id, student_id);
+-- Trạng thái xử lý: admin đánh dấu báo cáo nào đã phản hồi cho phụ huynh/học sinh.
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS status     VARCHAR(20) DEFAULT 'moi';  -- moi | da_xu_ly
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS handled_at TIMESTAMPTZ;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS handled_by VARCHAR(100);
+-- Dữ liệu CÓ CẤU TRÚC thay cho câu văn dài trong `detail`: bảng báo cáo dựng lại
+-- cột "chi tiết" từ mấy trường này nên không lặp lại tên học sinh / lớp / ngày —
+-- những thứ đã có cột riêng. `detail` giữ nguyên cho dữ liệu cũ.
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS context    VARCHAR(500);  -- tên bài tập / buổi học
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS score      REAL;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS max_score  REAL;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS note       TEXT;          -- ghi chú của GV (vắng học)
+CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_status  ON reports(status);
 
 CREATE TABLE IF NOT EXISTS notifications (
     id             VARCHAR(50)  PRIMARY KEY,
@@ -1874,13 +1887,18 @@ def upsert_attendance_session(session_id: str, cls_id: str, class_name: str,
                         continue
                     rid = secrets.token_hex(8)
                     student_name = rec.get("studentName", "")
+                    note = (rec.get("note") or "").strip()
+                    # `detail` chỉ chứa thông tin THÊM (ghi chú của GV) — tên học sinh,
+                    # lớp và ngày đã có cột riêng nên không nhắc lại ở đây.
                     cur.execute("""
-                        INSERT INTO reports(id,type,class_id,class_name,student_id,student_name,ref_id,title,detail)
-                        VALUES(%s,'vang_hoc',%s,%s,%s,%s,%s,%s,%s)
+                        INSERT INTO reports(id,type,class_id,class_name,student_id,student_name,ref_id,
+                            title,detail,context,note)
+                        VALUES(%s,'vang_hoc',%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         ON CONFLICT (type, ref_id, student_id) DO NOTHING
                     """, (rid, cls_id, class_name, str(rec.get("studentId")), student_name, sid,
                           f"Vắng học ngày {session_date}",
-                          f"Học sinh {student_name} vắng buổi học ngày {session_date} của lớp {class_name}"))
+                          note or "Vắng không phép",
+                          f"Buổi {session_date}", note))
                     new_absentees.append(student_name)
             conn.commit()
         except Exception:
@@ -2045,6 +2063,13 @@ def _report_from_row(row: dict) -> dict:
         "title":       r["title"] or "",
         "detail":      r["detail"] or "",
         "createdAt":   r["created_at"].isoformat() if r.get("created_at") else None,
+        "status":      r.get("status") or "moi",
+        "handledAt":   r["handled_at"].isoformat() if r.get("handled_at") else None,
+        "handledBy":   r.get("handled_by"),
+        "context":     r.get("context") or "",
+        "score":       r.get("score"),
+        "maxScore":    r.get("max_score"),
+        "note":        r.get("note") or "",
     }
 
 
@@ -2054,37 +2079,121 @@ def add_report(r: dict) -> bool:
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO reports(id,type,class_id,class_name,student_id,student_name,ref_id,title,detail)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                INSERT INTO reports(id,type,class_id,class_name,student_id,student_name,ref_id,
+                    title,detail,context,score,max_score,note)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (type, ref_id, student_id) DO NOTHING
                 RETURNING id
             """, (
                 r.get("id", ""), r.get("type", ""), r.get("classId"), r.get("className", ""),
                 str(r.get("studentId", "")), r.get("studentName", ""), r.get("refId"),
                 r.get("title", ""), r.get("detail", ""),
+                r.get("context"), r.get("score"), r.get("maxScore"), r.get("note"),
             ))
             inserted = cur.fetchone() is not None
         conn.commit()
     return inserted
 
 
-def list_reports(type_: str = None, class_id: str = None, limit: int = 50, offset: int = 0) -> dict:
+def _report_filters(type_=None, class_id=None, q=None, date_from=None, date_to=None, status=None):
+    """Mệnh đề WHERE dùng chung cho danh sách / đếm / xuất file báo cáo."""
     where, params = [], []
     if type_:
         where.append("type=%s"); params.append(type_)
     if class_id:
         where.append("class_id=%s"); params.append(class_id)
-    clause = f"WHERE {' AND '.join(where)}" if where else ""
+    if status:
+        where.append("COALESCE(status,'moi')=%s"); params.append(status)
+    if q:
+        # Tìm theo tên học sinh (không phân biệt hoa/thường) hoặc đúng mã học sinh
+        where.append("(student_name ILIKE %s OR student_id = %s)")
+        params += [f"%{q}%", q]
+    if date_from:
+        where.append("created_at >= %s"); params.append(date_from)
+    if date_to:
+        # date_to là mốc HẾT ngày do api.py tính sẵn (00:00 ngày kế tiếp)
+        where.append("created_at < %s"); params.append(date_to)
+    return (f"WHERE {' AND '.join(where)}" if where else ""), params
+
+
+def list_reports(type_: str = None, class_id: str = None, limit: int = 50, offset: int = 0,
+                 q: str = None, date_from=None, date_to=None, status: str = None) -> dict:
+    """Danh sách báo cáo đã lọc + tổng số + số lượng theo từng loại/trạng thái.
+    `counts` bỏ qua bộ lọc LOẠI (nhưng vẫn theo các bộ lọc còn lại) để mỗi chip
+    loại hiển thị được số của chính nó mà không cần gọi thêm request."""
+    clause, params = _report_filters(type_, class_id, q, date_from, date_to, status)
+    c_clause, c_params = _report_filters(None, class_id, q, date_from, date_to, status)
     with _C() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(f"SELECT COUNT(*) AS cnt FROM reports {clause}", params)
             total = cur.fetchone()["cnt"]
+            cur.execute(f"""
+                SELECT type, COUNT(*) AS cnt,
+                       COUNT(*) FILTER (WHERE COALESCE(status,'moi')='moi') AS pending
+                  FROM reports {c_clause} GROUP BY type
+            """, c_params)
+            by_type = {r["type"]: {"total": r["cnt"], "pending": r["pending"]}
+                       for r in cur.fetchall()}
+            cur.execute("SELECT COUNT(*) AS cnt FROM reports")
+            grand_total = cur.fetchone()["cnt"]
             cur.execute(
                 f"SELECT * FROM reports {clause} ORDER BY created_at DESC LIMIT %s OFFSET %s",
                 params + [limit, offset],
             )
             rows = cur.fetchall()
-    return {"rows": [_report_from_row(dict(r)) for r in rows], "total": total}
+    return {
+        "rows":   [_report_from_row(dict(r)) for r in rows],
+        "total":  total,
+        "counts": {
+            # all/pending/byType theo bộ lọc hiện tại (trừ bộ lọc LOẠI);
+            # grandTotal là tổng toàn hệ thống, không lọc gì — dùng cho tiêu đề tab.
+            "all":        sum(v["total"] for v in by_type.values()),
+            "pending":    sum(v["pending"] for v in by_type.values()),
+            "byType":     by_type,
+            "grandTotal": grand_total,
+        },
+    }
+
+
+def list_reports_for_export(type_=None, class_id=None, q=None, date_from=None,
+                            date_to=None, status=None, cap: int = 5000) -> list:
+    """Toàn bộ báo cáo khớp bộ lọc (chặn trên `cap` dòng) — dùng cho xuất file."""
+    clause, params = _report_filters(type_, class_id, q, date_from, date_to, status)
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(f"SELECT * FROM reports {clause} ORDER BY created_at DESC LIMIT %s",
+                        params + [cap])
+            rows = cur.fetchall()
+    return [_report_from_row(dict(r)) for r in rows]
+
+
+def mark_reports(ids: list, status: str, by=None) -> int:
+    """Đánh dấu đã xử lý / mở lại nhiều báo cáo cùng lúc. Trả số dòng đã đổi."""
+    if not ids:
+        return 0
+    handled = status == "da_xu_ly"
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE reports
+                   SET status=%s,
+                       handled_at = CASE WHEN %s THEN NOW() ELSE NULL END,
+                       handled_by = CASE WHEN %s THEN %s ELSE NULL END
+                 WHERE id = ANY(%s)
+            """, (status, handled, handled, str(by) if by is not None else None, list(ids)))
+            n = cur.rowcount
+        conn.commit()
+    return n
+
+
+def get_reports_by_ids(ids: list) -> list:
+    if not ids:
+        return []
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM reports WHERE id = ANY(%s)", (list(ids),))
+            rows = cur.fetchall()
+    return [_report_from_row(dict(r)) for r in rows]
 
 
 def update_user(uid: str, fields: dict) -> Optional[dict]:
