@@ -144,7 +144,7 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
   }
 
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-overlay">
       <div className="modal-box publish-modal">
         <div className="modal-header">
           <h2>🚀 Phát đề thi</h2>
