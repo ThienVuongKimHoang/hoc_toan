@@ -71,6 +71,12 @@ function buildMenu(user, actions) {
     items.push({ icon: IC.users,      label: 'Quản lý lớp học',   action: actions.onGoClasses })
   }
 
+  // Giáo viên có thể đồng thời là học sinh của một lớp khác (vd. học lớp IELTS của
+  // đồng nghiệp) — cần lối vào riêng vì "Quản lý lớp học" chỉ hiện lớp họ làm chủ.
+  if (role === ROLES.TEACHER) {
+    items.push({ icon: IC.users, label: 'Lớp tôi tham gia', action: actions.onGoMyClasses })
+  }
+
   if (tier >= 3) {
     items.push({ icon: IC.system, label: 'Bảng điều khiển Admin', action: actions.onGoAdmin, highlight: true })
   }

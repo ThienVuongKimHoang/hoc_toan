@@ -2323,6 +2323,8 @@ async def join_class_by_code(request: Request, caller: dict = Depends(require_au
         return JSONResponse({"error": "Mã lớp không hợp lệ."}, status_code=404)
     if _is_class_teacher(cls, uid):
         return JSONResponse({"error": "Bạn là giáo viên của lớp này, không thể tham gia với tư cách học sinh."}, status_code=403)
+    if caller.get("role") == "giao_vien":
+        return JSONResponse({"error": "Tài khoản giáo viên không thể tham gia lớp khác với tư cách học sinh."}, status_code=403)
     if cls.get("joinPassword") and cls["joinPassword"] != password:
         return JSONResponse({"error": "Sai mật khẩu."}, status_code=401)
     em = (uemail or "").strip().lower()
@@ -2433,15 +2435,21 @@ async def add_member_endpoint(cls_id: str, request: Request, caller: dict = Depe
     subject = body.get("subject") or None   # thêm học sinh THEO MÔN
     err = {}
 
-    # Chặn theo cấp độ: chỉ thêm học sinh cùng cấp độ với lớp.
     cls0 = db.get_class(cls_id)
     if cls0 is None:
         return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     if not _is_class_teacher(cls0, caller["id"]):
         return JSONResponse({"error": "Không có quyền thêm học sinh vào lớp này"}, status_code=403)
+
+    target_user = db.get_user_by_id(body.get("userId")) if body.get("userId") is not None else None
+    if (target_user or {}).get("role") == "giao_vien":
+        return JSONResponse(
+            {"error": "Không thể thêm tài khoản giáo viên vào lớp với tư cách học sinh."},
+            status_code=403)
+
+    # Chặn theo cấp độ: chỉ thêm học sinh cùng cấp độ với lớp.
     if cls0.get("grade"):
-        stu = db.get_user_by_id(body.get("userId")) if body.get("userId") is not None else None
-        stu_grade = (stu or {}).get("grade")
+        stu_grade = (target_user or {}).get("grade")
         if not stu_grade or str(stu_grade) != str(cls0.get("grade")):
             return JSONResponse(
                 {"error": f"Chỉ thêm được học sinh cấp độ Lớp {cls0.get('grade')} vào lớp này."},
