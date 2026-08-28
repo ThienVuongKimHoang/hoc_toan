@@ -10,7 +10,7 @@ import StudentProgressModal from '../components/StudentProgressModal.jsx'
 import {
   addAssignment, addCoTeacher, addDocument, addMemberToClass, createClass,
   deleteAssignmentSubmission,
-  deleteClass, getAllClasses, getClassById, getClassesByTeacher, getSubmissions,
+  deleteClass, getAllClasses, getClassById, getClassesByStudent, getClassesByTeacher, getSubmissions,
   joinUrl, removeAssignment, removeCoTeacher, removeDocument, removeMemberFromClass,
   searchStudents, searchTeachers, updateAssignmentDeadline, updateClassInfo, updateDocument,
   updateMemberLabel, uploadFile,
@@ -2473,8 +2473,12 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
 }
 
 /* ─── Main page ─── */
-export default function ClassManagementPage({ user }) {
+export default function ClassManagementPage({ user, onOpenClass }) {
   const [classes, setClasses] = useState([])
+  // Lớp mà user này THAM GIA với tư cách học sinh (vd. giáo viên học lớp IELTS của
+  // đồng nghiệp) — tách riêng khỏi `classes` (lớp user QUẢN LÝ) vì trang này mặc định
+  // chỉ tải lớp mình làm chủ, dễ khiến giáo viên không thấy lớp mình đang học.
+  const [memberClasses, setMemberClasses] = useState([])
   const [nav, setNav] = useState(navFromHash)  // {grade, classId} lấy từ hash
   const [showCreate, setShowCreate] = useState(false)
   const [editCls, setEditCls] = useState(null)
@@ -2505,6 +2509,9 @@ export default function ClassManagementPage({ user }) {
   }
 
   useEffect(() => { reload() }, [])
+  useEffect(() => {
+    getClassesByStudent(String(user.id), user.email).then(setMemberClasses).catch(() => {})
+  }, [user.id, user.email])
 
   const handleCreate = async ({ name, description, grade, subject, joinPassword, schedule, settings }) => {
     setLoading(true)
@@ -2669,6 +2676,39 @@ export default function ClassManagementPage({ user }) {
         <h1 className="exam-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{IC.users(24)} Quản lý lớp học</h1>
         <p className="exam-subtitle">Chọn khối để xem các lớp — mỗi môn là một lớp, có mã tham gia và học sinh riêng</p>
       </div>
+
+      {memberClasses.length > 0 && (
+        <div className="cm-member-classes-section" style={{ marginBottom: 28 }}>
+          <div className="my-exams-toolbar" style={{ marginBottom: 12 }}>
+            <span className="met-count">🎒 Lớp tôi tham gia (với vai trò học sinh)</span>
+          </div>
+          <div className="cm-class-grid">
+            {memberClasses.map(cls => {
+              const subject = primarySubject(cls)
+              return (
+                <div key={cls.id} className="cm-class-card cm-subject-card" data-subject={subject || 'khac'}
+                  style={{ cursor: 'pointer' }} onClick={() => onOpenClass?.(cls.id)}>
+                  <div className="cm-class-card-header">
+                    <div className="cm-class-icon cm-subject-icon">{SUBJECTS[subject]?.icon ?? '🏫'}</div>
+                    <div className="cm-title-accent" />
+                    <div style={{ flex: 1 }}>
+                      <div className="cm-class-title">{cls.name}</div>
+                    </div>
+                  </div>
+                  {cls.teacherName && <div className="cm-class-teacher-line">GV: {cls.teacherName}</div>}
+                  <div className="cm-class-subject-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                    <GradeBadge grade={cls.grade} size="sm" />
+                    {subject && <SubjectBadge subject={subject} size="sm" />}
+                  </div>
+                  <div className="cm-class-footer">
+                    <span className="cm-enter-hint">Vào lớp <span className="cm-enter-arrow">→</span></span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="my-exams-toolbar">
         <span className="met-count">{grades.length} khối · {classes.length} lớp</span>

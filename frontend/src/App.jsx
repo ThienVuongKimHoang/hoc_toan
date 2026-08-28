@@ -515,7 +515,7 @@ export default function App() {
     return (
       <>
         {header}
-        <ClassManagementPage user={user} onGoHome={goHome} />
+        <ClassManagementPage user={user} onGoHome={goHome} onOpenClass={openClass} />
         {teacherToolOverlays}
       </>
     )
