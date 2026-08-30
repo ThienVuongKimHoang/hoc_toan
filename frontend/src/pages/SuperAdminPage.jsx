@@ -959,6 +959,7 @@ function SecurityTab({ viewerId }) {
               <thead>
                 <tr>
                   <th>Địa chỉ IP</th>
+                  <th>Tài khoản đang cố đăng nhập</th>
                   <th>Số lần sai</th>
                   <th>Đang khoá</th>
                   <th>Cập nhật lúc</th>
@@ -967,10 +968,11 @@ function SecurityTab({ viewerId }) {
               </thead>
               <tbody>
                 {attempts.length === 0 ? (
-                  <tr><td colSpan={5} className="sa-empty">Chưa có IP nào đăng nhập sai.</td></tr>
+                  <tr><td colSpan={6} className="sa-empty">Chưa có IP nào đăng nhập sai.</td></tr>
                 ) : attempts.map(a => (
                   <tr key={a.ip}>
                     <td><code className="sa-code">{a.ip}</code></td>
+                    <td>{a.lastEmail || '—'}</td>
                     <td>{a.failCount}</td>
                     <td>{a.lockedSeconds > 0
                       ? <span className="sa-badge" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>{IcLock(12)} {fmtLock(a.lockedSeconds)}</span>

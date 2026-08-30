@@ -270,6 +270,9 @@ CREATE TABLE IF NOT EXISTS login_attempts (
     locked_until TIMESTAMPTZ,
     updated_at   TIMESTAMPTZ DEFAULT NOW()
 );
+-- Email/tài khoản gần nhất bị nhập sai từ IP này — cho super_admin thấy ai đang cố
+-- đăng nhập, không chỉ từ IP nào.
+ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS last_email VARCHAR(255);
 
 -- Danh sách IP bị super_admin cấm truy cập thẳng
 CREATE TABLE IF NOT EXISTS banned_ips (
@@ -1254,19 +1257,20 @@ def get_login_lock_seconds(ip: str) -> int:
     return max(0, int(remaining + 0.999))
 
 
-def register_login_failure(ip: str) -> int:
-    """Ghi nhận 1 lần đăng nhập sai từ IP này.
+def register_login_failure(ip: str, email: str = None) -> int:
+    """Ghi nhận 1 lần đăng nhập sai từ IP này, kèm email đang cố đăng nhập (nếu có).
     Trả về số giây bị khoá (0 nếu chưa vượt ngưỡng)."""
     with _C() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO login_attempts (ip, fail_count, updated_at)
-                VALUES (%s, 1, NOW())
+                INSERT INTO login_attempts (ip, fail_count, last_email, updated_at)
+                VALUES (%s, 1, %s, NOW())
                 ON CONFLICT (ip) DO UPDATE
                    SET fail_count = login_attempts.fail_count + 1,
+                       last_email = EXCLUDED.last_email,
                        updated_at = NOW()
                 RETURNING fail_count
-            """, (ip,))
+            """, (ip, email or None))
             fail_count = cur.fetchone()[0]
             lock_seconds = 0
             if fail_count > _LOGIN_LOCK_THRESHOLD:
@@ -1295,7 +1299,7 @@ def list_login_attempts() -> list:
     with _C() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT ip, fail_count, locked_until, updated_at
+                SELECT ip, fail_count, locked_until, updated_at, last_email
                   FROM login_attempts
                  ORDER BY fail_count DESC, updated_at DESC
             """)
@@ -1310,6 +1314,7 @@ def list_login_attempts() -> list:
             "failCount":     r["fail_count"],
             "lockedSeconds": locked_seconds,
             "updatedAt":     r["updated_at"].isoformat() if r["updated_at"] else None,
+            "lastEmail":     r.get("last_email") or None,
         })
     return out
 

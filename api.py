@@ -1890,11 +1890,11 @@ async def api_login(request: Request):
     password = body.get("password") or ""
     # Chặn đăng nhập bằng mật khẩu rỗng (tài khoản Google có password = "")
     if not password:
-        db.register_login_failure(ip)
+        db.register_login_failure(ip, email)
         return JSONResponse({"error": "Email hoặc mật khẩu không đúng."}, status_code=401)
     user = db.get_user_by_email(email, pwd=True)
     if not user or not db.verify_password(password, user.get("password") or ""):
-        locked_for = db.register_login_failure(ip)
+        locked_for = db.register_login_failure(ip, email)
         if locked_for > 0:
             return JSONResponse(
                 {"error": f"Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau {locked_for} giây."},
