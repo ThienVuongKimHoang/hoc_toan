@@ -202,6 +202,15 @@ CREATE TABLE IF NOT EXISTS attendance_sessions (
     updated_at   TIMESTAMPTZ  DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_attend_sess_unique ON attendance_sessions(class_id, session_date);
+-- Báo cáo điểm danh KHÔNG gửi ngay lúc lưu (giáo viên còn sửa: học sinh tới muộn,
+-- xin phép sau) mà hẹn giờ: hết tiết theo lịch lớp, lớp không có lịch hôm đó thì
+-- 1h30 sau khi điểm danh. Đang chờ gửi ⇔ notify_after <= NOW() AND (notified_at IS
+-- NULL OR notified_at < notify_after) — đẩy notify_after lên tương lai = hẹn lại.
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS notify_after TIMESTAMPTZ;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS notified_at  TIMESTAMPTZ;
+-- Danh sách vắng tại lần gửi gần nhất — so với danh sách hiện tại để biết giáo viên
+-- có sửa gì sau khi đã báo cáo hay không.
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS notified_absentees JSONB DEFAULT '[]';
 
 CREATE TABLE IF NOT EXISTS attendance_records (
     id           SERIAL       PRIMARY KEY,
@@ -1845,6 +1854,10 @@ def _attend_session_from_row(row: dict, records: list = None) -> dict:
         "openedBy":  r.get("opened_by"),
         "createdAt": r["created_at"].isoformat() if r.get("created_at") else None,
         "updatedAt": r["updated_at"].isoformat() if r.get("updated_at") else None,
+        # Hẹn giờ gửi báo cáo điểm danh — giao diện giáo viên hiện "báo cáo gửi lúc …"
+        "notifyAfter": r["notify_after"].isoformat() if r.get("notify_after") else None,
+        "notifiedAt":  r["notified_at"].isoformat() if r.get("notified_at") else None,
+        "notifiedAbsentees": r.get("notified_absentees") or [],
         "records":   records or [],
     }
 
@@ -1914,6 +1927,59 @@ def upsert_attendance_session(session_id: str, cls_id: str, class_name: str,
     result = _attend_session_from_row(srow, out_records)
     result["newAbsentees"] = new_absentees
     return result
+
+
+# ─── Hẹn giờ gửi báo cáo điểm danh ───
+def set_attendance_notify_after(session_id: str, when) -> None:
+    """Hẹn (hoặc hẹn lại) mốc gửi báo cáo cho một buổi điểm danh."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE attendance_sessions SET notify_after=%s WHERE id=%s", (when, session_id))
+        conn.commit()
+
+
+def list_due_attendance_notifs(now) -> list:
+    """Các buổi điểm danh đã tới hạn gửi mà chưa gửi (hoặc vừa được hẹn lại sau khi
+    giáo viên sửa). Kèm danh sách học sinh đang để trạng thái 'vắng' — nội dung báo
+    cáo luôn lấy theo dữ liệu MỚI NHẤT, không phải lúc bấm lưu lần đầu."""
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT s.id, s.class_id, s.class_name, s.session_date,
+                       s.notify_after, s.notified_at, s.notified_absentees,
+                       COALESCE(
+                         (SELECT json_agg(r.student_name ORDER BY r.id)
+                          FROM attendance_records r
+                          WHERE r.session_id = s.id AND r.status = 'vang'),
+                         '[]'::json) AS absentees
+                FROM attendance_sessions s
+                WHERE s.notify_after IS NOT NULL
+                  AND s.notify_after <= %s
+                  AND (s.notified_at IS NULL OR s.notified_at < s.notify_after)
+                ORDER BY s.notify_after
+            """, (now,))
+            rows = cur.fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        out.append({
+            "id": d["id"], "classId": d["class_id"], "className": d.get("class_name") or "",
+            "sessionDate": d["session_date"].isoformat() if d.get("session_date") else "",
+            "notifiedAt": d.get("notified_at"),
+            "notifiedAbsentees": d.get("notified_absentees") or [],
+            "absentees": d.get("absentees") or [],
+        })
+    return out
+
+
+def mark_attendance_notified(session_id: str, absentees: list, when) -> None:
+    """Đánh dấu đã gửi báo cáo + ghi lại danh sách vắng tại thời điểm gửi."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE attendance_sessions SET notified_at=%s, notified_absentees=%s WHERE id=%s",
+                (when, json.dumps(absentees or [], ensure_ascii=False), session_id))
+        conn.commit()
 
 
 def get_attendance_session(cls_id: str, session_date: str) -> Optional[dict]:

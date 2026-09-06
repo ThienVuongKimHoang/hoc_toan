@@ -1390,6 +1390,9 @@ function AttendanceTab({ classId, teacherId, members, schedule }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState([])
+  // Mốc gửi báo cáo cho quản trị (server hẹn: hết tiết học, hoặc 1h30 sau khi điểm
+  // danh) — cho giáo viên biết còn bao lâu để sửa trước khi báo cáo đi.
+  const [notifyInfo, setNotifyInfo] = useState(null)
 
   const loadHistory = useCallback(async () => setHistory(await getAttendanceHistory(classId)), [classId])
   useEffect(() => { loadHistory() }, [loadHistory])
@@ -1402,6 +1405,7 @@ function AttendanceTab({ classId, teacherId, members, schedule }) {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
+    setNotifyInfo(null)
     getAttendanceSession(classId, date).then(session => {
       if (cancelled) return
       const map = {}
@@ -1423,7 +1427,8 @@ function AttendanceTab({ classId, teacherId, members, schedule }) {
         studentId: m.userId, studentName: m.name,
         status: statusMap[m.userId]?.status || 'co_mat', note: statusMap[m.userId]?.note || '',
       }))
-      await submitAttendance(classId, { teacherId, date, records })
+      const saved = await submitAttendance(classId, { teacherId, date, records })
+      setNotifyInfo({ at: saved?.notifyAfter || null, sent: !!saved?.notifiedAt })
       await loadHistory()
     } catch (err) { alert(err.message) }
     finally { setSaving(false) }
@@ -1478,10 +1483,19 @@ function AttendanceTab({ classId, teacherId, members, schedule }) {
         </div>
       )}
 
-      <div className="cm-footer" style={{ padding: '12px 0' }}>
+      <div className="cm-footer" style={{ padding: '12px 0', flexWrap: 'wrap', gap: 10 }}>
         <button className="btn-primary cm-submit" onClick={save} disabled={saving || loading || members.length === 0}>
           {saving ? '⏳ Đang lưu…' : '💾 Lưu điểm danh'}
         </button>
+        {notifyInfo && (
+          <span className="cm-attend-notice">
+            {notifyInfo.at && new Date(notifyInfo.at) > new Date()
+              ? <>✅ Đã lưu. Báo cáo gửi cho quản trị lúc{' '}
+                  <strong>{new Date(notifyInfo.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</strong>
+                  {' '}— bạn còn sửa được trước giờ đó.</>
+              : <>✅ Đã lưu. Báo cáo sẽ được gửi cho quản trị trong ít phút tới.</>}
+          </span>
+        )}
       </div>
 
       <h4 className="sub-section-title">Lịch sử điểm danh</h4>

@@ -3205,6 +3205,34 @@ async def vocab_generate_examples(request: Request, caller: dict = Depends(requi
 
 # ─── Điểm danh + Tiến độ học sinh + Báo cáo tổng hợp ──────────────────────────
 
+VN_TZ = _tz(timedelta(hours=7))          # Việt Nam không có DST nên offset cố định là chính xác
+ATTENDANCE_NOTIFY_DELAY_MIN = 90         # lớp không có lịch hôm đó → 1 giờ 30 sau khi điểm danh
+
+
+def _attendance_deadline(cls: dict, date_str: str, now):
+    """Bao giờ được gửi báo cáo điểm danh của buổi `date_str`?
+
+    Hết tiết học theo lịch lớp (vd 19:30–21:00 → 21:00). Ngày đó lớp không có lịch,
+    hoặc giáo viên điểm danh bù khi tiết đã tan → 1 giờ 30 kể từ bây giờ."""
+    fallback = now + timedelta(minutes=ATTENDANCE_NOTIFY_DELAY_MIN)
+    try:
+        day = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except Exception:
+        return fallback
+    # dayOfWeek trong lịch lớp: 1=Thứ 2 … 7=Chủ nhật (khớp scheduleInfoForDate ở frontend)
+    iso_dow = day.isoweekday()
+    slot = next((s for s in (cls.get("schedule") or []) if s.get("dayOfWeek") == iso_dow), None)
+    end_time = (slot or {}).get("endTime")
+    if not end_time:
+        return fallback
+    try:
+        hh, mm = [int(x) for x in str(end_time).split(":")[:2]]
+        end_dt = datetime(day.year, day.month, day.day, hh, mm, tzinfo=VN_TZ)
+    except Exception:
+        return fallback
+    # Tiết đã tan trước cả lúc điểm danh (điểm danh muộn/bù) → vẫn chờ 1h30 cho GV sửa
+    return end_dt if end_dt > now else fallback
+
 @app.post("/api/classes/{cls_id}/attendance")
 async def submit_attendance_endpoint(cls_id: str, request: Request, caller: dict = Depends(require_auth)):
     body = await request.json()
@@ -3222,20 +3250,20 @@ async def submit_attendance_endpoint(cls_id: str, request: Request, caller: dict
     session = db.upsert_attendance_session(
         _cls_id(), cls_id, cls.get("name", ""), date, teacher_id, records)
 
-    absentees = session.get("newAbsentees") or []
-    if absentees:
-        for adm in db.get_super_admins():
-            db.add_notif({
-                # classId=None: đây là thông báo cho SUPER ADMIN, không phải học sinh của lớp
-                # (super admin không phải "member" của lớp) — để trống để NotificationBell
-                # không cố mở lớp qua luồng "Lớp của tôi" (chỉ dành cho học sinh) khi bấm vào.
-                "id": _cls_id(), "type": "attendance",
-                "targetUserId": str(adm.get("id")), "classId": None,
-                "className": cls.get("name", ""), "assignmentId": "",
-                "title": f"Báo cáo điểm danh lớp {cls.get('name','')} ngày {date}",
-                "message": f"{len(absentees)} học sinh vắng: {', '.join(absentees)}",
-                "createdAt": _now_iso(), "read": False,
-            })
+    # KHÔNG gửi báo cáo ngay: giáo viên còn sửa trong buổi (học sinh tới muộn, xin
+    # phép sau) nên mỗi lần lưu mà bắn một thông báo là dội quản trị. Chỉ hẹn giờ:
+    #   - chưa hẹn lần nào  → hẹn theo giờ tan tiết (hoặc +90 phút, xem _attendance_deadline)
+    #   - đã gửi báo cáo rồi mà danh sách vắng đổi → hẹn lại để gửi 1 bản "cập nhật"
+    # Sửa nhiều lần TRƯỚC mốc thì giữ nguyên hạn cũ — vẫn chỉ đúng một thông báo,
+    # nội dung lấy theo danh sách vắng cuối cùng lúc tới hạn.
+    now = datetime.now(_tz.utc)
+    absentees = sorted(session.get("newAbsentees") or [])
+    notified_at = session.get("notifiedAt")
+    if not session.get("notifyAfter"):
+        db.set_attendance_notify_after(session["id"], _attendance_deadline(cls, date, now))
+    elif notified_at and absentees != sorted(session.get("notifiedAbsentees") or []):
+        db.set_attendance_notify_after(session["id"], now + timedelta(minutes=ATTENDANCE_NOTIFY_DELAY_MIN))
+    session = db.get_attendance_session(cls_id, date) or session
     return session
 
 
@@ -3504,7 +3532,51 @@ async def _report_scanner_loop():
             _scan_overdue_assignments()
         except Exception as e:
             print(f"[report-scanner] error: {e}")
+        try:
+            _scan_pending_attendance_notifs()
+        except Exception as e:
+            print(f"[attendance-notifier] error: {e}")
         await asyncio.sleep(_REPORT_SCAN_INTERVAL)
+
+
+def _scan_pending_attendance_notifs() -> None:
+    """Gửi báo cáo điểm danh đã tới hạn (hết tiết học, hoặc 1h30 sau khi điểm danh).
+
+    Nội dung lấy theo danh sách vắng MỚI NHẤT nên giáo viên sửa bao nhiêu lần trước
+    mốc cũng chỉ ra đúng một thông báo. Sửa sau khi đã gửi mà danh sách đổi thì
+    submit_attendance_endpoint hẹn lại → ở đây gửi thêm một bản "cập nhật"."""
+    now = datetime.now(_tz.utc)
+    for sess in db.list_due_attendance_notifs(now):
+        absentees = [a for a in (sess.get("absentees") or []) if a]
+        first_time = sess.get("notifiedAt") is None
+        cls_name, date = sess.get("className", ""), sess.get("sessionDate", "")
+
+        if first_time:
+            # Không có ai vắng thì không làm phiền quản trị — vẫn đánh dấu đã xử lý
+            # để buổi đó không bị quét đi quét lại mãi.
+            if absentees:
+                title   = f"Báo cáo điểm danh lớp {cls_name} ngày {date}"
+                message = f"{len(absentees)} học sinh vắng: {', '.join(absentees)}"
+            else:
+                title = message = None
+        else:
+            title = f"Cập nhật điểm danh lớp {cls_name} ngày {date}"
+            message = (f"Giáo viên đã sửa — {len(absentees)} học sinh vắng: {', '.join(absentees)}"
+                       if absentees else "Giáo viên đã sửa — không còn học sinh vắng.")
+
+        if title:
+            for adm in db.get_super_admins():
+                db.add_notif({
+                    # classId=None: thông báo cho SUPER ADMIN, không phải học sinh của lớp
+                    # (super admin không phải "member" của lớp) — để trống để NotificationBell
+                    # không cố mở lớp qua luồng "Lớp của tôi" (chỉ dành cho học sinh) khi bấm vào.
+                    "id": _cls_id(), "type": "attendance",
+                    "targetUserId": str(adm.get("id")), "classId": None,
+                    "className": cls_name, "assignmentId": "",
+                    "title": title, "message": message,
+                    "createdAt": _now_iso(), "read": False,
+                })
+        db.mark_attendance_notified(sess["id"], absentees, now)
 
 
 def _scan_overdue_assignments() -> None:
