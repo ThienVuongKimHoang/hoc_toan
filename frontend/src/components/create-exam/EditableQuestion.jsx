@@ -707,29 +707,109 @@ function MCQEditor({ q, onChange }) {
 /* ═══════════════════════════════════════════
    PHẦN II — Đúng / Sai
 ═══════════════════════════════════════════ */
+// Một ý phụ a/b/c/d: giống hệt MCQChoiceRow của PHẦN I — text field (LaTeX) + nút chèn
+// ảnh riêng cho ý đó (marker [img:id] vào cuối nội dung, ảnh lưu chung trong q.images).
+function TFSubRow({ label, value, images, correct, onChangeText, onSetCorrect, onAddImage, onRemoveImage }) {
+  const fileRef = useRef(null)
+  const referencedIds = referencedImageIds(value)
+  const attached = images.filter(im => referencedIds.includes(im.id))
+
+  const handleFile = (file) => {
+    if (!file || !file.type.startsWith('image/')) return
+    loadImageFile(file)
+      .then(dataUrl => onAddImage({ id: `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`, dataUrl, name: file.name }))
+      .catch(() => alert(IMAGE_LOAD_FAIL_MSG))
+  }
+
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault()
+        // Chặn lan lên listener paste cấp document (chèn ảnh vào đề bài) — nếu không,
+        // ảnh bị chèn nhầm CẢ vào đề bài. Xem chú thích ở MCQChoiceRow.
+        e.stopPropagation()
+        handleFile(item.getAsFile())
+        return
+      }
+    }
+  }
+
+  return (
+    <div className="eq-sub-row" onPaste={handlePaste}>
+      <span className="eq-sub-label">{label})</span>
+      <div className="eq-choice-field-wrap">
+        <MathEditField value={value} onChange={onChangeText} placeholder="Nội dung ý phụ…" images={images} />
+        <div className="eq-choice-img-row">
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+            onChange={e => { handleFile(e.target.files?.[0]); e.target.value = '' }} />
+          <button type="button" className="eq-choice-img-btn"
+            title="Chèn ảnh vào ý này (hoặc dán Ctrl+V)"
+            onClick={() => fileRef.current?.click()}>
+            🖼 Ảnh
+          </button>
+          {attached.map(img => (
+            <span key={img.id} className="eq-choice-img-chip">
+              <img src={img.dataUrl || (img.url ? `/images/${img.url.replace('images/', '')}` : '')}
+                alt={img.name || 'Hình'} onClick={() => window.open(img.dataUrl || img.url, '_blank')} />
+              <button type="button" onClick={() => onRemoveImage(img.id)} title="Xoá ảnh">✕</button>
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="eq-tf-btns">
+        <button className={`eq-tf-btn true ${correct === true ? 'active' : ''}`}
+          onClick={() => onSetCorrect(true)} type="button">Đ</button>
+        <button className={`eq-tf-btn false ${correct === false ? 'active' : ''}`}
+          onClick={() => onSetCorrect(false)} type="button">S</button>
+      </div>
+    </div>
+  )
+}
+
 function TFEditor({ q, onChange }) {
   const subs = q.sub_questions || []
+  const images = q.images || []
   const updateSub = (idx, patch) => {
     const updated = subs.map((s, i) => i === idx ? { ...s, ...patch } : s)
     onChange({ ...q, sub_questions: updated })
   }
+
+  // Ảnh của ý phụ nằm CHUNG mảng q.images với ảnh đề bài và ảnh đáp án A-D; chỉ khác
+  // ở chỗ marker được chèn vào sub_questions[idx].text nên ảnh hiện đúng trong ý đó.
+  const addSubImage = (idx, img) => {
+    const marker = `[img:${img.id}]`
+    const updated = subs.map((s, i) => {
+      if (i !== idx) return s
+      return { ...s, text: s.text ? `${s.text}\n${marker}` : marker }
+    })
+    onChange({ ...q, images: [...images, img], sub_questions: updated })
+  }
+  const removeSubImage = (idx, id) => {
+    const strip = (t) => (t || '').replace(new RegExp(`\\n?\\[img:${id}\\]`, 'g'), '')
+    const updated = subs.map((s, i) => i === idx ? { ...s, text: strip(s.text) } : s)
+    onChange({ ...q, images: images.filter(im => im.id !== id), sub_questions: updated })
+  }
+
   return (
     <div className="eq-body">
       <div className="eq-subs">
         {subs.map((sub, idx) => (
-          <div key={idx} className="eq-sub-row">
-            <span className="eq-sub-label">{sub.label})</span>
-            <MathEditField value={sub.text || ''} onChange={v => updateSub(idx, { text: v })} placeholder="Nội dung ý phụ…" />
-            <div className="eq-tf-btns">
-              <button className={`eq-tf-btn true ${sub.correct_answer === true ? 'active' : ''}`}
-                onClick={() => updateSub(idx, { correct_answer: true })} type="button">Đ</button>
-              <button className={`eq-tf-btn false ${sub.correct_answer === false ? 'active' : ''}`}
-                onClick={() => updateSub(idx, { correct_answer: false })} type="button">S</button>
-            </div>
-          </div>
+          <TFSubRow
+            key={idx}
+            label={sub.label}
+            value={sub.text || ''}
+            images={images}
+            correct={sub.correct_answer}
+            onChangeText={v => updateSub(idx, { text: v })}
+            onSetCorrect={val => updateSub(idx, { correct_answer: val })}
+            onAddImage={img => addSubImage(idx, img)}
+            onRemoveImage={id => removeSubImage(idx, id)}
+          />
         ))}
       </div>
-      <p className="eq-hint">💡 Click Đ/S để đặt đáp án cho từng ý</p>
+      <p className="eq-hint">💡 Click Đ/S để đặt đáp án cho từng ý · 🖼 để chèn ảnh vào ý đó (dán Ctrl+V cũng được)</p>
     </div>
   )
 }
@@ -984,9 +1064,10 @@ export default function EditableQuestion({
       // Chỉ xử lý nếu focus đang trong card này (hoặc không focus ở textarea — textarea tự handle rồi)
       if (taRef.current && document.activeElement === taRef.current) return
       if (cardRef.current && !cardRef.current.contains(document.activeElement)) return
-      // Đang paste trong 1 ô đáp án A/B/C/D — ô đó tự xử lý riêng (chèn ảnh vào đúng
-      // đáp án), không chèn thêm vào đề bài ở đây.
-      if (document.activeElement?.closest?.('.eq-choice-row')) return
+      // Đang paste trong 1 ô đáp án A/B/C/D (.eq-choice-row) hoặc 1 ý phụ Đúng/Sai của
+      // PHẦN II (.eq-sub-row) — ô đó tự xử lý riêng (chèn ảnh vào đúng đáp án / đúng ý),
+      // không chèn thêm vào đề bài ở đây.
+      if (document.activeElement?.closest?.('.eq-choice-row, .eq-sub-row')) return
       const items = e.clipboardData?.items
       if (!items) return
       for (const item of Array.from(items)) {

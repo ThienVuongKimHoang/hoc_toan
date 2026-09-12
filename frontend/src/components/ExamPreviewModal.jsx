@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react'
 import MathText from './MathText.jsx'
+import MarkerText from './MarkerText.jsx'
 
 function PencilIcon({ size = 12 }) {
   return (
@@ -82,7 +83,7 @@ function TFPreview({ q, showAnswers, onEditQuestion }) {
         {subs.map((sub, i) => (
           <div key={i} className="ep-tf-row">
             <span className="ep-tf-label">{sub.label})</span>
-            <span className="ep-tf-text"><MathText text={sub.text} /></span>
+            <span className="ep-tf-text"><MarkerText text={sub.text} images={q.images} /></span>
             {showAnswers && (
               <span className={`ep-tf-ans ${sub.correct_answer ? 'true' : 'false'}`}>
                 {sub.correct_answer ? 'Đúng' : 'Sai'}

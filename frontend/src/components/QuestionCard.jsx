@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react'
-import MathText from './MathText.jsx'
 import MarkerText, { InlineImage, referencedImageIds } from './MarkerText.jsx'
 
 const CONTENT_EDITABLE_TAG = /<(strong|em|u|b|i|div|br|span|p)\b/i
@@ -29,14 +28,18 @@ export function FigureImages({ path }) {
 }
 
 // Render question_text với [img:id] markers → ảnh thật.
-// Ảnh đính kèm không được marker nào (kể cả trong các đáp án choices) tham chiếu
-// vẫn hiển thị ở cuối đề bài, tránh mất ảnh nếu marker bị xoá nhầm.
+// Ảnh đính kèm không được marker nào (kể cả trong các đáp án choices và trong các ý
+// phụ Đúng/Sai của PHẦN II) tham chiếu vẫn hiển thị ở cuối đề bài, tránh mất ảnh nếu
+// marker bị xoá nhầm.
 export function QuestionText({ q }) {
   const text = q?.question_text || ''
   const images = q?.images || []
   const referenced = new Set([
     ...referencedImageIds(text),
     ...Object.values(q?.choices || {}).flatMap(referencedImageIds),
+    // Thiếu dòng này: ảnh gắn vào ý phụ a/b/c/d bị coi là "mồ côi" và hiện LẶP LẠI
+    // lần nữa ở cuối đề bài, dù nó đã hiện đúng trong ý phụ.
+    ...(q?.sub_questions || []).flatMap(s => referencedImageIds(s?.text)),
   ])
   const orphans = images.filter(im => !referenced.has(im.id))
   if (!text && orphans.length === 0) return null
@@ -188,7 +191,7 @@ function TrueFalseCard({ q, examMode, onAnswerChange, saved, readOnly = false })
           return (
             <div key={sub.label} className={`sub-row ${rowClass}`}>
               <span className="sub-label">{sub.label})</span>
-              <span className="sub-text"><MathText text={sub.text} /></span>
+              <span className="sub-text"><MarkerText text={sub.text} images={q.images} /></span>
               <div className="tf-buttons">
                 <button
                   className={`tf-btn true-btn ${answers[sub.label] === true ? 'active' : ''}`}

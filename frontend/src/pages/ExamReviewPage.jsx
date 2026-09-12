@@ -3,7 +3,6 @@ import { fetchSubmissionReview, fetchMySubmissions, examStatus, scaledScore } fr
 import { getExamWindow } from '../store/classStore.js'
 import { QuestionText, FigureImages, SECTION_PREFIX, toPassageHTML } from '../components/QuestionCard.jsx'
 import { SUBJECTS } from '../components/SubjectBadge.jsx'
-import MathText from '../components/MathText.jsx'
 import MarkerText from '../components/MarkerText.jsx'
 import './ExamReviewPage.css'
 
@@ -323,7 +322,7 @@ function ReviewQuestion({ item, showPassage }) {
             return (
               <div key={sub.label} className={`rv-tf-row rv-tf-row--${st}`}>
                 <span className="rv-tf-label">{sub.label})</span>
-                <span className="rv-tf-text"><MathText text={sub.text} /></span>
+                <span className="rv-tf-text"><MarkerText text={sub.text} images={q.images} /></span>
                 <span className="rv-tf-ans">
                   <em className={`rv-tag ${st === 'right' ? 'rv-tag--ok' : st === 'wrong' ? 'rv-tag--bad' : 'rv-tag--miss'}`}>
                     Bạn: {ua === undefined ? 'bỏ trống' : ua ? 'Đúng' : 'Sai'}
