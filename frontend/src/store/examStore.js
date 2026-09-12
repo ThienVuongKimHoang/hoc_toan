@@ -15,8 +15,24 @@ export function getExamById(id) {
   return getAllExams().find(e => e.id === id) || null
 }
 
+/* localStorage chỉ ~5 MB/origin, trong khi một đề có ảnh nhúng base64 nặng tới vài MB
+   (ảnh chiếm >99% dung lượng JSON) — hai đề như vậy là đã tràn quota và setItem ném
+   QuotaExceededError. Server mới là nguồn thật, cache chỉ để đỡ tải lại, nên tràn cache
+   TUYỆT ĐỐI không được làm hỏng luồng đang chạy: bỏ dần đề nặng nhất rồi ghi lại, hết
+   cách thì thôi (lần sau chỉ đơn giản là tải lại từ server). */
 function persist(list) {
-  localStorage.setItem(KEY, JSON.stringify(list))
+  try { localStorage.setItem(KEY, JSON.stringify(list)); return }
+  catch { /* đầy — dọn bớt bên dưới */ }
+
+  const kept = list
+    .map(e => ({ e, size: JSON.stringify(e).length }))
+    .sort((a, b) => a.size - b.size)   // nhẹ trước, nặng sau
+  while (kept.length) {
+    kept.pop()                          // loại đề nặng nhất còn lại
+    try { localStorage.setItem(KEY, JSON.stringify(kept.map(k => k.e))); return }
+    catch { /* vẫn đầy — loại tiếp */ }
+  }
+  try { localStorage.removeItem(KEY) } catch { /* bó tay, bỏ qua cache */ }
 }
 
 export function saveExam(exam) {
@@ -166,16 +182,22 @@ export async function fetchExamById(id, teacherId, { fresh = false } = {}) {
     const local = getExamById(id)
     if (local) return local
   }
+  let exam
   try {
     const qs = teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : ''
     const res = await fetch(`/api/exams/${id}${qs}`, { headers: authHeaders() })
     if (!res.ok) return null
-    const exam = await res.json()
-    if (teacherId) saveExam(exam)
-    return exam
+    exam = await res.json()
   } catch {
     return null
   }
+  // Ghi cache là việc PHỤ và nằm NGOÀI try ở trên: trước đây nó chung một khối try,
+  // nên localStorage đầy là ném lỗi rồi bị nuốt thành `return null` — đề tải về hoàn
+  // toàn hợp lệ vẫn báo "Không tải được nội dung đề thi từ server".
+  if (teacherId) {
+    try { saveExam(exam) } catch { /* cache hỏng thì kệ, đã có dữ liệu thật */ }
+  }
+  return exam
 }
 
 /** Học sinh nộp bài */
