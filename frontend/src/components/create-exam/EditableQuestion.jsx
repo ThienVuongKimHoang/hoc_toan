@@ -1176,12 +1176,18 @@ export default function EditableQuestion({
   const isEnglishLike = q.section === 'TIẾNG ANH' || q.section === 'READING'
   const images = q.images || []
   // "Hình ảnh đính kèm" chỉ hiện ảnh gắn vào NỘI DUNG CÂU HỎI — ảnh chèn riêng vào 1
-  // đáp án (paste ngay trong ô đáp án) không hiện lại ở đây, tránh hiểu nhầm là ảnh
-  // đó cũng hiển thị ở đề bài; nó chỉ hiện trong đáp án tương ứng (xem MCQChoiceRow).
+  // đáp án A-D (MCQChoiceRow) hoặc 1 ý phụ Đúng/Sai của PHẦN II (TFSubRow) không hiện
+  // lại ở đây, tránh hiểu nhầm là ảnh đó cũng hiển thị ở đề bài; nó chỉ hiện trong đáp
+  // án / ý phụ tương ứng.
   const galleryImages = (() => {
-    const choiceRefs = new Set(Object.values(q.choices || {}).flatMap(referencedImageIds))
+    // Thiếu nhánh sub_questions: ảnh vừa dán vào ý phụ sẽ "nhảy" lên mục đính kèm,
+    // trông như bị chèn nhầm vào đề bài.
+    const answerRefs = new Set([
+      ...Object.values(q.choices || {}).flatMap(referencedImageIds),
+      ...(q.sub_questions || []).flatMap(s => referencedImageIds(s?.text)),
+    ])
     const qRefs = new Set(referencedImageIds(q.question_text))
-    return images.filter(img => qRefs.has(img.id) || !choiceRefs.has(img.id))
+    return images.filter(img => qRefs.has(img.id) || !answerRefs.has(img.id))
   })()
   const totalImgs = (q.figure_path ? 1 : 0) + images.length
   const suspicious = hasSuspiciousLatex(q.question_text)
