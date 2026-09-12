@@ -181,6 +181,34 @@ def apply_choice_figures(q: dict, content_images: list) -> None:
         choices[letter] = f"{choices[letter]}\n{marker}" if choices[letter] else marker
 
 
+def apply_sub_figures(q: dict, content_images: list) -> None:
+    """Bản song song của apply_choice_figures cho PHẦN II: map "sub_figures" (vị trí ảnh
+    1-based riêng cho từng ý phụ a/b/c/d — vd mỗi mệnh đề Đúng/Sai là một đồ thị) thành
+    ảnh thật, gắn vào q["images"] và chèn marker [img:id] vào cuối "text" của ý tương ứng.
+    Dùng chung marker [img:id] với ảnh chèn tay ở frontend (TFSubRow trong
+    EditableQuestion.jsx) nên không cần đổi shape của "sub_questions"."""
+    sub_figs = q.pop("sub_figures", None)
+    subs = q.get("sub_questions")
+    if not isinstance(sub_figs, dict) or not isinstance(subs, list):
+        return
+    by_label = {str(s.get("label", "")).strip().lower(): s
+                for s in subs if isinstance(s, dict)}
+    for label, idx in sub_figs.items():
+        key = str(label).strip().lower()
+        sub = by_label.get(key)
+        if sub is None or not isinstance(idx, int) or not (1 <= idx <= len(content_images)):
+            continue
+        img = content_images[idx - 1]
+        # Cùng cách đặt id với apply_choice_figures: theo tên file nên ổn định qua các
+        # lần trích lại; tiền tố "sf_" để không đụng id ảnh đáp án A-D ("cf_").
+        img_id = f"sf_{Path(img['path']).stem}_{key}"
+        q.setdefault("images", []).append(
+            {"id": img_id, "url": img["path"], "name": f"Hình ý {key}", "source": "ai"})
+        marker = f"[img:{img_id}]"
+        cur = sub.get("text") or ""
+        sub["text"] = f"{cur}\n{marker}" if cur else marker
+
+
 def scan_pdf_layout(doc: fitz.Document) -> tuple:
     """
     Phân tích bố cục PDF để tìm chính xác trang nào chứa câu hỏi của từng phần.
@@ -507,6 +535,7 @@ Trích xuất TẤT CẢ câu hỏi. Trả về CHỈ JSON, không có text nào
         {{"label": "c", "text": "...", "correct_answer": true}},
         {{"label": "d", "text": "...", "correct_answer": false}}
       ],
+      "sub_figures": {{"a": 0, "b": 0, "c": 0, "d": 0}},
       "answer": "A",
       "figure_index": 0,
       "points": 0.25
@@ -517,8 +546,9 @@ Trích xuất TẤT CẢ câu hỏi. Trả về CHỈ JSON, không có text nào
 Lưu ý bắt buộc:
 - "figure_index": PHẦN LỚN câu hỏi KHÔNG có hình → đặt 0. Chỉ đặt > 0 khi câu đó CÓ biểu đồ/đồ thị/hình vẽ riêng (nằm ngay dưới nội dung câu đó, trước đáp án). Đây là VỊ TRÍ (1 = hình cao nhất trang, 2 = hình thứ 2...), KHÔNG phải số câu. Mỗi hình chỉ thuộc 1 câu.
 - "choice_figures": chỉ dùng khi CHÍNH MỘT ĐÁP ÁN (không phải cả câu hỏi) là một hình/đồ thị/biểu đồ riêng (ví dụ "đồ thị nào sau đây là đúng" với 4 hình A/B/C/D). PHẦN LỚN để {{"A":0,"B":0,"C":0,"D":0}}. Nếu đáp án X là hình, đặt choice_figures.X = VỊ TRÍ hình đó trên trang (cùng cách đánh số với figure_index, 1 = hình cao nhất). Không dùng chung 1 vị trí hình cho cả figure_index và choice_figures của cùng 1 câu.
-- "choices" chỉ có ở PHẦN I (bỏ qua ở PHẦN II và III)
-- "sub_questions" chỉ có ở PHẦN II (4 ý a-b-c-d); correct_answer = true/false/null
+- "sub_figures": bản song song của "choice_figures" nhưng cho PHẦN II — chỉ dùng khi CHÍNH MỘT Ý PHỤ a/b/c/d (không phải cả câu hỏi) là một hình/đồ thị/biểu đồ riêng, ví dụ mỗi mệnh đề Đúng/Sai là một đồ thị khác nhau. PHẦN LỚN để {{"a":0,"b":0,"c":0,"d":0}}. Nếu ý X là hình, đặt sub_figures.X = VỊ TRÍ hình đó trên trang (cùng cách đánh số với figure_index, 1 = hình cao nhất). Không dùng chung 1 vị trí hình cho cả figure_index và sub_figures của cùng 1 câu.
+- "choices" và "choice_figures" chỉ có ở PHẦN I (bỏ qua ở PHẦN II và III)
+- "sub_questions" và "sub_figures" chỉ có ở PHẦN II (4 ý a-b-c-d); correct_answer = true/false/null
 - "answer" ở PHẦN I = "A"/"B"/"C"/"D"; ở PHẦN III = đáp số; ở PHẦN II bỏ field này
 - "points": PHẦN I = 0.25 | PHẦN II = 1.0 (tối đa) | PHẦN III = 0.5
 - Nếu section là "TỰ LUẬN" (tự luận — học sinh trình bày lời giải, giáo viên chấm tay,
@@ -951,6 +981,7 @@ def run(pdf_path: Path, out_path: Path, start_page: int = 1) -> None:
                 q["figure_path"] = content_images[fig_idx - 1]["path"]
             q["has_figure"] = "figure_path" in q
             apply_choice_figures(q, content_images)
+            apply_sub_figures(q, content_images)
             # Cập nhật last_q tracker
             sec = q.get("section", "")
             num = q.get("question_number", 0)
