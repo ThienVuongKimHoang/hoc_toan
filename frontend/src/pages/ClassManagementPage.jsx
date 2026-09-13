@@ -132,10 +132,19 @@ function fileType(f) {
   return 'other'
 }
 
+/* Bề ngang và chiều cao khả dụng của .fv-body — dùng để giới hạn ảnh khi xoay ngang.
+   .fv-modal rộng min(90vw, 900px), .fv-body đệm 16px mỗi bên. */
+const FV_MAX_W = 'min(calc(90vw - 32px), 868px)'
+const FV_MAX_H = '75vh'
+
 /* ─── Inline file viewer modal ─── */
 function FileViewerModal({ file, onClose }) {
   const [text, setText] = useState(null)
+  // Góc xoay ảnh: ảnh học sinh chụp hay bị ngược. Chỉ là trạng thái xem, đóng khung
+  // xem là mất, KHÔNG ghi gì lên file đã nộp.
+  const [deg, setDeg] = useState(0)
   const type = fileType(file)
+  const rotate = (d) => setDeg(v => ((((v + d) % 360) + 360) % 360))
 
   useEffect(() => {
     if (type === 'text') {
@@ -143,12 +152,22 @@ function FileViewerModal({ file, onClose }) {
     }
   }, [file.url, type])
 
+  // Mở sang file khác trong cùng khung xem thì trả ảnh về đúng chiều gốc
+  useEffect(() => { setDeg(0) }, [file.url])
+
   return (
     <div className="fv-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="fv-modal">
         <div className="fv-header">
           <span className="fv-name">{file.name}</span>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {type === 'image' && (
+              <span className="fv-rotate">
+                <button type="button" onClick={() => rotate(-90)} title="Xoay trái 90°">↺</button>
+                <em>{deg}°</em>
+                <button type="button" onClick={() => rotate(90)} title="Xoay phải 90°">↻</button>
+              </span>
+            )}
             {type === 'youtube'
               ? <a className="mec-btn" href={file.url} target="_blank" rel="noreferrer">{IC.link(14)} Mở trên YouTube</a>
               : <a className="mec-btn" href={file.url} target="_blank" rel="noreferrer" download>{IC.download(14)} Tải xuống</a>}
@@ -165,7 +184,19 @@ function FileViewerModal({ file, onClose }) {
               allowFullScreen
             />
           )}
-          {type === 'image' && <img src={file.url} alt={file.name} style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: 8 }} />}
+          {type === 'image' && (
+            <img src={file.url} alt={file.name}
+              style={{
+                borderRadius: 8,
+                transform: `rotate(${deg}deg)`,
+                transition: 'transform 0.18s ease',
+                // Xoay 90/270 làm chiều rộng và chiều cao đổi chỗ cho nhau, nên hoán đổi
+                // luôn giới hạn kích thước — không thì ảnh ngang xoay dọc sẽ dài quá khung
+                // và bị cắt mất đầu/chân bài làm.
+                maxWidth:  deg % 180 === 0 ? '100%' : FV_MAX_H,
+                maxHeight: deg % 180 === 0 ? FV_MAX_H : FV_MAX_W,
+              }} />
+          )}
           {type === 'pdf' && <iframe src={file.url} title={file.name} style={{ width: '100%', height: '75vh', border: 'none', borderRadius: 8 }} />}
           {type === 'audio' && <audio controls src={file.url} style={{ width: '100%', marginTop: 16 }} />}
           {type === 'video' && <video controls src={file.url} style={{ width: '100%', maxHeight: '75vh', borderRadius: 8 }} />}
