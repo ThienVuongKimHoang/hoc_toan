@@ -47,15 +47,21 @@ function initScores(sub, essayQs) {
 }
 
 /* Ảnh bài làm của 1 câu trong 1 lượt */
-function AnswerImages({ sub, qKey, onZoom, compact = false }) {
+function AnswerImages({ sub, qKey, onZoom, rotations = {}, compact = false }) {
   const imgs = Array.isArray(sub?.answers?.[qKey]) ? sub.answers[qKey] : []
   if (imgs.length === 0) return <div className="ge-no-img">— Chưa nộp ảnh cho câu này —</div>
   return (
     <div className={`ge-imgs ${compact ? 'ge-imgs--compact' : ''}`}>
-      {imgs.map((im, i) => (
-        <img key={im.url || i} src={im.url} alt={im.name || `Ảnh ${i + 1}`}
-          className="ge-img" loading="lazy" onClick={() => onZoom(im.url)} />
-      ))}
+      {imgs.map((im, i) => {
+        const deg = rotations[im.url] || 0
+        return (
+          <img key={im.url || i} src={im.url} alt={im.name || `Ảnh ${i + 1}`}
+            className="ge-img" loading="lazy" onClick={() => onZoom(im.url)}
+            // Ô thumbnail vuông + object-fit:cover nên xoay góc nào cũng không tràn ra
+            // ngoài khung, không cần hoán đổi kích thước như ở ảnh phóng to.
+            style={deg ? { transform: `rotate(${deg}deg)` } : undefined} />
+        )
+      })}
     </div>
   )
 }
@@ -70,6 +76,12 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
   const [err,    setErr]    = useState('')
   const [zoom,   setZoom]   = useState(null)
   const [split,  setSplit]  = useState(false)   // xem song song lượt trước
+  // Góc xoay từng ảnh (url → độ). Ảnh học sinh chụp bị ngược thì xoay cho dễ đọc; đây
+  // chỉ là trạng thái xem, đóng cửa sổ chấm là mất, KHÔNG ghi gì lên bài nộp.
+  const [rotations, setRotations] = useState({})
+  const rotate = (url, delta) => setRotations(r => ({
+    ...r, [url]: ((((r[url] || 0) + delta) % 360) + 360) % 360,
+  }))
 
   /* ── Vị trí hiện tại trong danh sách học sinh / lượt làm ── */
   const stIdx    = students.findIndex(st => st.attempts?.some(a => String(a.id) === String(curId)))
@@ -270,15 +282,15 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
                         <div className="ge-split-label">
                           Lượt {attIdx} (cũ){prevScore != null ? ` · đã chấm ${prevScore}đ` : ''}
                         </div>
-                        <AnswerImages sub={prevAttempt} qKey={key} onZoom={setZoom} compact />
+                        <AnswerImages sub={prevAttempt} qKey={key} onZoom={setZoom} rotations={rotations} compact />
                       </div>
                       <div className="ge-split-pane">
                         <div className="ge-split-label ge-split-label--cur">Lượt {attIdx + 1} (đang chấm)</div>
-                        <AnswerImages sub={sub} qKey={key} onZoom={setZoom} compact />
+                        <AnswerImages sub={sub} qKey={key} onZoom={setZoom} rotations={rotations} compact />
                       </div>
                     </div>
                   ) : (
-                    <AnswerImages sub={sub} qKey={key} onZoom={setZoom} />
+                    <AnswerImages sub={sub} qKey={key} onZoom={setZoom} rotations={rotations} />
                   )}
 
                   <div className="ge-score-row">
@@ -352,7 +364,22 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
 
       {zoom && (
         <div className="ge-zoom" onClick={() => setZoom(null)}>
-          <img src={zoom} alt="Ảnh bài làm" />
+          <img src={zoom} alt="Ảnh bài làm"
+            style={{
+              transform: `rotate(${rotations[zoom] || 0}deg)`,
+              // Xoay 90/270 làm chiều rộng và chiều cao đổi chỗ cho nhau, nên phải hoán
+              // đổi luôn giới hạn kích thước — không thì ảnh ngang xoay dọc sẽ dài quá
+              // màn hình và bị cắt mất đầu/chân bài làm.
+              maxWidth:  (rotations[zoom] || 0) % 180 === 0 ? '94vw' : '90vh',
+              maxHeight: (rotations[zoom] || 0) % 180 === 0 ? '90vh' : '94vw',
+            }} />
+          {/* Thanh công cụ nằm trong lớp phủ vốn bấm-đâu-cũng-đóng, nên phải chặn nổi
+              bọt, nếu không bấm xoay một cái là đóng luôn ảnh. */}
+          <div className="ge-zoom-tools" onClick={e => e.stopPropagation()}>
+            <button type="button" onClick={() => rotate(zoom, -90)} title="Xoay trái 90°">↺</button>
+            <span className="ge-zoom-deg">{rotations[zoom] || 0}°</span>
+            <button type="button" onClick={() => rotate(zoom, 90)} title="Xoay phải 90°">↻</button>
+          </div>
           <button className="ge-zoom-close" onClick={() => setZoom(null)}>✕</button>
         </div>
       )}

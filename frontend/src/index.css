@@ -10646,7 +10646,7 @@ button { font-family: inherit; }
 .ge-qtext { font-size: 0.94rem; margin-bottom: 8px; }
 .ge-rubric { font-size: 0.85rem; color: #047857; background: #ecfdf5; padding: 6px 10px; border-radius: 8px; margin-bottom: 10px; }
 .ge-imgs { display: flex; flex-wrap: wrap; gap: 10px; }
-.ge-img { width: 130px; height: 130px; object-fit: cover; border-radius: 10px; border: 1px solid #e5e7eb; cursor: zoom-in; }
+.ge-img { width: 130px; height: 130px; object-fit: cover; border-radius: 10px; border: 1px solid #e5e7eb; cursor: zoom-in; transition: transform 0.18s ease; }
 .ge-no-img { color: #94a3b8; font-style: italic; font-size: 0.88rem; padding: 8px 0; }
 .ge-score-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .ge-score-row label { font-weight: 700; font-size: 0.9rem; }
@@ -10671,11 +10671,29 @@ button { font-family: inherit; }
   position: fixed; inset: 0; background: rgba(0,0,0,0.85);
   display: flex; align-items: center; justify-content: center; z-index: 10000; cursor: zoom-out;
 }
-.ge-zoom img { max-width: 94vw; max-height: 90vh; border-radius: 8px; }
+.ge-zoom img { max-width: 94vw; max-height: 90vh; border-radius: 8px; transition: transform 0.18s ease; }
 .ge-zoom-close {
   position: absolute; top: 18px; right: 22px; width: 40px; height: 40px;
   border-radius: 50%; border: none; background: rgba(255,255,255,0.9);
   font-size: 1.1rem; font-weight: 700; cursor: pointer;
+}
+/* Thanh xoay ảnh bài làm (ảnh học sinh chụp ngược) */
+.ge-zoom-tools {
+  position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px; border-radius: 99px;
+  background: rgba(255,255,255,0.94); box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  cursor: default;
+}
+.ge-zoom-tools button {
+  width: 38px; height: 38px; border-radius: 50%; border: none;
+  background: #f1f5f9; color: #0f172a; font-size: 1.2rem; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: background 0.12s;
+}
+.ge-zoom-tools button:hover { background: #e2e8f0; }
+.ge-zoom-deg {
+  min-width: 42px; text-align: center;
+  font-size: 0.8rem; font-weight: 700; color: #475569;
 }
 
 /* Preview modal + editor note */
