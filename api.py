@@ -3235,6 +3235,22 @@ def _attendance_deadline(cls: dict, date_str: str, now):
     # Tiết đã tan trước cả lúc điểm danh (điểm danh muộn/bù) → vẫn chờ 1h30 cho GV sửa
     return end_dt if end_dt > now else fallback
 
+
+def _schedule_attendance_notif(cls: dict, date_str: str, session: dict, now) -> None:
+    """Hẹn giờ gửi báo cáo cho buổi điểm danh vừa lưu.
+
+    - Chưa hẹn lần nào → hẹn theo giờ tan tiết (hoặc +1h30).
+    - Đã gửi báo cáo rồi mà danh sách vắng đổi → hẹn lại sau 1h30 để gửi bản "cập nhật".
+    - Sửa nhiều lần TRƯỚC hạn → không đụng gì: vẫn đúng một thông báo, nội dung lấy
+      theo danh sách vắng cuối cùng lúc tới hạn.
+    """
+    absentees = sorted(session.get("newAbsentees") or [])
+    if not session.get("notifyAfter"):
+        db.set_attendance_notify_after(session["id"], _attendance_deadline(cls, date_str, now))
+    elif session.get("notifiedAt") and absentees != sorted(session.get("notifiedAbsentees") or []):
+        db.set_attendance_notify_after(
+            session["id"], now + timedelta(minutes=ATTENDANCE_NOTIFY_DELAY_MIN))
+
 @app.post("/api/classes/{cls_id}/attendance")
 async def submit_attendance_endpoint(cls_id: str, request: Request, caller: dict = Depends(require_auth)):
     body = await request.json()
@@ -3258,15 +3274,8 @@ async def submit_attendance_endpoint(cls_id: str, request: Request, caller: dict
     #   - đã gửi báo cáo rồi mà danh sách vắng đổi → hẹn lại để gửi 1 bản "cập nhật"
     # Sửa nhiều lần TRƯỚC mốc thì giữ nguyên hạn cũ — vẫn chỉ đúng một thông báo,
     # nội dung lấy theo danh sách vắng cuối cùng lúc tới hạn.
-    now = datetime.now(_tz.utc)
-    absentees = sorted(session.get("newAbsentees") or [])
-    notified_at = session.get("notifiedAt")
-    if not session.get("notifyAfter"):
-        db.set_attendance_notify_after(session["id"], _attendance_deadline(cls, date, now))
-    elif notified_at and absentees != sorted(session.get("notifiedAbsentees") or []):
-        db.set_attendance_notify_after(session["id"], now + timedelta(minutes=ATTENDANCE_NOTIFY_DELAY_MIN))
-    session = db.get_attendance_session(cls_id, date) or session
-    return session
+    _schedule_attendance_notif(cls, date, session, datetime.now(_tz.utc))
+    return db.get_attendance_session(cls_id, date) or session
 
 
 @app.get("/api/classes/{cls_id}/attendance")
