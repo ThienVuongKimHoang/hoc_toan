@@ -19,7 +19,7 @@ import {
   getAttendanceHistory, getAttendanceSession, getClassProgress, submitAttendance,
 } from '../store/attendanceStore.js'
 import ExerciseSolver from '../components/ExerciseSolver.jsx'
-import Geo3DViewer from '../components/Geo3DViewer.jsx'
+import Geo3DWorkbench from '../components/Geo3DWorkbench.jsx'
 import CreateExamPage from './CreateExamPage.jsx'
 import CreateExamChoiceModal from '../components/CreateExamChoiceModal.jsx'
 import MixExamModal from '../components/MixExamModal.jsx'
@@ -2470,8 +2470,9 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
 
         {/* ── Vẽ hình (Toán) ── */}
         {tab === 'geo3d' && isMathSubject(subject) && (
-          <div style={{ height: '72vh', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
-            <Geo3DViewer />
+          // 84vh chứ không phải 72vh: thêm ô nhập AI ở trên thì 72vh cắt mất thanh đó.
+          <div style={{ height: '84vh', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', display: 'flex' }}>
+            <Geo3DWorkbench user={user} />
           </div>
         )}
       </div>

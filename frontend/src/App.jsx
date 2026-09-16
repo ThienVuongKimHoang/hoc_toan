@@ -640,12 +640,20 @@ export default function App() {
     )
   }
 
-  if (view === 'geo3d-page') return (
-    <>
-      {header}
-      <GeoViewerPage onBack={() => { setHash(''); setView('home') }} />
-    </>
-  )
+  if (view === 'geo3d-page') {
+    // Cần đăng nhập vì /api/geo3d/generate nay trả 401 — không chặn ở đây thì học sinh
+    // chưa đăng nhập bấm "Vẽ hình" sẽ nhận một lỗi khó hiểu. KHÔNG dùng hasTeacherAccess:
+    // học sinh khối 11-12 mới là người dùng chính của trang này.
+    if (!user) return (
+      <>{header}<AccessDenied message="Bạn cần đăng nhập để dùng công cụ vẽ hình." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
+    )
+    return (
+      <>
+        {header}
+        <GeoViewerPage user={user} onBack={() => { setHash(''); setView('home') }} />
+      </>
+    )
+  }
 
   if (view === 'vocab-page') {
     if (!user) return (

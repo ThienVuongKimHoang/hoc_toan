@@ -6968,11 +6968,27 @@ button { font-family: inherit; }
   border-right: 1px solid #e2e8f0;
 }
 
-.g3d-topbar {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 14px; background: #fff; border-bottom: 1px solid #e2e8f0;
+/* Không có cột JSON bên phải (học sinh) thì bỏ luôn vạch kẻ, không thì thừa một
+   đường dọc lơ lửng ở mép phải. */
+.g3d-canvas-panel--full { border-right: none; }
+.g3d-canvas-panel:fullscreen,
+.g3d-canvas-panel:-webkit-full-screen { background: #fff; }
+
+.g3d-toolbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; background: #fff; border-bottom: 1px solid #e2e8f0;
   flex-shrink: 0;
 }
+.g3d-tool-group { display: flex; align-items: center; gap: 4px; }
+.g3d-tool-group--end { margin-left: auto; }
+.g3d-cams { gap: 4px; overflow-x: auto; }
+.g3d-cam-chip {
+  padding: 4px 10px; font-size: 0.74rem; font-weight: 500; white-space: nowrap;
+  border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 99px;
+  cursor: pointer; color: #475569; transition: all .15s; flex-shrink: 0;
+}
+.g3d-cam-chip:hover { background: #ede9fe; border-color: #c4b5fd; color: #5b21b6; }
+.g3d-btn-sm:disabled { opacity: .45; cursor: not-allowed; }
 .g3d-btn-sm {
   padding: 5px 12px; border-radius: 7px; font-size: 0.8rem; font-weight: 600;
   border: 1px solid #e2e8f0; background: #f8fafc; cursor: pointer; color: #475569;
@@ -7007,14 +7023,6 @@ button { font-family: inherit; }
   font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: .07em; color: #94a3b8; margin-bottom: 8px;
 }
-
-.g3d-presets { display: flex; flex-wrap: wrap; gap: 5px; }
-.g3d-preset {
-  padding: 4px 10px; font-size: 0.75rem; font-weight: 500;
-  border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 6px;
-  cursor: pointer; color: #374151; transition: all .15s;
-}
-.g3d-preset:hover { background: #ede9fe; border-color: #c4b5fd; color: #5b21b6; }
 
 .g3d-textarea {
   flex: 1; min-height: 240px; width: 100%; box-sizing: border-box;
@@ -7058,10 +7066,146 @@ button { font-family: inherit; }
   font-size: 0.72rem; color: #7c3aed;
 }
 
+/* ── Bố cục trang vẽ hình: ô nhập AI trên, hình + cột JSON dưới ── */
+.g3d-workbench {
+  flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;
+}
+.g3d-prompt-bar {
+  flex-shrink: 0; padding: 12px 16px; background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+}
+.g3d-prompt-bar > * { max-width: 880px; margin: 0 auto; }
+.g3d-stage { flex: 1; display: flex; min-height: 0; min-width: 0; }
+.g3d-stage-main {
+  flex: 1; display: flex; min-width: 0; min-height: 0; position: relative;
+}
+
+.g3d-empty {
+  position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center; text-align: center;
+  padding: 24px; color: #94a3b8; font-size: 0.9rem; pointer-events: none;
+}
+.g3d-hint--float {
+  position: absolute; right: 12px; bottom: 10px; margin: 0;
+  background: rgba(255,255,255,.85); padding: 3px 9px; border-radius: 99px;
+  pointer-events: none;
+}
+.g3d-busy {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; background: rgba(248,250,252,.82);
+  font-size: 0.9rem; font-weight: 600; color: #5b21b6;
+}
+/* Dùng lại @keyframes spin đã có sẵn trong file này, không khai thêm cái nữa. */
+.g3d-spinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid currentColor; border-top-color: transparent;
+  animation: spin .7s linear infinite; display: inline-block;
+}
+.g3d-spinner--lg { width: 30px; height: 30px; border-width: 3px; }
+.g3d-note {
+  position: absolute; left: 12px; right: 12px; bottom: 10px;
+  background: rgba(255,255,255,.92); border: 1px solid #e2e8f0;
+  border-radius: 8px; padding: 7px 11px;
+  font-size: 0.8rem; color: #475569; line-height: 1.45;
+}
+.g3d-warn {
+  margin: 0 16px 12px; padding: 8px 10px;
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+  font-size: 0.73rem; color: #92400e; line-height: 1.5;
+}
+
+/* ── Ô nhập AI (ảnh + chữ). Dựng theo .es-unified-box của trang giải bài nhưng
+   CỐ Ý KHÔNG có khung xem trước LaTeX — học sinh không được thấy LaTeX. ── */
+.g3d-ai-box {
+  position: relative; background: #fff;
+  border: 1.5px solid #e2e8f0; border-radius: 14px;
+  padding: 10px 12px; transition: border-color .15s;
+}
+.g3d-ai-box:focus-within { border-color: #7c3aed; }
+.g3d-ai-box--dragging { border-color: #7c3aed; background: #faf5ff; }
+.g3d-ai-drop {
+  position: absolute; inset: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: rgba(250,245,255,.95); border-radius: 13px;
+  font-size: 0.85rem; font-weight: 600; color: #6d28d9;
+}
+.g3d-ai-chip {
+  display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  padding: 4px 8px 4px 4px; background: #f8fafc;
+  border: 1px solid #e2e8f0; border-radius: 9px; max-width: 100%;
+}
+.g3d-ai-chip-thumb { width: 34px; height: 34px; object-fit: cover; border-radius: 6px; }
+.g3d-ai-chip-name {
+  font-size: 0.76rem; color: #475569; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; max-width: 220px;
+}
+.g3d-ai-chip-remove {
+  border: none; background: #e2e8f0; color: #475569; cursor: pointer;
+  width: 19px; height: 19px; border-radius: 50%; line-height: 1; font-size: .9rem;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.g3d-ai-chip-remove:hover { background: #fecaca; color: #b91c1c; }
+.g3d-ai-textarea {
+  width: 100%; box-sizing: border-box; min-height: 62px;
+  border: none; outline: none; resize: vertical; background: transparent;
+  font-family: inherit; font-size: 0.9rem; line-height: 1.55; color: #0f172a;
+}
+.g3d-ai-textarea::placeholder { color: #a8b3c4; }
+.g3d-ai-examples { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+.g3d-ai-example {
+  padding: 4px 10px; font-size: 0.73rem; border-radius: 99px;
+  border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b;
+  cursor: pointer; transition: all .15s; text-align: left;
+}
+.g3d-ai-example:hover { background: #ede9fe; border-color: #c4b5fd; color: #5b21b6; }
+.g3d-ai-toolbar {
+  display: flex; align-items: center; gap: 10px; margin-top: 8px;
+  padding-top: 8px; border-top: 1px solid #f1f5f9;
+}
+.g3d-ai-toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.g3d-ai-hint { font-size: 0.7rem; color: #a8b3c4; }
+.g3d-ai-attach {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; font-size: 0.78rem; font-weight: 600;
+  border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 8px;
+  cursor: pointer; color: #475569; transition: background .15s;
+}
+.g3d-ai-attach:hover:not(:disabled) { background: #ede9fe; color: #5b21b6; }
+.g3d-ai-attach:disabled { opacity: .5; cursor: not-allowed; }
+.g3d-ai-submit {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 18px; border: none; border-radius: 9px;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff;
+  font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: opacity .15s;
+}
+.g3d-ai-submit:hover:not(:disabled) { opacity: .9; }
+.g3d-ai-submit:disabled { opacity: .45; cursor: not-allowed; }
+.g3d-ai-error {
+  max-width: 880px; margin: 8px auto 0; padding: 8px 12px;
+  background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px;
+  font-size: 0.8rem; color: #b91c1c; line-height: 1.5;
+}
+.g3d-ai-collapsed {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px; background: #f8fafc;
+  border: 1px solid #e2e8f0; border-radius: 10px;
+}
+.g3d-ai-collapsed-text {
+  flex: 1; min-width: 0; font-size: 0.82rem; color: #475569;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 @media (max-width: 768px) {
   .g3d-root { flex-direction: column; }
   .g3d-canvas-panel { min-height: 50vh; border-right: none; border-bottom: 1px solid #e2e8f0; }
   .g3d-editor { width: 100%; flex-shrink: 0; max-height: 50vh; }
+  .g3d-stage { flex-direction: column; }
+  .g3d-stage-main { min-height: 46vh; }
+  .g3d-prompt-bar { padding: 10px 12px; }
+  .g3d-toolbar { gap: 6px; padding: 7px 10px; }
+  .g3d-cams { flex-wrap: nowrap; max-width: 100%; }
+  .g3d-tool-group--end { margin-left: 0; }
 }
 
 /* ═══════════════════════════════════════════

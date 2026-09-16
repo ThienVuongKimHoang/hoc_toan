@@ -1,5 +1,5 @@
 import React from 'react'
-import Geo3DViewer from '../components/Geo3DViewer.jsx'
+import Geo3DWorkbench from '../components/Geo3DWorkbench.jsx'
 
 const ArrowLeftIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -15,7 +15,7 @@ const CubeIcon = () => (
   </svg>
 )
 
-export default function GeoViewerPage({ onBack }) {
+export default function GeoViewerPage({ onBack, user }) {
   return (
     <div className="tool-page">
       <div className="tool-page-topbar">
@@ -29,7 +29,7 @@ export default function GeoViewerPage({ onBack }) {
         </span>
       </div>
       <div className="tool-page-content">
-        <Geo3DViewer />
+        <Geo3DWorkbench user={user} />
       </div>
     </div>
   )

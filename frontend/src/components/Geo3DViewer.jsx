@@ -15,133 +15,14 @@ function proj(px, py, pz, rx, ry, CX, CY, S) {
   return { sx: CX + r.x * S * d, sy: CY - r.y * S * d, depth: r.z }
 }
 
-/* ─────────────────── Presets ─────────────────── */
-const PRESETS = [
-  {
-    id: 'cube',
-    name: "Lập phương ABCD.A'B'C'D'",
-    data: {
-      points: [
-        {id:'A',x:0,y:0,z:0},{id:'B',x:1,y:0,z:0},{id:'C',x:1,y:0,z:1},{id:'D',x:0,y:0,z:1},
-        {id:"A'",x:0,y:1,z:0},{id:"B'",x:1,y:1,z:0},{id:"C'",x:1,y:1,z:1},{id:"D'",x:0,y:1,z:1},
-      ],
-      segments: [
-        {from:'A',to:'B'},{from:'B',to:'C'},{from:'C',to:'D',dashed:true},{from:'D',to:'A',dashed:true},
-        {from:"A'",to:"B'"},{from:"B'",to:"C'"},{from:"C'",to:"D'"},{from:"D'",to:"A'"},
-        {from:'A',to:"A'"},{from:'B',to:"B'"},{from:'C',to:"C'"},
-        {from:'D',to:"D'",dashed:true},
-      ],
-      faces:[], midpoints:[], vectors:[], labels:[],
-    },
-  },
-  {
-    id: 'pyramid4',
-    name: 'Hình chóp S.ABCD',
-    data: {
-      points: [
-        {id:'A',x:-1,y:0,z:-1},{id:'B',x:1,y:0,z:-1},
-        {id:'C',x:1,y:0,z:1},{id:'D',x:-1,y:0,z:1},
-        {id:'S',x:0,y:2.5,z:0},
-      ],
-      segments: [
-        {from:'A',to:'B'},{from:'B',to:'C'},
-        {from:'C',to:'D',dashed:true},{from:'D',to:'A',dashed:true},
-        {from:'S',to:'A'},{from:'S',to:'B'},{from:'S',to:'C'},
-        {from:'S',to:'D',dashed:true},
-      ],
-      faces:[], midpoints:[], vectors:[], labels:[],
-    },
-  },
-  {
-    id: 'section',
-    name: 'Thiết diện S-G-B (chóp)',
-    data: {
-      points: [
-        {id:'A',x:-1,y:0,z:-1},{id:'B',x:1,y:0,z:-1},
-        {id:'C',x:1,y:0,z:1}, {id:'D',x:-1,y:0,z:1},
-        {id:'S',x:0,y:2.5,z:0},
-      ],
-      segments: [
-        {from:'A',to:'B'},{from:'B',to:'C'},
-        {from:'C',to:'D',dashed:true},{from:'D',to:'A',dashed:true},
-        {from:'S',to:'A'},{from:'S',to:'B'},{from:'S',to:'C'},
-        {from:'S',to:'D',dashed:true},
-        {from:'S',to:'G', highlight:true},
-        {from:'G',to:'B', highlight:true},
-        {from:'B',to:'S', highlight:true},
-      ],
-      midpoints: [{id:'G', of:['A','D']}],
-      faces: [{
-        id: 'section_SGB',
-        points: ['S','G','B'],
-        style: {fill:'#4dabf7', opacity:0.35, stroke:'#1971c2'},
-      }],
-      vectors: [],
-      labels: [{point:'G', text:'G'}],
-    },
-  },
-  {
-    id: 'cube_section',
-    name: 'Thiết diện hình hộp',
-    data: {
-      points: [
-        {id:'A',x:0,y:0,z:0},{id:'B',x:2,y:0,z:0},{id:'C',x:2,y:0,z:2},{id:'D',x:0,y:0,z:2},
-        {id:"A'",x:0,y:2,z:0},{id:"B'",x:2,y:2,z:0},{id:"C'",x:2,y:2,z:2},{id:"D'",x:0,y:2,z:2},
-      ],
-      segments: [
-        {from:'A',to:'B'},{from:'B',to:'C'},{from:'C',to:'D',dashed:true},{from:'D',to:'A',dashed:true},
-        {from:"A'",to:"B'"},{from:"B'",to:"C'"},{from:"C'",to:"D'"},{from:"D'",to:"A'"},
-        {from:'A',to:"A'"},{from:'B',to:"B'"},{from:'C',to:"C'"},{from:'D',to:"D'",dashed:true},
-        {from:'B',to:"D'", highlight:true},
-        {from:"D'",to:'A', highlight:true},
-        {from:'A',to:"C'", highlight:true},
-        {from:"C'",to:'B', highlight:true},
-      ],
-      midpoints: [],
-      faces: [{
-        id: 'section_rect',
-        points: ['B',"D'",'A',"C'"],
-        style: {fill:'#69db7c', opacity:0.3, stroke:'#2f9e44'},
-      }],
-      vectors:[],
-      labels:[],
-    },
-  },
-  {
-    id: 'pyramid3',
-    name: 'Hình chóp S.ABC',
-    data: {
-      points: [
-        {id:'A',x:-1,y:0,z:0.58},{id:'B',x:1,y:0,z:0.58},{id:'C',x:0,y:0,z:-1.15},
-        {id:'S',x:0,y:2,z:0},
-      ],
-      segments: [
-        {from:'A',to:'B'},{from:'B',to:'C'},{from:'C',to:'A',dashed:true},
-        {from:'S',to:'A'},{from:'S',to:'B'},{from:'S',to:'C'},
-      ],
-      faces:[], midpoints:[], vectors:[], labels:[],
-    },
-  },
-  {
-    id: 'prism',
-    name: "Lăng trụ ABC.A'B'C'",
-    data: {
-      points: [
-        {id:'A',x:-1,y:0,z:0},{id:'B',x:1,y:0,z:0},{id:'C',x:0,y:0,z:1.73},
-        {id:"A'",x:-1,y:2,z:0},{id:"B'",x:1,y:2,z:0},{id:"C'",x:0,y:2,z:1.73},
-      ],
-      segments: [
-        {from:'A',to:'B'},{from:'B',to:'C'},{from:'C',to:'A',dashed:true},
-        {from:"A'",to:"B'"},{from:"B'",to:"C'"},{from:"C'",to:"A'"},
-        {from:'A',to:"A'"},{from:'B',to:"B'"},{from:'C',to:"C'",dashed:true},
-      ],
-      faces:[], midpoints:[], vectors:[], labels:[],
-    },
-  },
-]
-
 const INIT_RX = -0.45
 const INIT_RY =  0.62
+/* Biên góc ngẩng. Trước đây là 1.2 (~69°) nên không nhìn thẳng từ trên xuống được;
+   nới tới sát π/2 để có góc nhìn "Từ trên xuống", nhưng KHÔNG chạm đúng π/2 vì ở đó
+   trục y co về một điểm và mũi tên Y của gizmo trùng gốc toạ độ. */
+const RX_LIMIT = Math.PI / 2 - 0.02
+const ZOOM_MIN = 0.2
+const ZOOM_MAX = 6
 
 /* ─────────────────── Renderer ─────────────────── */
 function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom) {
@@ -346,29 +227,67 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom) {
   })
 }
 
+export const EMPTY_SCENE = {
+  points: [], segments: [], midpoints: [], faces: [], vectors: [], labels: [],
+}
+
+/* Góc nhìn dựng sẵn. rx là góc ngẩng, ry là góc quay quanh trục đứng. */
+const CAMERAS = [
+  { id: 'default', name: 'Mặc định',      rx: INIT_RX,       ry: INIT_RY },
+  { id: 'front',   name: 'Trước',         rx: 0,             ry: 0 },
+  { id: 'right',   name: 'Bên phải',      rx: 0,             ry: Math.PI / 2 },
+  { id: 'left',    name: 'Chéo trái',     rx: INIT_RX,       ry: -INIT_RY },
+  { id: 'top',     name: 'Từ trên xuống', rx: -RX_LIMIT,     ry: 0 },
+]
+
 /* ─────────────────── Component ─────────────────── */
-export default function Geo3DViewer({ defaultPresetId, initialSceneData } = {}) {
+/**
+ * Bộ vẽ thuần — KHÔNG còn ô soạn JSON, ô đó nay nằm ở Geo3DWorkbench và chỉ giáo
+ * viên thấy.
+ *
+ * `scene`            — dùng có kiểm soát (Geo3DWorkbench truyền xuống).
+ * `initialSceneData` — dùng kiểu cũ, giữ cho ExerciseSolver.
+ */
+export default function Geo3DViewer({
+  scene,
+  initialSceneData,
+  showTools = true,
+  fileName = 'hinh-khong-gian',
+} = {}) {
   const cvs    = useRef(null)
   const wrap   = useRef(null)
+  const panel  = useRef(null)
   const drawFn = useRef(null)
 
-  const initData = initialSceneData
-    ?? (PRESETS.find(p => p.id === defaultPresetId) ?? PRESETS[2]).data
-  const [script,  setScript]  = useState(() => JSON.stringify(initData, null, 2))
-  const [scene,   setScene]   = useState(initData)
-  const [err,     setErr]     = useState(null)
+  const [uncontrolled, setUncontrolled] = useState(() => initialSceneData ?? EMPTY_SCENE)
   const [rx,      setRx]      = useState(INIT_RX)
   const [ry,      setRy]      = useState(INIT_RY)
   const [zoom,    setZoom]    = useState(1.0)
+  const [isFull,  setIsFull]  = useState(false)
   const [isDrag,  setIsDrag]  = useState(false)
   const drag  = useRef({ on: false, x: 0, y: 0 })
   const touch = useRef({ on: false, x: 0, y: 0 })
 
+  const resetView = useCallback(() => { setRx(INIT_RX); setRy(INIT_RY); setZoom(1) }, [])
+
+  // Đồng bộ khi cha truyền hình MỚI xuống. Lỗi cũ: initialSceneData chỉ được đọc trong
+  // useState nên React bỏ qua từ lần render thứ hai — dựng hình lần thứ hai là hình cũ
+  // vẫn nằm nguyên trên canvas. Không vá bằng key={} ở nơi gắn vì làm vậy sẽ dựng lại
+  // canvas và gây nháy.
+  useEffect(() => {
+    if (initialSceneData) { setUncontrolled(initialSceneData); resetView() }
+  }, [initialSceneData, resetView])
+  // Hình mới do AI dựng thì trả góc nhìn về mặc định, học sinh mong thấy hình ngay ngắn.
+  useEffect(() => { if (scene) resetView() }, [scene, resetView])
+
+  const activeScene = scene ?? uncontrolled
+  const isEmpty = !(activeScene?.points || []).length
+
   /* ── Derived ── */
   const ptMap = useMemo(() => {
     const m = {}
-    ;(scene.points || []).forEach(p => { m[p.id] = { ...p } })
-    ;(scene.midpoints || []).forEach(mp => {
+    ;(activeScene.points || []).forEach(p => { m[p.id] = { ...p } })
+    ;(activeScene.midpoints || []).forEach(mp => {
       const a = m[mp.of?.[0]], b = m[mp.of?.[1]]
       if (a && b) m[mp.id] = {
         id: mp.id,
@@ -377,7 +296,7 @@ export default function Geo3DViewer({ defaultPresetId, initialSceneData } = {}) 
       }
     })
     return m
-  }, [scene])
+  }, [activeScene])
 
   const bb = useMemo(() => {
     const pts = Object.values(ptMap)
@@ -397,8 +316,8 @@ export default function Geo3DViewer({ defaultPresetId, initialSceneData } = {}) 
   /* ── Draw ── */
   const draw = useCallback(() => {
     const c = cvs.current; if (!c) return
-    renderScene(c.getContext('2d'), c.width, c.height, scene, ptMap, bb, rx, ry, zoom)
-  }, [scene, ptMap, bb, rx, ry, zoom])
+    renderScene(c.getContext('2d'), c.width, c.height, activeScene, ptMap, bb, rx, ry, zoom)
+  }, [activeScene, ptMap, bb, rx, ry, zoom])
 
   drawFn.current = draw
 
@@ -423,12 +342,12 @@ export default function Geo3DViewer({ defaultPresetId, initialSceneData } = {}) 
     const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y
     drag.current.x = e.clientX; drag.current.y = e.clientY
     setRy(v => v + dx * 0.007)
-    setRx(v => Math.max(-1.2, Math.min(1.2, v + dy * 0.007)))
+    setRx(v => Math.max(-RX_LIMIT, Math.min(RX_LIMIT, v + dy * 0.007)))
   }, [])
   const onUp = () => { drag.current.on = false; setIsDrag(false) }
   const onWheel = useCallback((e) => {
     e.preventDefault()
-    setZoom(v => Math.max(0.2, Math.min(6, v * (e.deltaY < 0 ? 1.1 : 0.91))))
+    setZoom(v => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v * (e.deltaY < 0 ? 1.1 : 0.91))))
   }, [])
 
   /* ── Touch ── */
@@ -441,31 +360,97 @@ export default function Geo3DViewer({ defaultPresetId, initialSceneData } = {}) 
     const dx=e.touches[0].clientX-touch.current.x, dy=e.touches[0].clientY-touch.current.y
     touch.current.x=e.touches[0].clientX; touch.current.y=e.touches[0].clientY
     setRy(v => v+dx*0.007)
-    setRx(v => Math.max(-1.2, Math.min(1.2, v+dy*0.007)))
+    setRx(v => Math.max(-RX_LIMIT, Math.min(RX_LIMIT, v+dy*0.007)))
   }
   const onTEnd = () => { touch.current.on=false }
 
   /* ── Actions ── */
-  const apply = () => {
-    try { setScene(JSON.parse(script)); setErr(null) } catch (e) { setErr(e.message) }
+  const stepZoom = (f) =>
+    setZoom(v => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v * f)))
+
+  const setCamera = (cam) => { setRx(cam.rx); setRy(cam.ry) }
+
+  /* Xuất PNG: vẽ LẠI ra canvas ngoài màn hình ở 3x rồi mới xuất. Canvas trên trang
+     lấy kích thước theo CSS pixel, không nhân devicePixelRatio, nên xuất thẳng sẽ mờ.
+     renderScene nhận W/H tường minh và suy mọi thứ từ đó, nên chỉ cần ctx.scale rồi
+     truyền W/H LOGIC là xong, không phải sửa gì trong bộ vẽ. */
+  const savePNG = () => {
+    const src = cvs.current; if (!src || isEmpty) return
+    const W = src.width, H = src.height, k = 3
+    const off = document.createElement('canvas')
+    off.width = W * k; off.height = H * k
+    const ctx = off.getContext('2d')
+    ctx.scale(k, k)
+    renderScene(ctx, W, H, activeScene, ptMap, bb, rx, ry, zoom)
+    const d = new Date()
+    const pad = n => String(n).padStart(2, '0')
+    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
+                + `-${pad(d.getHours())}${pad(d.getMinutes())}`
+    const a = document.createElement('a')
+    a.href = off.toDataURL('image/png')
+    a.download = `${fileName}-${stamp}.png`
+    a.click()
   }
-  const loadPreset = (p) => {
-    setScript(JSON.stringify(p.data, null, 2))
-    setScene(p.data); setErr(null)
-    setRx(INIT_RX); setRy(INIT_RY); setZoom(1)
+
+  /* Toàn màn hình đặt trên cả panel (không phải riêng canvas) để thanh công cụ còn
+     thấy được. ResizeObserver sẵn có tự chỉnh lại canvas khi vào/ra. */
+  const toggleFull = () => {
+    const el = panel.current; if (!el) return
+    const doc = document
+    const cur = doc.fullscreenElement || doc.webkitFullscreenElement
+    if (cur) (doc.exitFullscreen || doc.webkitExitFullscreen)?.call(doc)
+    else (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el)
   }
-  const resetView = () => { setRx(INIT_RX); setRy(INIT_RY); setZoom(1) }
+
+  useEffect(() => {
+    const sync = () =>
+      setIsFull(!!(document.fullscreenElement || document.webkitFullscreenElement))
+    document.addEventListener('fullscreenchange', sync)
+    document.addEventListener('webkitfullscreenchange', sync)
+    return () => {
+      document.removeEventListener('fullscreenchange', sync)
+      document.removeEventListener('webkitfullscreenchange', sync)
+    }
+  }, [])
 
   return (
-    <div className="g3d-root">
+    <div className={`g3d-root${showTools ? '' : ' g3d-root--bare'}`}>
+      <div ref={panel} className="g3d-canvas-panel g3d-canvas-panel--full">
 
-      {/* ── Canvas panel ── */}
-      <div className="g3d-canvas-panel">
-        <div className="g3d-topbar">
-          <button className="g3d-btn-sm" onClick={resetView}>↺ Reset góc nhìn</button>
-          <span className="g3d-hint">Kéo để xoay &nbsp;·&nbsp; Scroll để zoom</span>
-          <span className="g3d-zoom-badge">{Math.round(zoom * 100)}%</span>
-        </div>
+        {showTools && (
+          <div className="g3d-toolbar">
+            <div className="g3d-tool-group">
+              <button className="g3d-btn-sm" onClick={resetView} title="Về góc nhìn mặc định">
+                ↺ Reset
+              </button>
+            </div>
+
+            <div className="g3d-tool-group">
+              <button className="g3d-btn-sm" onClick={() => stepZoom(0.8)} title="Thu nhỏ">−</button>
+              <button className="g3d-zoom-badge" onClick={() => setZoom(1)} title="Bấm để về 100%">
+                {Math.round(zoom * 100)}%
+              </button>
+              <button className="g3d-btn-sm" onClick={() => stepZoom(1.25)} title="Phóng to">+</button>
+            </div>
+
+            <div className="g3d-tool-group g3d-cams">
+              {CAMERAS.map(c => (
+                <button key={c.id} className="g3d-cam-chip" onClick={() => setCamera(c)}>
+                  {c.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="g3d-tool-group g3d-tool-group--end">
+              <button className="g3d-btn-sm" onClick={savePNG} disabled={isEmpty} title="Tải hình về máy">
+                ⬇ Tải PNG
+              </button>
+              <button className="g3d-btn-sm" onClick={toggleFull}>
+                {isFull ? '⤡ Thoát' : '⤢ Toàn màn hình'}
+              </button>
+            </div>
+          </div>
+        )}
 
         <div
           ref={wrap}
@@ -481,48 +466,16 @@ export default function Geo3DViewer({ defaultPresetId, initialSceneData } = {}) 
           onTouchEnd={onTEnd}
         >
           <canvas ref={cvs} style={{ display:'block', touchAction:'none' }} />
+          {isEmpty && (
+            <div className="g3d-empty">
+              Chưa có hình — nhập đề bài hoặc tải ảnh lên để AI vẽ.
+            </div>
+          )}
+          {!isEmpty && showTools && (
+            <span className="g3d-hint g3d-hint--float">Kéo để xoay · Lăn chuột để phóng to</span>
+          )}
         </div>
       </div>
-
-      {/* ── Editor panel ── */}
-      <div className="g3d-editor">
-        <div className="g3d-editor-section">
-          <div className="g3d-editor-label">Hình mẫu</div>
-          <div className="g3d-presets">
-            {PRESETS.map(p => (
-              <button key={p.id} className="g3d-preset" onClick={() => loadPreset(p)}>
-                {p.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="g3d-editor-section g3d-editor-section--grow">
-          <div className="g3d-editor-label">Script JSON</div>
-          <textarea
-            className="g3d-textarea"
-            value={script}
-            onChange={e => setScript(e.target.value)}
-            spellCheck={false}
-            autoComplete="off"
-          />
-          {err && <div className="g3d-err">⚠ {err}</div>}
-          <button className="g3d-apply-btn" onClick={apply}>▶ Vẽ hình</button>
-        </div>
-
-        <details className="g3d-guide">
-          <summary>Hướng dẫn cú pháp</summary>
-          <div className="g3d-guide-body">
-            <div className="g3d-guide-row"><code>points</code> — id, x, y, z, color?, size?</div>
-            <div className="g3d-guide-row"><code>segments</code> — from, to, dashed?, highlight?, color?, width?</div>
-            <div className="g3d-guide-row"><code>midpoints</code> — id, of: ["A","B"]</div>
-            <div className="g3d-guide-row"><code>faces</code> — id, points: ["A","B","C"], style: &#123;fill, opacity, stroke&#125;</div>
-            <div className="g3d-guide-row"><code>vectors</code> — from, to, color?, label?</div>
-            <div className="g3d-guide-row"><code>labels</code> — id/point, text?, dx?, dy?, color?, size?</div>
-          </div>
-        </details>
-      </div>
-
     </div>
   )
 }

@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Geo3DViewer from './Geo3DViewer.jsx'
 import MathText from './MathText.jsx'
+import { validateScene } from '../utils/geo3dScene.js'
 
 /* ── SVG Icons ── */
 const ArrowLeftIcon = () => (
@@ -208,7 +209,14 @@ export default function ExerciseSolver({ onBack, subject = 'toan' }) {
     setRevealed((result.steps || []).map((_, i) => i))
 
   const isGeo  = result?.is_geometry && result?.geometry_data
-  const geoData = result?.geometry_data ?? null
+  // Lọc qua cùng bộ kiểm tra với trang vẽ hình: /api/solve-exercise chỉ kiểm rất lỏng
+  // (chỉ xem points có phải list không), nên toạ độ NaN hay id không tồn tại vẫn lọt.
+  // BẮT BUỘC dùng useMemo — trả về object mới mỗi lần render sẽ khiến Geo3DViewer hiểu
+  // nhầm là "hình mới" và reset góc nhìn liên tục.
+  const geoData = useMemo(
+    () => (result?.geometry_data ? validateScene(result.geometry_data).scene : null),
+    [result],
+  )
 
   const renderContent = () => {
     if (phase === 'theory') {

@@ -11,7 +11,9 @@ import os
 import secrets
 import sys
 import tempfile
+import time
 import uuid
+from collections import deque
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
@@ -56,6 +58,7 @@ IMAGES_DIR = SRC_DIR / "output" / "images"
 FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
 
 import database as db
+import geo3d as geo3d_ai
 import ielts_grading as ielts
 import listening_grading as listening
 import speaking_grading as speaking
@@ -4130,6 +4133,123 @@ async def solve_exercise(
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # ─── End Exercise Solver ──────────────────────────────────────────────────────
+
+# ─── Vẽ hình không gian bằng AI (#tools/geo3d) ────────────────────────────────
+# Tách khỏi /api/solve-exercise: route kia gọi Groq HAI lần để sinh thêm lý thuyết và
+# các bước giải mà tính năng này vứt đi (~7000 token thừa mỗi hình), lại để model tự
+# quyết is_geometry trong khi ở đây luôn cần một hình.
+
+# KHÔNG dùng lại GROQ_SOLVER_MODEL: model đó (llama-4-maverick) đã bị Groq gỡ, gọi vào
+# là 404. qwen3.8-27b là model CÓ THỊ GIÁC duy nhất còn sống trên tài khoản này tính đến
+# 16/09/2026 (openai/gpt-oss-* chỉ nhận chữ, không nhận ảnh).
+GEO3D_MODEL = "qwen/qwen3.8-27b"
+
+# Giới hạn tần suất theo user. Đây là route AI ĐẦU TIÊN mở cho học sinh, mà mỗi lượt
+# gọi tốn tiền Groq thật, nên không thể để trần như các route AI còn lại.
+# Lưu ý: dict trong RAM nên chỉ đúng trong PHẠM VI MỘT WORKER và reset khi khởi động lại.
+GEO3D_RATE_MAX     = 8      # số lượt
+GEO3D_RATE_WINDOW  = 300    # trong 5 phút
+_geo3d_calls: dict = {}
+
+
+def _geo3d_rate_ok(user_id: str) -> bool:
+    now = time.monotonic()
+    q = _geo3d_calls.setdefault(str(user_id), deque())
+    while q and now - q[0] > GEO3D_RATE_WINDOW:
+        q.popleft()
+    if len(q) >= GEO3D_RATE_MAX:
+        return False
+    q.append(now)
+    return True
+
+
+def _groq_geo3d_sync(prompt_text: str, img_b64, mime, retry_hint: str = ""):
+    """Một lượt gọi Groq → cảnh đã làm sạch. Ném ValueError khi cảnh không vẽ được."""
+    prompt = geo3d_ai.build_geo3d_prompt(prompt_text, has_image=img_b64 is not None,
+                                         retry_hint=retry_hint)
+    if img_b64:
+        content = [
+            {"type": "image_url",
+             "image_url": {"url": f"data:{mime or 'image/jpeg'};base64,{img_b64}"}},
+            {"type": "text", "text": prompt},
+        ]
+    else:
+        content = prompt
+    resp = _groq_chat_with_key_rotation(
+        model=GEO3D_MODEL,
+        messages=[{"role": "user", "content": content}],
+        temperature=0.15,
+        max_tokens=2500,
+    )
+    raw = (resp.choices[0].message.content or "").strip()
+    if not raw:
+        raise ValueError("AI không trả về nội dung.")
+    parsed = _safe_json_loads(raw)
+    note = ""
+    if isinstance(parsed, dict):
+        note = str(parsed.get("note") or "").strip()[:300]
+        # Model được phép "từ chối" bằng scene: null kèm lý do — chuyển thành ValueError
+        # để lên 422 với đúng câu giải thích của nó.
+        if parsed.get("scene", True) is None:
+            raise ValueError(note or "Đề bài này không dựng được hình không gian.")
+    scene, warns = geo3d_ai.validate_geo3d_scene(parsed)
+    return scene, note, warns
+
+
+@app.post("/api/geo3d/generate")
+async def geo3d_generate(
+    prompt: str = Form(""),
+    file: UploadFile = File(None),
+    caller: dict = Depends(require_auth),
+):
+    """Ảnh và/hoặc đề bài → cảnh JSON cho Geo3DViewer vẽ.
+
+    Dùng require_auth chứ KHÔNG dùng require_teacher: học sinh khối 11-12 mới là người
+    dùng chính của trang này.
+    """
+    prompt = (prompt or "").strip()
+    if not prompt and file is None:
+        return JSONResponse({"error": "Nhập đề bài hoặc tải ảnh lên."}, status_code=400)
+
+    if not _geo3d_rate_ok(caller["id"]):
+        return JSONResponse(
+            {"error": "Bạn đang tạo hình quá nhanh. Chờ khoảng một phút rồi thử lại."},
+            status_code=429)
+
+    img_b64 = mime = None
+    if file is not None:
+        ext = Path(file.filename or "").suffix.lower()
+        if ext and ext not in _IMG_EXTS:
+            return JSONResponse(
+                {"error": "Định dạng ảnh không hỗ trợ. Dùng JPG, PNG hoặc WEBP."},
+                status_code=415)
+        img_bytes = await file.read()
+        if len(img_bytes) > geo3d_ai.GEO3D_MAX_IMAGE_BYTES:
+            return JSONResponse({"error": "Ảnh quá lớn (tối đa 8 MB)."}, status_code=413)
+        img_b64 = _base64.b64encode(img_bytes).decode()
+        mime = file.content_type or "image/jpeg"
+
+    try:
+        try:
+            scene, note, warns = await asyncio.to_thread(
+                _groq_geo3d_sync, prompt, img_b64, mime)
+        except ValueError as first_err:
+            # Gọi lại ĐÚNG một lần, nhét lỗi lần trước vào prompt làm gợi ý sửa.
+            if not geo3d_ai.GEO3D_RETRY_ON_INVALID:
+                raise
+            scene, note, warns = await asyncio.to_thread(
+                _groq_geo3d_sync, prompt, img_b64, mime, str(first_err))
+        return {"scene": scene, "note": note, "warnings": warns}
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
+    except json.JSONDecodeError:
+        return JSONResponse(
+            {"error": "AI chưa dựng được hình từ đề này. Hãy mô tả rõ hơn."},
+            status_code=422)
+    except Exception as e:
+        return JSONResponse({"error": f"Máy chủ AI đang bận: {e}"}, status_code=502)
+
+# ─── End Geo3D AI ─────────────────────────────────────────────────────────────
 
 # ─── AI Generate Questions ────────────────────────────────────────────────────
 
