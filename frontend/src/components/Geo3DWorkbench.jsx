@@ -25,10 +25,14 @@ export default function Geo3DWorkbench({ user }) {
   const [isFocusMode, setIsFocusMode] = useState(false)  // Chế độ cô lập hình
   const [showDrawer,  setShowDrawer]  = useState(false)  // Drawer mã JSON giáo viên
   const [showPromptDrawer, setShowPromptDrawer] = useState(false) // Drawer nhập đề
+  const [animateBuild, setAnimateBuild] = useState(false)  // hình AI vừa trả về đang được dựng từng bước
 
   const handleResult = (data) => {
     const { scene: clean, warnings: w, error: err } = validateScene(data.scene)
     if (err) { setError(err); return }
+    // Hình AI mới: viewer vẽ từng bước kèm ô "Quá trình vẽ hình", xong mới hiện thanh công cụ.
+    // Bật cô lập ngay từ đầu để khung hình không đổi cỡ giữa chừng.
+    setAnimateBuild(true)
     setScene(clean)
     setNote(data.note || '')
     setWarnings([...(data.warnings || []), ...w])
@@ -44,6 +48,7 @@ export default function Geo3DWorkbench({ user }) {
     if (err) { setScriptErr(err); return }
     setScriptErr(null)
     setWarnings(w)
+    setAnimateBuild(false)   // giáo viên sửa JSON thì hiện ngay, không phát lại hoạt ảnh
     setScene(clean)
   }
 
@@ -88,6 +93,8 @@ export default function Geo3DWorkbench({ user }) {
             onOpenScript={() => setShowDrawer(true)}
             canSeeCode={canSeeCode}
             onSceneChange={handleSceneChange}
+            animateNextScene={animateBuild}
+            onBuildDone={() => setAnimateBuild(false)}
           />
 
           {busy && (
@@ -97,7 +104,7 @@ export default function Geo3DWorkbench({ user }) {
             </div>
           )}
 
-          {note && !busy && (
+          {note && !busy && !animateBuild && (
             <div className="g3d-note g3d-note--float">
               <span className="g3d-note-badge">Chú thích</span>
               <span className="g3d-note-text">{note}</span>

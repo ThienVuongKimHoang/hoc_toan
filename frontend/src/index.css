@@ -7444,6 +7444,122 @@ button { font-family: inherit; }
   to { transform: translateX(0); }
 }
 
+/* ── Ô "Quá trình vẽ hình" khi dựng hình từng bước ── */
+.g3d-build-log {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 12;
+  width: 300px;
+  max-width: calc(100% - 32px);
+  max-height: 60%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px -6px rgba(15, 23, 42, 0.14), 0 3px 8px -2px rgba(15, 23, 42, 0.05);
+  animation: fadeIn 0.25s ease-out;
+}
+.g3d-build-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px 8px;
+}
+.g3d-build-log-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.g3d-build-log-count {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #ede9fe;
+  padding: 2px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.g3d-build-progress {
+  flex-shrink: 0;
+  height: 3px;
+  margin: 0 14px;
+  background: #ede9fe;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.g3d-build-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #8b5cf6, #6d28d9);
+  border-radius: 99px;
+  transition: width 0.45s ease;
+}
+.g3d-build-steps {
+  list-style: none;
+  margin: 0;
+  padding: 8px 14px;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.g3d-build-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #94a3b8;
+  animation: fadeIn 0.2s ease-out;
+}
+.g3d-build-steps li.is-current { color: #1e293b; font-weight: 700; }
+.g3d-build-steps li.is-finish  { color: #15803d; font-weight: 700; }
+.g3d-build-mark {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  color: #16a34a;
+  font-weight: 700;
+}
+.g3d-build-pen {
+  display: inline-block;
+  color: #7c3aed;
+  animation: g3dPen 0.9s ease-in-out infinite;
+}
+@keyframes g3dPen {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50%      { transform: translate(2px, -2px) rotate(-12deg); }
+}
+.g3d-build-log-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 10px 10px;
+  border-top: 1px solid #f1f5f9;
+}
+.g3d-build-skip {
+  padding: 4px 12px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  border-radius: 99px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.g3d-build-skip:hover {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #5b21b6;
+}
+
 /* ── Gợi ý lơ lửng đáy màn hình ── */
 .g3d-hint-island {
   position: absolute;
@@ -7785,6 +7901,17 @@ button { font-family: inherit; }
   }
   .g3d-hud-cams { display: none; }
   .g3d-hint-island { display: none; }
+  /* Ô quá trình vẽ nằm dưới đáy, chỉ hiện 2 dòng cuối để không che hình */
+  .g3d-build-log {
+    top: auto;
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-width: none;
+    max-height: 40%;
+  }
+  .g3d-build-steps li:not(:nth-last-child(-n+2)) { display: none; }
   .g3d-note--float {
     bottom: 10px;
     left: 10px;

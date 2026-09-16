@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { makeBuildSteps, layoutBuild, revealAt } from '../utils/geo3dBuild.js'
 
 /* ─────────────────── 3D Math & Lighting ─────────────────── */
 function rotXY(px, py, pz, rx, ry) {
@@ -53,6 +54,10 @@ const RX_LIMIT = Math.PI / 2 - 0.02
 const ZOOM_MIN = 0.3
 const ZOOM_MAX = 6
 
+/* Màu nhấn cho phần đang được vẽ khi dựng hình từng bước */
+const BUILD_ACCENT = '#7c3aed'
+const easeOutBack = (x) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * (x - 1) ** 3 + c1 * (x - 1) ** 2 }
+
 /* Bảng màu và ký hiệu cho các nhóm đoạn thẳng bằng nhau */
 export const EQUAL_PALETTE = [
   { id: 'eq1', name: 'Nhóm 1 (Xanh lá)',  color: '#059669', symbol: 'single', mark: '1 gạch (/)' },
@@ -73,7 +78,13 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
     hoveredSegKey = null,
     selectedSegKey = null,
     rightAngleDraft = [],
+    reveal = null,   // dựng hình từng bước (utils/geo3dBuild.js); null = vẽ đủ cả hình
   } = options
+
+  // Mức hiện [0..1] của một phần tử; không ở chế độ dựng hình thì mọi thứ hiện đủ
+  const rv  = (kind, ref) => (reveal ? (reveal[kind][ref] || 0) : 1)
+  const hot = (kind, ref) => !!(reveal && reveal.hot[kind][ref])
+  const penTips = []   // đầu ngòi bút của các đoạn đang vẽ dở — vẽ sau cùng để không bị che
 
   ctx.clearRect(0, 0, W, H)
 
@@ -140,7 +151,9 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
   const nlx = lx/lLen, nly = ly/lLen, nlz = lz/lLen
 
   // Mặt phẳng (faces)
-  ;(scene.faces || []).forEach(face => {
+  ;(scene.faces || []).forEach((face, fi) => {
+    const fa = rv('face', fi)
+    if (fa <= 0) return
     const pts = (face.points || []).map(id => p2[id]).filter(Boolean)
     if (pts.length < 3) return
 
@@ -164,40 +177,63 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
     }
 
     const z = pts.reduce((s, p) => s + p.depth, 0) / pts.length - 0.5
-    items.push({ k: 'face', face, pts, z, lightFactor })
+    items.push({ k: 'face', face, pts, z, lightFactor, fa })
   })
 
   // Đoạn thẳng (segments)
   ;(scene.segments || []).forEach((seg, idx) => {
-    const a = p2[seg.from], b = p2[seg.to]
+    const t = rv('seg', idx)
+    if (t <= 0) return
+    let a = p2[seg.from], b = p2[seg.to]
     if (!a || !b) return
+    const z = (a.depth + b.depth) / 2
+    // Đang vẽ dở: chỉ vẽ tới vị trí ngòi bút (ngòi bút xuất phát từ điểm đã có trên hình)
+    const partial = t < 1
+    if (partial) {
+      if (reveal.segRev[idx]) [a, b] = [b, a]
+      b = { sx: a.sx + (b.sx - a.sx) * t, sy: a.sy + (b.sy - a.sy) * t, depth: b.depth }
+      penTips.push(b)
+    }
     const segKey = `${seg.from}-${seg.to}`
     const revKey = `${seg.to}-${seg.from}`
     const isHovered = hoveredSegKey === segKey || hoveredSegKey === revKey
     const isSelected = selectedSegKey === segKey || selectedSegKey === revKey
+    const isHot = hot('seg', idx)
     const eqGroup = seg.equalGroup ? eqGroupMap[seg.equalGroup] : null
 
     if (seg.highlight) {
-      highlights.push({ a, b, seg, segKey, isHovered, isSelected, eqGroup })
+      highlights.push({ a, b, seg, segKey, isHovered, isSelected, isHot, partial, eqGroup })
     } else {
-      items.push({ k: 'seg', a, b, seg, segKey, isHovered, isSelected, eqGroup, z: (a.depth + b.depth) / 2 })
+      items.push({ k: 'seg', a, b, seg, segKey, isHovered, isSelected, isHot, partial, eqGroup, z })
     }
   })
 
   // Vectơ
-  ;(scene.vectors || []).forEach(vec => {
-    const a = p2[vec.from], b = p2[vec.to]
-    if (a && b) items.push({ k: 'vec', a, b, vec, z: (a.depth + b.depth) / 2 })
+  ;(scene.vectors || []).forEach((vec, vi) => {
+    const t = rv('vec', vi)
+    if (t <= 0) return
+    const a = p2[vec.from]
+    let b = p2[vec.to]
+    if (!a || !b) return
+    const z = (a.depth + b.depth) / 2
+    const partial = t < 1
+    if (partial) {
+      b = { sx: a.sx + (b.sx - a.sx) * t, sy: a.sy + (b.sy - a.sy) * t, depth: b.depth }
+      penTips.push(b)
+    }
+    items.push({ k: 'vec', a, b, vec, partial, isHot: hot('vec', vi), z })
   })
 
   // Điểm
   Object.entries(ptMap).forEach(([id, p]) => {
+    const pv = rv('pt', id)
+    if (pv <= 0) return
     const pt = p2[id]
     if (pt) {
       const isHovered = hoveredPtId === id
       const isConnecting = connectingFromId === id
       const isDraftRightAngle = rightAngleDraft.includes(id)
-      items.push({ k: 'pt', id, p, pt, z: pt.depth, isHovered, isConnecting, isDraftRightAngle })
+      items.push({ k: 'pt', id, p, pt, z: pt.depth, isHovered, isConnecting, isDraftRightAngle, pv, isHot: hot('pt', id) })
     }
   })
 
@@ -207,7 +243,7 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
   // ── Giai đoạn 1: Vẽ đối tượng theo chiều sâu ──
   items.forEach(it => {
     if (it.k === 'face') {
-      const { face, pts, lightFactor } = it
+      const { face, pts, lightFactor, fa } = it
       const st = face.style || {}
       ctx.setLineDash([])
       ctx.globalAlpha = 1
@@ -217,14 +253,14 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].sx, pts[i].sy)
       ctx.closePath()
 
-      // Đổ bóng 3D mặt phẳng
-      ctx.globalAlpha = st.opacity ?? 0.32
+      // Đổ bóng 3D mặt phẳng (fa < 1 khi mặt đang hiện dần lúc dựng hình)
+      ctx.globalAlpha = (st.opacity ?? 0.32) * fa
       const baseFill = st.fill || '#74c0fc'
       ctx.fillStyle = shadeColor(baseFill, lightFactor)
       ctx.fill()
 
       if (st.stroke) {
-        ctx.globalAlpha = Math.min(1, (st.opacity ?? 0.32) * 1.4 + 0.2)
+        ctx.globalAlpha = Math.min(1, (st.opacity ?? 0.32) * 1.4 + 0.2) * fa
         ctx.strokeStyle = st.stroke
         ctx.lineWidth   = st.strokeWidth || 1.5
         ctx.stroke()
@@ -232,7 +268,7 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
       ctx.globalAlpha = 1
 
     } else if (it.k === 'seg') {
-      const { a, b, seg, isHovered, isSelected, eqGroup } = it
+      const { a, b, seg, isHovered, isSelected, isHot, partial, eqGroup } = it
       let strokeColor = seg.color || '#1e293b'
       let strokeWidth = seg.width || 1.8
 
@@ -248,14 +284,17 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
       } else if (isHovered) {
         strokeColor = '#3b82f6'
         strokeWidth = 2.8
+      } else if (isHot) {
+        strokeColor = BUILD_ACCENT   // thuộc bước đang dựng
+        strokeWidth = Math.max(strokeWidth, 2.8)
       }
 
       ctx.strokeStyle = strokeColor
       ctx.lineWidth   = strokeWidth
       ctx.setLineDash(seg.dashed ? [7, 5] : [])
-      ctx.globalAlpha = seg.dashed ? 0.6 : 1
-      ctx.shadowBlur  = isSelected ? 8 : (isHovered ? 5 : 0)
-      ctx.shadowColor = isSelected ? '#f59e0b' : (isHovered ? '#3b82f6' : 'transparent')
+      ctx.globalAlpha = seg.dashed ? (isHot ? 0.85 : 0.6) : 1
+      ctx.shadowBlur  = isSelected ? 8 : (isHovered ? 5 : (isHot ? 6 : 0))
+      ctx.shadowColor = isSelected ? '#f59e0b' : (isHovered ? '#3b82f6' : (isHot ? BUILD_ACCENT : 'transparent'))
 
       ctx.beginPath()
       ctx.moveTo(a.sx, a.sy)
@@ -266,14 +305,14 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
       ctx.shadowColor = 'transparent'
       ctx.globalAlpha = 1
 
-      // Vẽ vạch chia bằng nhau (Tick Marks) tại trung điểm đoạn thẳng
-      if (eqGroup) {
+      // Vẽ vạch chia bằng nhau (Tick Marks) tại trung điểm đoạn thẳng — chỉ khi đoạn đã vẽ xong
+      if (eqGroup && !partial) {
         drawTickMarks(ctx, a, b, eqGroup.symbol, eqGroup.color)
       }
 
     } else if (it.k === 'vec') {
-      const { a, b, vec } = it
-      const col = vec.color || '#2563eb'
+      const { a, b, vec, partial, isHot } = it
+      const col = isHot ? BUILD_ACCENT : (vec.color || '#2563eb')
       ctx.strokeStyle = col
       ctx.lineWidth = 2.4
       ctx.setLineDash([])
@@ -285,7 +324,7 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
 
       const dx = b.sx - a.sx, dy = b.sy - a.sy
       const L = Math.sqrt(dx * dx + dy * dy)
-      if (L > 2) {
+      if (L > 2 && !partial) {
         const ux = dx/L, uy = dy/L, s = 11
         ctx.fillStyle = col
         ctx.beginPath()
@@ -297,7 +336,7 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
       }
 
     } else if (it.k === 'pt') {
-      const { p, pt, isHovered, isConnecting, isDraftRightAngle } = it
+      const { p, pt, isHovered, isConnecting, isDraftRightAngle, pv, isHot } = it
       let r = p.size || (p.isMidpoint ? 3.8 : 4.2)
       let col = p.color || (p.isMidpoint ? '#7c3aed' : '#1e293b')
 
@@ -307,14 +346,20 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
       } else if (isHovered) {
         r = 6.0
         col = '#3b82f6'
+      } else if (isHot) {
+        r = 5.5
+        col = BUILD_ACCENT
       }
+      // Lúc dựng hình: điểm "nở" ra (hơi vượt rồi thu về) thay vì hiện bụp một cái
+      if (pv < 1) r *= Math.max(0, easeOutBack(pv))
+      const ring = isHovered || isConnecting || isDraftRightAngle || isHot
 
       ctx.setLineDash([])
-      ctx.shadowBlur = (isHovered || isConnecting || isDraftRightAngle) ? 8 : 0
+      ctx.shadowBlur = ring ? 8 : 0
       ctx.shadowColor = col
 
-      // Vòng hào quang nếu đang hover hoặc chọn
-      if (isHovered || isConnecting || isDraftRightAngle) {
+      // Vòng hào quang nếu đang hover, chọn, hoặc thuộc bước đang dựng
+      if (ring) {
         ctx.strokeStyle = col
         ctx.lineWidth = 2
         ctx.beginPath()
@@ -334,16 +379,22 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
   })
 
   // ── Giai đoạn 2: Vẽ góc vuông 3D chuẩn phối cảnh ──
-  ;(scene.rightAngles || []).forEach(ra => {
+  ;(scene.rightAngles || []).forEach((ra, ri) => {
+    const ta = rv('ra', ri)
+    if (ta <= 0) return
+    ctx.save()
+    ctx.globalAlpha = ta
     draw3DRightAngle(ctx, ra, ptMap, rx, ry, CX, CY, S, bb)
+    ctx.restore()
   })
 
   // ── Giai đoạn 3: Đoạn thẳng highlight (vẽ với hiệu ứng thở pulsing sống động) ──
   const pulse = Math.sin(animTime * 3.5)
-  highlights.forEach(({ a, b, seg, isHovered, isSelected, eqGroup }) => {
+  highlights.forEach(({ a, b, seg, isHovered, isSelected, isHot, partial, eqGroup }) => {
     let col = seg.color || (eqGroup ? eqGroup.color : '#2563eb')
     if (isSelected) col = '#f59e0b'
     else if (isHovered) col = '#3b82f6'
+    else if (isHot) col = BUILD_ACCENT
 
     // Đoạn highlight vẫn phải theo kiểu nét — trước đây luôn vẽ liền nên đổi sang nét đứt không có tác dụng
     ctx.setLineDash(seg.dashed ? [7, 5] : [])
@@ -356,12 +407,30 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
     ctx.lineTo(b.sx, b.sy)
     ctx.stroke()
 
-    if (eqGroup) {
+    if (eqGroup && !partial) {
       drawTickMarks(ctx, a, b, eqGroup.symbol, eqGroup.color)
     }
   })
   ctx.shadowBlur = 0
   ctx.shadowColor = 'transparent'
+
+  // ── Giai đoạn 3b: Ngòi bút ở đầu các đoạn đang vẽ dở (dựng hình từng bước) ──
+  penTips.forEach(tip => {
+    ctx.save()
+    ctx.setLineDash([])
+    ctx.shadowColor = BUILD_ACCENT
+    ctx.shadowBlur = 12
+    ctx.fillStyle = BUILD_ACCENT
+    ctx.beginPath()
+    ctx.arc(tip.sx, tip.sy, 4.2, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.shadowBlur = 0
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.arc(tip.sx, tip.sy, 1.6, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  })
 
   // ── Giai đoạn 4: Đường nối Preview (Rubber-band line) khi kéo nối điểm ──
   if (connectingFromId && rubberBandPos && p2[connectingFromId]) {
@@ -383,6 +452,9 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
   ctx.save()
   Object.entries(ptMap).forEach(([id, p]) => {
     const pt  = p2[id]; if (!pt) return
+    const pv  = rv('pt', id)
+    if (pv <= 0) return
+    ctx.globalAlpha = Math.min(1, pv)   // nhãn hiện dần cùng điểm khi dựng hình
     const ov  = lblMap[id]
     const txt = ov?.text  ?? id
     const dx  = ov?.dx    ?? 11
@@ -415,10 +487,11 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
     ctx.fillStyle = col
     ctx.fillText(txt, pt.sx + dx, pt.sy + dy)
   })
+  ctx.globalAlpha = 1
 
   // Nhãn vectơ
-  ;(scene.vectors || []).forEach(vec => {
-    if (!vec.label) return
+  ;(scene.vectors || []).forEach((vec, vi) => {
+    if (!vec.label || rv('vec', vi) < 1) return
     const a = p2[vec.from], b = p2[vec.to]; if (!a || !b) return
     ctx.font      = `italic 600 12.5px "Inter", system-ui, sans-serif`
     ctx.fillStyle = vec.color || '#2563eb'
@@ -596,6 +669,8 @@ export default function Geo3DViewer({
   onOpenScript,
   canSeeCode = false,
   onSceneChange,
+  animateNextScene = false,   // hình mới nhận qua `scene` sẽ được dựng từng bước
+  onBuildDone,                // gọi khi dựng xong hoặc người dùng bấm Bỏ qua
 } = {}) {
   const cvs    = useRef(null)
   const wrap   = useRef(null)
@@ -620,6 +695,10 @@ export default function Geo3DViewer({
      để popover cập nhật ngay khi đổi nét/nhóm và tự đóng khi đoạn bị xoá. */
   const [selKey, setSelKey]             = useState(null)
   const [popoverPos, setPopoverPos]     = useState(null) // { x, y }
+  /* Dựng hình từng bước: danh sách bước (null = không dựng) và bước đang vẽ */
+  const [buildSteps, setBuildSteps]     = useState(null)
+  const [buildIdx, setBuildIdx]         = useState(0)
+  const isBuilding = !!buildSteps
 
   /* Animation & Physics Refs */
   const rxRef          = useRef(INIT_RX)
@@ -635,6 +714,14 @@ export default function Geo3DViewer({
   const rafRef         = useRef(null)
   /* Cảnh mà chính viewer vừa sửa rồi đẩy lên cha qua onSceneChange */
   const emittedRef     = useRef(null)
+  const buildRef       = useRef(null)   // { layout, t0, idx } khi đang dựng hình
+  const revealRef      = useRef(null)   // trạng thái hiện hình của khung hình hiện tại
+  const logListRef     = useRef(null)
+  /* Đọc prop qua ref: Workbench tắt animateNextScene lúc dựng xong không được làm dựng lại */
+  const animateRef     = useRef(animateNextScene)
+  animateRef.current   = animateNextScene
+  const onBuildDoneRef = useRef(onBuildDone)
+  onBuildDoneRef.current = onBuildDone
 
   const drag  = useRef({ on: false, x: 0, y: 0, lastX: 0, lastY: 0, time: 0, moved: false, consumed: false, cancelConnect: false })
   const touch = useRef({ on: false, x: 0, y: 0, lastX: 0, lastY: 0, time: 0, moved: false })
@@ -660,6 +747,44 @@ export default function Geo3DViewer({
     setRightAngleDraft([])
   }, [closePopover, clearConnect])
 
+  /* Kết thúc dựng hình (vẽ xong hoặc bấm Bỏ qua) → hiện đủ hình, trả lại giao diện xoay */
+  const finishBuild = useCallback(() => {
+    buildRef.current = null
+    revealRef.current = null
+    setBuildSteps(null)
+    onBuildDoneRef.current?.()
+  }, [])
+
+  /* Dựng hình từng bước từ góc nhìn chuẩn, tỉ lệ 100% */
+  const startBuild = useCallback((sc) => {
+    rxRef.current = targetRxRef.current = INIT_RX
+    ryRef.current = targetRyRef.current = INIT_RY
+    velXRef.current = velYRef.current = 0
+    isTransitionRef.current = false
+    entranceRef.current = 1.0
+    autoRotateRef.current = false
+    drag.current.on = false
+    setIsAutoRotating(false)
+    setIsDrag(false)
+    setActiveCam('default')
+    setActiveTool('rotate')
+    setZoom(1.0)
+    closePopover()
+    clearConnect()
+    setRightAngleDraft([])
+
+    const steps = makeBuildSteps(sc)
+    const reduceMotion = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduceMotion || !steps.length) { finishBuild(); return }
+
+    const layout = layoutBuild(steps)
+    buildRef.current = { layout, t0: performance.now(), idx: 0 }
+    revealRef.current = revealAt(layout, 0).reveal
+    setBuildSteps(steps)
+    setBuildIdx(0)
+  }, [closePopover, clearConnect, finishBuild])
+
   useEffect(() => {
     if (initialSceneData) {
       setUncontrolled(initialSceneData)
@@ -671,9 +796,14 @@ export default function Geo3DViewer({
     // Cảnh do chính viewer sửa (nối điểm, đổi nét, xoá đoạn…) quay về qua prop `scene` thì
     // KHÔNG chạy hiệu ứng vào — nếu không mỗi lần sửa camera lại nhảy về góc mặc định.
     if (scene && scene !== emittedRef.current) {
-      triggerEntrance()
+      if (animateRef.current) {
+        startBuild(scene)
+      } else {
+        if (buildRef.current) finishBuild()
+        triggerEntrance()
+      }
     }
-  }, [scene, triggerEntrance])
+  }, [scene, triggerEntrance, startBuild, finishBuild])
 
   /* ── Derived Data ── */
   const ptMap = useMemo(() => {
@@ -751,6 +881,7 @@ export default function Geo3DViewer({
         hoveredSegKey,
         selectedSegKey: selKey ? `${selKey.from}-${selKey.to}` : null,
         rightAngleDraft,
+        reveal: revealRef.current,
       }
     )
     ctx.restore()
@@ -764,6 +895,18 @@ export default function Geo3DViewer({
       if (!active) return
 
       animTimeRef.current += 0.016
+
+      // Dựng hình từng bước: tính phần nào đã hiện ở thời điểm này
+      const b = buildRef.current
+      if (b) {
+        const { reveal, stepIdx, done } = revealAt(b.layout, performance.now() - b.t0)
+        if (done) {
+          finishBuild()
+        } else {
+          revealRef.current = reveal
+          if (stepIdx !== b.idx) { b.idx = stepIdx; setBuildIdx(stepIdx) }
+        }
+      }
 
       if (entranceRef.current < 1.0) {
         entranceRef.current += (1.0 - entranceRef.current) * 0.08
@@ -807,7 +950,13 @@ export default function Geo3DViewer({
       active = false
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
-  }, [drawCanvas, connectingFrom])
+  }, [drawCanvas, connectingFrom, finishBuild])
+
+  /* Ô quá trình vẽ: luôn cuộn tới dòng mới nhất (không dùng scrollIntoView — nó cuộn cả trang) */
+  useEffect(() => {
+    const el = logListRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [buildIdx, buildSteps])
 
   useEffect(() => {
     const el = wrap.current; if (!el) return
@@ -865,7 +1014,7 @@ export default function Geo3DViewer({
     // Chỉ nhận thao tác BẮT ĐẦU trên canvas. Trước đây bấm nút trong popover cũng bị tính
     // là click canvas: mouseup đóng popover trước khi sự kiện click tới nút, nên "Nét đứt"
     // và "Xoá đoạn" không bao giờ ăn.
-    if (e.button !== 0 || e.target !== cvs.current) return
+    if (e.button !== 0 || e.target !== cvs.current || buildRef.current) return
     const rect = cvs.current.getBoundingClientRect()
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
@@ -896,6 +1045,7 @@ export default function Geo3DViewer({
   }
 
   const onMove = useCallback((e) => {
+    if (buildRef.current) return   // đang dựng hình: chỉ xem, không tương tác
     const rect = cvs.current?.getBoundingClientRect()
     if (!rect) return
     const mx = e.clientX - rect.left
@@ -1081,18 +1231,24 @@ export default function Geo3DViewer({
     const onWheel = (e) => {
       if (e.target !== cvs.current) return
       e.preventDefault()
+      if (buildRef.current) return
       setZoom(v => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v * (e.deltaY < 0 ? 1.1 : 0.91))))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  /* Phím tắt: Esc huỷ thao tác dở / đóng bảng; Delete (Backspace trên Mac) xoá đoạn đang chọn */
+  /* Phím tắt: Esc bỏ qua hoạt ảnh dựng hình / huỷ thao tác dở / đóng bảng;
+     Delete (Backspace trên Mac) xoá đoạn đang chọn */
   useEffect(() => {
-    if (!selectedSeg && !connectingFrom && !rightAngleDraft.length) return
+    if (!isBuilding && !selectedSeg && !connectingFrom && !rightAngleDraft.length) return
     const onKey = (e) => {
       const t = e.target
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (isBuilding) {
+        if (e.key === 'Escape') finishBuild()
+        return
+      }
       if (e.key === 'Escape') {
         closePopover()
         clearConnect()
@@ -1208,7 +1364,7 @@ export default function Geo3DViewer({
         {/* Lớp phủ phía trên: thanh công cụ + dải hướng dẫn xếp chồng theo luồng (không chồng
             lên nhau), thanh công cụ tự xuống dòng khi khung hẹp thay vì giấu nút đi. */}
         <div className="g3d-overlay-top">
-          {showTools && (
+          {showTools && !isBuilding && (
             <div className="g3d-floating-hud">
 
               {/* Bộ chọn Chế độ tương tác (Tool Palette) */}
@@ -1259,6 +1415,15 @@ export default function Geo3DViewer({
 
                 <button className="g3d-hud-btn" onClick={resetView} title="Về góc nhìn chuẩn">
                   ↺ Đặt lại
+                </button>
+
+                <button
+                  className="g3d-hud-btn"
+                  onClick={() => startBuild(activeScene)}
+                  disabled={isEmpty}
+                  title="Phát lại từng bước dựng hình"
+                >
+                  ▶ Xem lại cách vẽ
                 </button>
               </div>
 
@@ -1355,6 +1520,50 @@ export default function Geo3DViewer({
             </div>
           )}
         </div>
+
+        {/* Ô "Quá trình vẽ hình": ghi từng bước đang dựng, khớp với phần đang vẽ trên hình */}
+        {isBuilding && (
+          <div className="g3d-build-log" role="status" aria-live="polite">
+            <div className="g3d-build-log-head">
+              <span className="g3d-build-log-title">✏️ Quá trình vẽ hình</span>
+              <span className="g3d-build-log-count">
+                {buildIdx >= buildSteps.length ? 'Hoàn thành' : `Bước ${buildIdx + 1}/${buildSteps.length}`}
+              </span>
+            </div>
+            <div className="g3d-build-progress">
+              <div
+                className="g3d-build-progress-bar"
+                style={{ width: `${Math.min(100, ((buildIdx + 1) / buildSteps.length) * 100)}%` }}
+              />
+            </div>
+            <ol ref={logListRef} className="g3d-build-steps">
+              {buildSteps.slice(0, buildIdx + 1).map((s, i) => (
+                i < buildIdx ? (
+                  <li key={i} className="is-done">
+                    <span className="g3d-build-mark">✓</span>
+                    <span>{s.text.charAt(0).toUpperCase() + s.text.slice(1)}</span>
+                  </li>
+                ) : (
+                  <li key={i} className="is-current">
+                    <span className="g3d-build-mark g3d-build-pen">✎</span>
+                    <span>Đang {s.text}…</span>
+                  </li>
+                )
+              ))}
+              {buildIdx >= buildSteps.length && (
+                <li className="is-finish">
+                  <span className="g3d-build-mark">✓</span>
+                  <span>Hình đã hoàn thiện</span>
+                </li>
+              )}
+            </ol>
+            <div className="g3d-build-log-foot">
+              <button className="g3d-build-skip" onClick={finishBuild} title="Hiện ngay toàn bộ hình (Esc)">
+                Bỏ qua ⏭
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Vùng Canvas hiển thị hình không gian */}
         <div
@@ -1471,7 +1680,7 @@ export default function Geo3DViewer({
             </div>
           )}
 
-          {!isEmpty && showTools && (
+          {!isEmpty && showTools && !isBuilding && (
             <div className="g3d-hint-island">
               <span>✦ Kéo để xoay · Click vào đoạn thẳng để đổi nét hoặc xoá</span>
             </div>
