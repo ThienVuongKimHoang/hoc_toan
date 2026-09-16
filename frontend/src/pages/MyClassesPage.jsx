@@ -487,6 +487,10 @@ const formatDtShort = iso => iso
   ? new Date(iso).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
   : null
 
+/* Lần làm này có xem lại được không: đáp án đã mở, HOẶC GV đã nhận xét bài tự luận
+   và điểm đã mở (nhận xét đi cùng ĐIỂM, không đi cùng đáp án). */
+const canReviewAttempt = a => a.answerVisible !== false || (a.scoreVisible !== false && a.hasComments)
+
 /* Vì sao lần làm này chưa xem lại được — theo "Cài đặt hiển thị" của đề */
 function lockNote(a) {
   if (a.answerBelowMin) return `Cần đạt ${a.answerMinScore}đ trở lên mới mở đáp án`
@@ -537,7 +541,7 @@ function ExamAttemptHistory({ attempts, examId }) {
           {attempts.map((a, i) => {
             // Cài đặt hiển thị của đề (server quyết định): chưa mở đáp án thì hàng
             // này không bấm vào được, kèm dòng chữ nhỏ báo lúc nào mở.
-            const canReview = a.answerVisible !== false
+            const canReview = canReviewAttempt(a)
             const Row = canReview ? 'a' : 'div'
             return (
               <Row key={a.id}
@@ -547,6 +551,11 @@ function ExamAttemptHistory({ attempts, examId }) {
                   <span className="mc-exam-history-item-badge">Lần {attempts.length - i}</span>
                   {formatDt(a.submittedAt)}
                   {!canReview && <span className="mc-locked-note">{IC.lock(11)} {lockNote(a)}</span>}
+                  {/* Mở được chỉ nhờ nhận xét → nói rõ vào sẽ thấy gì, để HS không
+                      tưởng đáp án đã mở rồi bấm vào lại hụt. */}
+                  {canReview && a.answerVisible === false && (
+                    <span className="mc-note-hint">💬 Giáo viên đã nhận xét bài tự luận</span>
+                  )}
                 </span>
                 <span className="mc-exam-history-item-right">
                   <span className={a.score != null ? `mc-exam-history-score ${examScoreBand(scaledScore(a.score, a.maxScore) * 10)}` : 'mc-exam-history-score'}>

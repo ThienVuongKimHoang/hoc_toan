@@ -459,8 +459,10 @@ export default function ExamHistoryPage({ user, onGoHome, onGoProfile }) {
                               </>}
                         </span>
                         <span className="eh-cell eh-cell--act">
-                          {/* Đề chưa tới lúc mở đáp án → nút xám, kèm mốc sẽ mở */}
-                          {s.answerVisible === false ? (
+                          {/* Đề chưa tới lúc mở đáp án → nút xám, kèm mốc sẽ mở. Nhưng
+                              nếu GV đã nhận xét bài tự luận thì vẫn cho vào đọc nhận
+                              xét (nhận xét đi cùng ĐIỂM, không đi cùng đáp án). */}
+                          {s.answerVisible === false && !(s.scoreVisible !== false && s.hasComments) ? (
                             <span className="eh-review-btn eh-review-btn--locked"
                               title={s.answerBelowMin
                                 ? `Cần đạt từ ${s.answerMinScore} điểm trở lên mới xem được đáp án`
@@ -470,8 +472,9 @@ export default function ExamHistoryPage({ user, onGoHome, onGoProfile }) {
                               {IcEye(14)} {s.answerUnlockAt ? `Mở ${formatDt(s.answerUnlockAt)}` : 'Chưa mở'}
                             </span>
                           ) : (
-                            <a className="eh-review-btn" href={`#results/${s.examId}/${s.id}`}>
-                              {IcEye(14)} Xem lại
+                            <a className="eh-review-btn" href={`#results/${s.examId}/${s.id}`}
+                              title={s.answerVisible === false ? 'Đáp án chưa mở, nhưng giáo viên đã nhận xét bài tự luận' : undefined}>
+                              {IcEye(14)} {s.answerVisible === false ? 'Xem nhận xét' : 'Xem lại'}
                             </a>
                           )}
                         </span>

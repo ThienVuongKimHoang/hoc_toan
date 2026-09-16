@@ -271,12 +271,19 @@ export async function fetchSubmissionReview(examId, subId) {
   return res.json()
 }
 
-/** Giáo viên chấm tay câu tự luận cho một bài nộp. manualScores = { TL_1: 1.5, ... } */
-export async function gradeSubmission(examId, subId, manualScores, teacherId) {
+/** Giáo viên chấm tay câu tự luận cho một bài nộp.
+ *  manualScores   = { TL_1: 1.5, ... }
+ *  manualComments = { TL_1: "nhận xét", ... } — bỏ qua thì server GIỮ NGUYÊN nhận xét
+ *  đã lưu; truyền vào thì ghi đè nguyên cụm, nên phải gửi đủ mọi câu chứ không chỉ
+ *  câu vừa sửa. */
+export async function gradeSubmission(examId, subId, manualScores, teacherId, manualComments) {
   const res = await fetch(`/api/exams/${examId}/submissions/${subId}/grade`, {
     method:  'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body:    JSON.stringify({ manualScores, teacherId }),
+    body:    JSON.stringify({
+      manualScores, teacherId,
+      ...(manualComments ? { manualComments } : {}),
+    }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

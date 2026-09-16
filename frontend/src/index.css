@@ -11391,6 +11391,11 @@ button { font-family: inherit; }
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 0.72rem; color: #94A3B8; font-weight: 600; line-height: 1.3;
 }
+/* Lần làm mở được nhờ có nhận xét của GV (đáp án thì vẫn chưa mở) */
+.mc-note-hint {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.72rem; color: #7C3AED; font-weight: 700; line-height: 1.3;
+}
 .mc-review-link {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 12px; border-radius: 10px; text-decoration: none;

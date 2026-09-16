@@ -75,6 +75,29 @@
 }
 .ge-mini-copy:hover { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
 
+/* ─── Ô nhận xét từng câu ─── */
+.ge-note-row { margin-top: 10px; }
+.ge-note-label {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font-size: 0.82rem; font-weight: 700; color: #334155; margin-bottom: 5px;
+}
+.ge-note-hint { font-weight: 500; font-size: 0.74rem; color: #94a3b8; }
+.ge-note-input {
+  width: 100%; box-sizing: border-box; padding: 8px 10px;
+  border: 1.5px solid #e2e8f0; border-radius: 9px; background: #fff;
+  font-family: inherit; font-size: 0.88rem; line-height: 1.5; color: #1e293b;
+  /* .ge-list là vùng cuộn — chặn max-height để kéo giãn không đẩy nút Lưu đi mất */
+  resize: vertical; min-height: 56px; max-height: 220px;
+}
+.ge-note-input:focus { outline: none; border-color: #7c3aed; background: #faf5ff; }
+.ge-note-input::placeholder { color: #cbd5e1; }
+.ge-note-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-top: 4px;
+}
+.ge-note-count { font-size: 0.72rem; color: #94a3b8; }
+.ge-note-count.is-warn { color: #b45309; font-weight: 700; }
+
 /* ─── Cụm nút lưu ─── */
 .ge-actions { flex-wrap: wrap; align-items: center; }
 .ge-btn-next { border: 1.5px solid #2563eb !important; color: #2563eb !important; background: #fff !important; font-weight: 700; }

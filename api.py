@@ -692,6 +692,26 @@ def _manual_total(manual_scores) -> float:
     return sum(_to_float(v) for v in manual_scores.values())
 
 
+MAX_COMMENT_LEN = 1000   # ~15 dòng cho một câu — đủ cho nhận xét thật, không cho dán cả bài
+
+
+def _clean_comments(raw, allowed_keys) -> dict:
+    """Nhận xét GV nhập cho từng câu tự luận → dict sạch {TL_n: "..."}.
+    Bỏ key không khớp câu nào của đề (như đang làm với điểm), bỏ nhận xét rỗng — nhờ
+    đó "xoá nhận xét" chỉ cần gửi chuỗi rỗng — và cắt bớt phần vượt giới hạn."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict = {}
+    for key, val in raw.items():
+        if key not in allowed_keys or not isinstance(val, str):
+            continue
+        # strip lần 2 sau khi cắt: cắt giữa chừng đừng để treo lại khoảng trắng cuối
+        text = val.strip()[:MAX_COMMENT_LEN].strip()
+        if text:
+            out[key] = text
+    return out
+
+
 def _recompute_submissions(exam_id: str, exam: dict) -> int:
     """Chấm lại toàn bộ bài nộp theo đáp án hiện tại của đề. Trả về số bài đã đổi điểm."""
     max_score = _calc_max_score(exam)
@@ -1195,6 +1215,12 @@ async def get_student_submissions(student_id: str, caller: dict = Depends(requir
         vis = _display_state(s, s)
         s.update({k: vis[k] for k in ("scoreVisible", "answerVisible", "scoreUnlockAt",
                                       "answerUnlockAt", "answerBelowMin")})
+        # Đây là endpoint DANH SÁCH: chỉ cần biết "có nhận xét hay không" để mở nút
+        # Xem lại + gắn dấu, nội dung đọc ở endpoint review. pop() phải đứng TRƯỚC
+        # nhánh che bên dưới, không thì bài chưa mở điểm vẫn lọt nhận xét ra ngoài
+        # (nhận xét thường tiết lộ luôn đáp án).
+        notes = s.pop("manualComments", None) or {}
+        s["hasComments"] = bool(notes) and vis["scoreVisible"]
         if not vis["scoreVisible"]:
             s["score"] = None
             s["maxScore"] = None
@@ -1232,12 +1258,34 @@ async def review_submission(exam_id: str, sub_id: int, caller: dict = Depends(re
         return {"revealed": True, "exam": exam, "submission": sub,
                 **vis, "scoreVisible": True, "answerVisible": True}
     if not vis["answerVisible"]:
+        # Nhận xét KHÔNG phải đáp án: em điểm thấp mới là em cần đọc nhất, nên mở ngay
+        # khi ĐIỂM đã mở — không chờ mốc mở đáp án, không xét answerMinScore.
+        notes = []
+        if vis["scoreVisible"]:
+            cmts   = sub.get("manualComments") or {}
+            manual = sub.get("manualScores") or {}
+            essay  = (exam.get("sections") or {}).get("TỰ LUẬN") or {}
+            # Duyệt theo thứ tự câu TRONG ĐỀ (không phải thứ tự key của dict), và trả
+            # kèm số câu/điểm: màn hình khoá không nhận object exam nên tự nó không
+            # biết "TL_1" là câu mấy, được mấy điểm.
+            for q in (essay.get("questions") or []):
+                key = f"TL_{q.get('question_number')}"
+                if not cmts.get(key):
+                    continue
+                notes.append({
+                    "key":            key,
+                    "questionNumber": q.get("question_number"),
+                    "comment":        cmts[key],
+                    "score":          manual.get(key),
+                    "max":            _to_float(q.get("points")),
+                })
         return {
             "revealed": False,
             "submission": {
                 "score":    sub.get("score")    if vis["scoreVisible"] else None,
                 "maxScore": sub.get("maxScore") if vis["scoreVisible"] else None,
             },
+            "essayNotes": notes,
             **vis,
         }
 
@@ -1247,10 +1295,15 @@ async def review_submission(exam_id: str, sub_id: int, caller: dict = Depends(re
 @app.post("/api/exams/{exam_id}/submissions/{sub_id}/grade")
 async def grade_essay_submission(exam_id: str, sub_id: str, request: Request, caller: dict = Depends(require_auth)):
     """Giáo viên chấm tay câu tự luận (TỰ LUẬN) cho một bài nộp.
-    body: { manualScores: { "TL_1": 1.5, ... } }. Điểm mỗi câu bị kẹp trong [0, điểm tối đa của câu].
-    Điểm tổng = điểm tự động (trắc nghiệm/trả lời ngắn) + tổng điểm tự luận."""
+    body: { manualScores: { "TL_1": 1.5, ... }, manualComments: { "TL_1": "..." } }.
+    Điểm mỗi câu bị kẹp trong [0, điểm tối đa của câu]; điểm tổng = điểm tự động
+    (trắc nghiệm/trả lời ngắn) + tổng điểm tự luận. Nhận xét độc lập với điểm: ghi
+    nhận xét mà chưa cho điểm vẫn lưu được, và ngược lại."""
     body = await request.json()
     manual_in = body.get("manualScores") or {}
+    # KHÔNG "or {}": phải phân biệt "client không gửi field" (giữ nguyên nhận xét cũ)
+    # với "gửi map rỗng" (GV đã xoá hết nhận xét).
+    comments_in = body.get("manualComments")
     exam = db.get_exam(exam_id)
     if not exam:
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
@@ -1269,6 +1322,9 @@ async def grade_essay_submission(exam_id: str, sub_id: str, request: Request, ca
         v = max(0.0, min(_to_float(val), max_by_key[key]))
         clean[key] = _round2(v)
 
+    # None = client không gửi → giữ nguyên nhận xét đã lưu trong DB
+    clean_notes = None if comments_in is None else _clean_comments(comments_in, set(max_by_key))
+
     sub = next((s for s in db.get_submissions(exam_id) if str(s.get("id")) == str(sub_id)), None)
     if not sub:
         return JSONResponse({"error": "Không tìm thấy bài nộp"}, status_code=404)
@@ -1278,9 +1334,11 @@ async def grade_essay_submission(exam_id: str, sub_id: str, request: Request, ca
     # Ghi lại cả maxScore theo đề hiện tại: đề có thể đã đổi thang điểm sau khi học
     # sinh nộp, giữ mẫu số cũ thì điểm quy về thang 10 mỗi màn hình một khác.
     max_score = _calc_max_score(exam)
-    if not db.update_submission_grade(sub_id, clean, total, max_score):
+    if not db.update_submission_grade(sub_id, clean, total, max_score, clean_notes):
         return JSONResponse({"error": "Không cập nhật được điểm"}, status_code=500)
-    return {"ok": True, "score": total, "maxScore": max_score, "manualScores": clean}
+    return {"ok": True, "score": total, "maxScore": max_score, "manualScores": clean,
+            "manualComments": clean_notes if clean_notes is not None
+                              else (sub.get("manualComments") or {})}
 
 
 @app.delete("/api/exams/{exam_id}/submissions/{sub_id}")

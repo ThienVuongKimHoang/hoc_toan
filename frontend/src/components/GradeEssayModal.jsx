@@ -15,7 +15,10 @@ import './GradeEssayModal.css'
  */
 
 const round2 = (n) => Math.round(n * 100) / 100
+// "Đã chấm" tính theo ĐIỂM, không tính nhận xét: bài mới ghi nhận xét mà chưa cho
+// điểm vẫn phải nằm trong hàng chờ chấm (xem nextUngraded bên dưới).
 const isGraded = (s) => !!s?.manualScores && Object.keys(s.manualScores).length > 0
+const MAX_NOTE = 1000   // khớp MAX_COMMENT_LEN ở api.py
 
 const formatDt = iso => iso
   ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -27,15 +30,18 @@ const fmtDur = (sec) => {
   return m > 0 ? `${m} phút` : `${sec} giây`
 }
 
-/* Điểm đã lưu → giá trị cho ô nhập, kèm danh sách câu bị giới hạn lại vì đề đã
-   sửa giảm điểm tối đa sau khi chấm (báo cho GV thay vì âm thầm đổi số). */
-function initScores(sub, essayQs) {
+/* Điểm + nhận xét đã lưu → giá trị cho ô nhập, kèm danh sách câu bị giới hạn lại vì
+   đề đã sửa giảm điểm tối đa sau khi chấm (báo cho GV thay vì âm thầm đổi số). */
+function initGrade(sub, essayQs) {
   const out = {}
+  const comments = {}
   const clamped = new Set()
   const saved = sub?.manualScores || {}
+  const notes = sub?.manualComments || {}
   essayQs.forEach(q => {
     const key = `TL_${q.question_number}`
     const max = Number(q.points) || 0
+    comments[key] = String(notes[key] ?? '')
     const raw = saved[key]
     if (raw == null) { out[key] = ''; return }
     const num = Number(raw)
@@ -43,7 +49,7 @@ function initScores(sub, essayQs) {
     out[key] = String(bounded)
     if (bounded !== num) clamped.add(key)
   })
-  return { scores: out, clamped }
+  return { scores: out, comments, clamped }
 }
 
 /* Ảnh bài làm của 1 câu trong 1 lượt */
@@ -91,14 +97,16 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
   const sub      = attempts[attIdx] || null
   const prevAttempt = attIdx > 0 ? attempts[attIdx - 1] : null
 
-  const [state, setState] = useState(() => initScores(sub, essayQs))
-  // Đổi lượt/học sinh → nạp lại điểm đã lưu của bài đó (chỉ theo curId, không theo
-  // `sub` — danh sách ngoài tải lại sau mỗi lần lưu sẽ tạo object mới, nếu bám vào
-  // đó thì điểm đang gõ dở của lượt hiện tại bị xoá trắng).
-  useEffect(() => { setState(initScores(sub, essayQs)); setErr('') }, [curId])
-  const { scores, clamped: clampedKeys } = state
+  const [state, setState] = useState(() => initGrade(sub, essayQs))
+  // Đổi lượt/học sinh → nạp lại điểm & nhận xét đã lưu của bài đó (chỉ theo curId,
+  // không theo `sub` — danh sách ngoài tải lại sau mỗi lần lưu sẽ tạo object mới,
+  // nếu bám vào đó thì thứ đang gõ dở của lượt hiện tại bị xoá trắng).
+  useEffect(() => { setState(initGrade(sub, essayQs)); setErr('') }, [curId])
+  const { scores, comments, clamped: clampedKeys } = state
   const setScores = (updater) =>
     setState(prev => ({ ...prev, scores: typeof updater === 'function' ? updater(prev.scores) : updater }))
+  const setComment = (key, text) =>
+    setState(prev => ({ ...prev, comments: { ...prev.comments, [key]: text.slice(0, MAX_NOTE) } }))
 
   const total = useMemo(
     () => essayQs.reduce((s, q) => {
@@ -110,6 +118,7 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
 
   const currentKeys = new Set(essayQs.map(q => `TL_${q.question_number}`))
   const orphanedEntries = Object.entries(sub?.manualScores || {}).filter(([k]) => !currentKeys.has(k))
+  const orphanedNotes = Object.entries(sub?.manualComments || {}).filter(([k]) => !currentKeys.has(k))
 
   /* Tách rõ 2 phần điểm. `sub.score` là ĐIỂM TỔNG đã cộng cả tự luận đã chấm, nên
      phần trắc nghiệm = tổng − điểm tự luận đã lưu; nếu lấy thẳng sub.score ghi là
@@ -144,12 +153,17 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
 
   const doSave = async () => {
     const manual = {}
+    const notes = {}
     essayQs.forEach(q => {
       const key = `TL_${q.question_number}`
       const v = parseFloat(scores[key])
       if (!isNaN(v)) manual[key] = v
+      const t = (comments[key] || '').trim()
+      if (t) notes[key] = t
     })
-    await gradeSubmission(exam.id, sub.id, manual, teacherId)
+    // Gửi TOÀN BỘ cụm nhận xét (kể cả rỗng): server ghi đè nguyên cụm, gửi thiếu là
+    // xoá mất nhận xét của những câu không sửa lần này.
+    await gradeSubmission(exam.id, sub.id, manual, teacherId, notes)
     onSaved?.()
   }
 
@@ -169,11 +183,11 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
     }
   }
 
-  /* Chép nhanh điểm của lượt liền trước sang lượt đang chấm */
+  /* Chép nhanh điểm + nhận xét của lượt liền trước sang lượt đang chấm */
   const copyFromPrev = () => {
     if (!prevAttempt) return
-    const { scores: s } = initScores(prevAttempt, essayQs)
-    setScores(s)
+    const { scores: s, comments: c } = initGrade(prevAttempt, essayQs)
+    setState(prev => ({ ...prev, scores: s, comments: c }))
   }
 
   if (!sub) {
@@ -248,8 +262,8 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
               <button className={`ge-tool ${split ? 'is-on' : ''}`} onClick={() => setSplit(v => !v)}>
                 ⇋ {split ? 'Ẩn' : 'So sánh'} lượt {attIdx}
               </button>
-              <button className="ge-tool" onClick={copyFromPrev} title="Áp dụng điểm đã chấm ở lượt liền trước">
-                📋 Lấy điểm lượt {attIdx}
+              <button className="ge-tool" onClick={copyFromPrev} title="Áp dụng điểm và nhận xét đã ghi ở lượt liền trước">
+                📋 Lấy điểm + nhận xét lượt {attIdx}
               </button>
             </>
           )}
@@ -263,6 +277,8 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
               const key = `TL_${q.question_number}`
               const max = maxOf(q)
               const prevScore = prevAttempt?.manualScores?.[key]
+              const prevNote = prevAttempt?.manualComments?.[key]
+              const note = comments[key] ?? ''
               return (
                 <div key={key} className="ge-item">
                   <div className="ge-item-head">
@@ -311,6 +327,29 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
                       </button>
                     )}
                   </div>
+
+                  <div className="ge-note-row">
+                    <label className="ge-note-label" htmlFor={`ge-note-${key}`}>
+                      💬 Nhận xét câu này
+                      <span className="ge-note-hint">học sinh đọc được ngay khi điểm đã mở</span>
+                    </label>
+                    <textarea id={`ge-note-${key}`} className="ge-note-input"
+                      rows={2} maxLength={MAX_NOTE} value={note}
+                      placeholder="VD: Hướng làm đúng, nhưng thiếu điều kiện xác định ở ý b."
+                      onChange={e => setComment(key, e.target.value)} />
+                    <div className="ge-note-foot">
+                      <span className={`ge-note-count ${note.length > MAX_NOTE * 0.9 ? 'is-warn' : ''}`}>
+                        {note.length}/{MAX_NOTE}
+                      </span>
+                      {prevNote && (
+                        <button className="ge-mini-copy" type="button" title={prevNote}
+                          onClick={() => setComment(key, prevNote)}>
+                          ↩ Chép nhận xét lượt {attIdx}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   {clampedKeys.has(key) && (
                     <div className="ge-clamp-warn">
                       ⚠️ Điểm đã lưu trước đó vượt điểm tối đa hiện tại của câu này (đề có thể
@@ -323,16 +362,22 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
           </div>
         )}
 
-        {orphanedEntries.length > 0 && (
+        {(orphanedEntries.length > 0 || orphanedNotes.length > 0) && (
           <div className="ge-orphan-warn">
             <div className="ge-orphan-title">
-              ⚠️ Có điểm tự luận cũ không khớp câu nào trong đề hiện tại (đề có thể đã bị
-              sửa — thêm/xoá/đổi thứ tự câu tự luận sau khi bài này đã được chấm). Điểm này
-              vẫn được cộng vào tổng, nhưng nên kiểm tra và chấm lại cho đúng câu:
+              ⚠️ Có điểm/nhận xét tự luận cũ không khớp câu nào trong đề hiện tại (đề có thể
+              đã bị sửa — thêm/xoá/đổi thứ tự câu tự luận sau khi bài này đã được chấm). Điểm
+              vẫn được cộng vào tổng nhưng nhận xét thì học sinh KHÔNG thấy (không biết gắn
+              vào câu nào) — nên kiểm tra và chấm lại cho đúng câu:
             </div>
             {orphanedEntries.map(([key, val]) => (
               <div key={key} className="ge-orphan-row">
                 <code>{key}</code>: {val}đ
+              </div>
+            ))}
+            {orphanedNotes.map(([key, text]) => (
+              <div key={`c_${key}`} className="ge-orphan-row">
+                <code>{key}</code>: 💬 “{text.length > 60 ? `${text.slice(0, 60)}…` : text}”
               </div>
             ))}
           </div>

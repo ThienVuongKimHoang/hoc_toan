@@ -159,6 +159,10 @@ ALTER TABLE submissions ADD COLUMN IF NOT EXISTS violation_count INTEGER;
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS assignment_id VARCHAR(50);
 -- Điểm chấm tay cho câu tự luận (GV nhập): { "TL_1": 1.5, ... }. Cộng vào score.
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS manual_scores JSONB DEFAULT '{}';
+-- Nhận xét của GV cho từng câu tự luận: { "TL_1": "Ý b thiếu điều kiện xác định", ... }.
+-- Key trùng manual_scores. Học sinh đọc được ngay khi ĐIỂM mở — nhận xét không phải
+-- đáp án, nên không chờ mốc mở đáp án và không bị chặn bởi ngưỡng answerMinScore.
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS manual_comments JSONB DEFAULT '{}';
 -- Bản đồ trộn câu/đáp án học sinh thấy lúc làm bài (xem utils/shuffle.js buildShuffleMap
 -- ở frontend) — lưu lại để lúc xem "lịch sử làm bài" hiển thị đúng thứ tự/nhãn câu đã
 -- thấy khi làm, tránh "Câu 3" lúc làm thành "Câu 7" lúc xem lại (đề bật trộn câu).
@@ -746,6 +750,7 @@ def _sub_from_row(row: dict) -> dict:
         "classId":     r["class_id"],
         "assignmentId": r.get("assignment_id"),
         "manualScores": r.get("manual_scores") or {},
+        "manualComments": r.get("manual_comments") or {},
         "shuffleMap":  r.get("shuffle_map"),
     }
 
@@ -1099,27 +1104,34 @@ def update_submission_score(sub_id, score, max_score) -> bool:
     return row is not None
 
 
-def update_submission_grade(sub_id, manual_scores: dict, score, max_score=None) -> bool:
+def update_submission_grade(sub_id, manual_scores: dict, score, max_score=None,
+                            manual_comments=None) -> bool:
     """Lưu điểm chấm tay câu tự luận + điểm tổng đã cộng cho 1 bài nộp.
     max_score: điểm tối đa của đề TẠI THỜI ĐIỂM CHẤM — phải ghi lại cùng lúc, nếu
     không thì bài đã chấm giữ mẫu số cũ (đề sửa lại thang điểm sau khi học sinh nộp)
-    và mỗi màn hình quy về thang 10 ra một con số khác nhau."""
+    và mỗi màn hình quy về thang 10 ra một con số khác nhau.
+    manual_comments: nhận xét từng câu { "TL_1": "..." }. None = KHÔNG đụng tới nhận
+    xét đã lưu (client cũ không gửi field này thì nhận xét phải còn nguyên); dict =
+    ghi đè toàn bộ cụm."""
     try:
         sid = int(sub_id)
     except (TypeError, ValueError):
         return False
+    # Dựng SET theo đúng những cột được yêu cầu đổi — tránh nở tổ hợp if/else khi
+    # thêm cột. Các mảnh SET là hằng trong code, chỉ giá trị mới bind vào %s.
+    sets = ["manual_scores=%s", "score=%s"]
+    vals = [json.dumps(manual_scores or {}, ensure_ascii=False), score]
+    if max_score is not None:
+        sets.append("max_score=%s")
+        vals.append(max_score)
+    if manual_comments is not None:
+        sets.append("manual_comments=%s")
+        vals.append(json.dumps(manual_comments, ensure_ascii=False))
+    vals.append(sid)
     with _C() as conn:
         with conn.cursor() as cur:
-            if max_score is None:
-                cur.execute(
-                    "UPDATE submissions SET manual_scores=%s, score=%s WHERE id=%s RETURNING id",
-                    (json.dumps(manual_scores or {}, ensure_ascii=False), score, sid),
-                )
-            else:
-                cur.execute(
-                    "UPDATE submissions SET manual_scores=%s, score=%s, max_score=%s WHERE id=%s RETURNING id",
-                    (json.dumps(manual_scores or {}, ensure_ascii=False), score, max_score, sid),
-                )
+            cur.execute(
+                f"UPDATE submissions SET {', '.join(sets)} WHERE id=%s RETURNING id", vals)
             row = cur.fetchone()
         conn.commit()
     return row is not None

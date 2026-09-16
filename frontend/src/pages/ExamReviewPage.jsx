@@ -166,6 +166,7 @@ function MiniTrend({ points, currentId }) {
 function buildReview(exam, submission) {
   const answers = submission?.answers || {}
   const manual = submission?.manualScores || {}
+  const notes = submission?.manualComments || {}
   const shuffle = submission?.shuffleMap || null
 
   const blocks = []
@@ -217,8 +218,10 @@ function buildReview(exam, submission) {
         return {
           ...base, kind: 'essay', max,
           earned: Number(scored) || 0,
+          // status vẫn chỉ theo ĐIỂM: nhận xét không làm câu thành "đã chấm"
           status: scored == null ? 'pending' : 'essay',
           images: Array.isArray(picked) ? picked : [],
+          comment: notes[key] || '',
         }
       }
 
@@ -362,6 +365,15 @@ function ReviewQuestion({ item, showPassage }) {
             <p className="rv-note rv-note--warn">Bạn chưa nộp ảnh bài làm cho câu này.</p>
           )}
           {status === 'pending' && <p className="rv-note">Giáo viên chưa chấm câu tự luận này.</p>}
+          {item.comment && (
+            <div className="rv-teacher-note">
+              <span className="rv-teacher-note-head">💬 Nhận xét của giáo viên</span>
+              {/* Chữ GV tự gõ: render thuần để React tự escape. TUYỆT ĐỐI không đưa
+                  qua MathText — nó render bằng dangerouslySetInnerHTML với KaTeX
+                  trust:true, nhận xét có \href/\htmlClass sẽ thành lỗ chèn HTML. */}
+              <p className="rv-teacher-note-body">{item.comment}</p>
+            </div>
+          )}
         </div>
       )}
     </article>
@@ -538,6 +550,8 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
     const lockMax   = lockInfo?.submission?.maxScore
     const hasScore  = lockInfo?.scoreVisible && lockScore != null
     const unlockAt  = lockInfo?.answerUnlockAt
+    // Nhận xét không phải đáp án nên vẫn tới được đây (server gửi kèm khi điểm đã mở)
+    const essayNotes = lockInfo?.essayNotes || []
     const desc = lockInfo?.answerBelowMin
       ? `Đề này chỉ mở đáp án cho bài đạt từ ${lockInfo.answerMinScore} điểm trở lên. Làm lại để đạt mức đó rồi xem lời giải nhé.`
       : unlockAt
@@ -548,12 +562,31 @@ export default function ExamReviewPage({ examId, subId, onGoHome }) {
         <div className="etl-card">
           <div className="etl-icon">{lockInfo?.answerBelowMin ? '🎯' : '⏳'}</div>
           <h1 className="etl-title">
-            {hasScore ? 'Đáp án chưa được mở' : 'Kết quả chưa được công bố'}
+            {essayNotes.length > 0 ? 'Giáo viên đã nhận xét bài của bạn'
+              : hasScore ? 'Đáp án chưa được mở' : 'Kết quả chưa được công bố'}
           </h1>
           {hasScore && (
             <div className="etl-score" style={{ marginTop: 14 }}>
               <div className="etl-score-num">{scaledScore(lockScore, lockMax)} <span>/ 10</span></div>
               <div className="etl-score-label">điểm của bạn</div>
+            </div>
+          )}
+          {essayNotes.length > 0 && (
+            <div className="etl-notes">
+              <h2 className="etl-notes-title">💬 Nhận xét phần tự luận</h2>
+              {essayNotes.map(n => (
+                <div key={n.key} className="etl-note">
+                  <div className="etl-note-head">
+                    <span className="etl-note-q">Câu {n.questionNumber}</span>
+                    {n.score != null && (
+                      <span className="etl-note-score">{round2(n.score)}/{round2(n.max)}đ</span>
+                    )}
+                  </div>
+                  {/* Chữ GV tự gõ — render thuần, không qua MathText (xem ghi chú ở
+                      khối nhận xét của ReviewQuestion). */}
+                  <p className="etl-note-body">{n.comment}</p>
+                </div>
+              ))}
             </div>
           )}
           <p className="review-status-desc">{desc}</p>
