@@ -47,6 +47,11 @@ export default function Geo3DWorkbench({ user }) {
     setScene(clean)
   }
 
+  const handleSceneChange = (updated) => {
+    setScene(updated)
+    if (canSeeCode) setScript(JSON.stringify(updated, null, 2))
+  }
+
   const toggleFocus = () => setIsFocusMode(v => !v)
 
   return (
@@ -109,6 +114,7 @@ export default function Geo3DWorkbench({ user }) {
             }}
             onOpenScript={() => setShowDrawer(true)}
             canSeeCode={canSeeCode}
+            onSceneChange={handleSceneChange}
           />
 
           {busy && (

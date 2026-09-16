@@ -15,6 +15,7 @@
 
 export const EMPTY_SCENE = {
   points: [], segments: [], midpoints: [], faces: [], vectors: [], labels: [],
+  rightAngles: [], equalGroups: [],
 }
 
 const MAX_COORD  = 1000
@@ -43,7 +44,10 @@ export function validateScene(input) {
     return { scene: null, warnings, error: 'Dữ liệu hình không hợp lệ.' }
   }
 
-  const out = { points: [], segments: [], midpoints: [], faces: [], vectors: [], labels: [] }
+  const out = {
+    points: [], segments: [], midpoints: [], faces: [], vectors: [], labels: [],
+    rightAngles: [], equalGroups: [],
+  }
   const known = new Set()
 
   for (const p of arr(raw.points)) {
@@ -118,6 +122,21 @@ export function validateScene(input) {
     // Cắt $ để LaTeX không lọt ra canvas (canvas vẽ chữ bằng fillText).
     if (item.text != null) item.text = String(item.text).replace(/\$/g, '').slice(0, 40)
     out.labels.push(item)
+  }
+
+  for (const ra of arr(raw.rightAngles)) {
+    if (!ra || typeof ra !== 'object') continue
+    const v = id(ra.vertex)
+    const r1 = id(ra.ray1)
+    const r2 = id(ra.ray2)
+    if (!v || !r1 || !r2 || !known.has(v) || !known.has(r1) || !known.has(r2)) continue
+    if (r1 === v || r2 === v || r1 === r2) continue
+    out.rightAngles.push({ ...ra, vertex: v, ray1: r1, ray2: r2 })
+  }
+
+  for (const eg of arr(raw.equalGroups)) {
+    if (!eg || typeof eg !== 'object' || !eg.id) continue
+    out.equalGroups.push({ ...eg })
   }
 
   if (out.points.length < 2) {
