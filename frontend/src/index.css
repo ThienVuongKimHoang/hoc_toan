@@ -6959,21 +6959,348 @@ button { font-family: inherit; }
    GEO 3D VIEWER
    ═══════════════════════════════════════════════════════════════════════ */
 .g3d-root {
-  flex: 1; display: flex; min-height: 0; gap: 0;
+  flex: 1; display: flex; min-height: 0; gap: 0; position: relative; width: 100%; height: 100%;
+}
+.g3d-root--focus {
+  background: #f8fafc;
 }
 
 /* ── Canvas panel ── */
 .g3d-canvas-panel {
   flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0;
-  border-right: 1px solid #e2e8f0;
+  border-right: 1px solid #e2e8f0; position: relative;
 }
 
-/* Không có cột JSON bên phải (học sinh) thì bỏ luôn vạch kẻ, không thì thừa một
-   đường dọc lơ lửng ở mép phải. */
 .g3d-canvas-panel--full { border-right: none; }
 .g3d-canvas-panel:fullscreen,
 .g3d-canvas-panel:-webkit-full-screen { background: #fff; }
 
+/* ── Floating Glassmorphism Toolbar HUD (Cô lập không gian hiển thị) ── */
+.g3d-floating-hud {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  border-radius: 99px;
+  box-shadow: 0 10px 28px -4px rgba(15, 23, 42, 0.08), 0 3px 8px -2px rgba(15, 23, 42, 0.03);
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  transition: all 0.2s ease;
+}
+.g3d-floating-hud::-webkit-scrollbar { display: none; }
+
+.g3d-hud-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.g3d-hud-group--end {
+  margin-left: 4px;
+}
+.g3d-hud-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 99px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  color: #475569;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.g3d-hud-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+.g3d-hud-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.g3d-hud-btn--active {
+  background: #ede9fe !important;
+  border-color: #c4b5fd !important;
+  color: #6d28d9 !important;
+}
+.g3d-hud-btn--icon {
+  padding: 5px 9px;
+  font-size: 0.85rem;
+}
+.g3d-hud-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #ede9fe;
+  padding: 3px 8px;
+  border-radius: 99px;
+  border: none;
+  cursor: pointer;
+}
+.g3d-hud-cams {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+  border-left: 1px solid #e2e8f0;
+  border-right: 1px solid #e2e8f0;
+}
+.g3d-hud-chip {
+  padding: 3px 9px;
+  font-size: 0.73rem;
+  font-weight: 500;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 99px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.15s;
+}
+.g3d-hud-chip:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+.g3d-hud-chip--active {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+.g3d-spin-icon {
+  display: inline-block;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.g3d-spin-icon--anim {
+  animation: spin 2.5s linear infinite;
+}
+
+/* ── Thanh điều hướng nhanh góc trái khi ở Focus Mode ── */
+.g3d-focus-nav {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.g3d-focus-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #e2e8f0;
+  border-radius: 99px;
+  color: #334155;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.g3d-focus-nav-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+  transform: translateY(-1px);
+}
+.g3d-focus-nav-btn--exit {
+  color: #dc2626;
+}
+.g3d-focus-nav-btn--exit:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+/* ── Bảng Drawer trượt (Script JSON và Prompt AI) ── */
+.g3d-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: flex-end;
+  animation: fadeIn 0.2s ease-out;
+}
+.g3d-drawer-panel {
+  width: 360px;
+  max-width: 90vw;
+  height: 100%;
+  background: #ffffff;
+  box-shadow: -8px 0 25px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  animation: slideLeft 0.25s ease-out;
+}
+.g3d-drawer-prompt {
+  width: 600px;
+  max-width: 95vw;
+  height: 100%;
+  background: #ffffff;
+  box-shadow: -8px 0 25px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  animation: slideLeft 0.25s ease-out;
+}
+.g3d-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.g3d-drawer-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.g3d-drawer-close {
+  background: #f1f5f9;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #64748b;
+  transition: all 0.15s;
+}
+.g3d-drawer-close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+.g3d-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.g3d-textarea--drawer {
+  min-height: 380px;
+}
+@keyframes slideLeft {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+/* ── Gợi ý lơ lửng đáy màn hình ── */
+.g3d-hint-island {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 99px;
+  padding: 4px 14px;
+  font-size: 0.74rem;
+  color: #64748b;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* ── Trạng thái trống (Empty State) ── */
+.g3d-empty-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 380px;
+  padding: 32px 24px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(10px);
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 16px;
+  pointer-events: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+.g3d-empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 10px;
+}
+.g3d-empty-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 6px;
+}
+.g3d-empty-sub {
+  font-size: 0.82rem;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+.g3d-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #ffffff;
+  border: none;
+  border-radius: 99px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+  transition: opacity 0.15s;
+}
+.g3d-btn-primary:hover {
+  opacity: 0.92;
+}
+
+/* ── Chú thích nổi (Floating Note) ── */
+.g3d-note--float {
+  position: absolute;
+  bottom: 14px;
+  left: 16px;
+  max-width: 360px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  z-index: 5;
+}
+.g3d-note-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #7c3aed;
+  letter-spacing: 0.05em;
+}
+.g3d-note-text {
+  font-size: 0.78rem;
+  color: #334155;
+  line-height: 1.45;
+}
+
+/* ── Thanh công cụ dự phòng (legacy toolbar) ── */
 .g3d-toolbar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 8px 12px; background: #fff; border-bottom: 1px solid #e2e8f0;
@@ -7003,7 +7330,7 @@ button { font-family: inherit; }
 
 .g3d-wrap {
   flex: 1; min-height: 0; overflow: hidden;
-  background: #f8fafc; position: relative;
+  background: #f8fafc; position: relative; width: 100%; height: 100%;
 }
 .g3d-wrap canvas { width: 100%; height: 100%; display: block; }
 
@@ -7068,14 +7395,17 @@ button { font-family: inherit; }
 
 /* ── Bố cục trang vẽ hình: ô nhập AI trên, hình + cột JSON dưới ── */
 .g3d-workbench {
-  flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; position: relative;
+}
+.g3d-workbench--focus {
+  background: #f8fafc;
 }
 .g3d-prompt-bar {
   flex-shrink: 0; padding: 12px 16px; background: #fff;
   border-bottom: 1px solid #e2e8f0;
 }
 .g3d-prompt-bar > * { max-width: 880px; margin: 0 auto; }
-.g3d-stage { flex: 1; display: flex; min-height: 0; min-width: 0; }
+.g3d-stage { flex: 1; display: flex; min-height: 0; min-width: 0; position: relative; }
 .g3d-stage-main {
   flex: 1; display: flex; min-width: 0; min-height: 0; position: relative;
 }
@@ -7198,14 +7528,38 @@ button { font-family: inherit; }
 
 @media (max-width: 768px) {
   .g3d-root { flex-direction: column; }
-  .g3d-canvas-panel { min-height: 50vh; border-right: none; border-bottom: 1px solid #e2e8f0; }
+  .g3d-canvas-panel { min-height: 55vh; border-right: none; border-bottom: 1px solid #e2e8f0; }
   .g3d-editor { width: 100%; flex-shrink: 0; max-height: 50vh; }
   .g3d-stage { flex-direction: column; }
-  .g3d-stage-main { min-height: 46vh; }
+  .g3d-stage-main { min-height: 52vh; }
   .g3d-prompt-bar { padding: 10px 12px; }
   .g3d-toolbar { gap: 6px; padding: 7px 10px; }
   .g3d-cams { flex-wrap: nowrap; max-width: 100%; }
   .g3d-tool-group--end { margin-left: 0; }
+  .g3d-floating-hud {
+    top: auto;
+    bottom: 12px;
+    padding: 5px 8px;
+    gap: 4px;
+    max-width: calc(100% - 16px);
+  }
+  .g3d-hud-cams { display: none; }
+  .g3d-focus-nav {
+    top: 10px;
+    left: 10px;
+    gap: 6px;
+  }
+  .g3d-focus-nav-btn {
+    padding: 5px 10px;
+    font-size: 0.72rem;
+  }
+  .g3d-hint-island { display: none; }
+  .g3d-note--float {
+    bottom: 58px;
+    left: 10px;
+    right: 10px;
+    max-width: none;
+  }
 }
 
 /* ═══════════════════════════════════════════
