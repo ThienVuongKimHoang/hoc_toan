@@ -72,36 +72,9 @@ export default function Geo3DWorkbench({ user }) {
         </div>
       )}
 
-      {/* Nút bấm nhanh nổi ở góc trên trái khi ở Chế độ cô lập */}
-      {isFocusMode && (
-        <div className="g3d-focus-nav">
-          <button
-            className="g3d-focus-nav-btn"
-            onClick={() => setShowPromptDrawer(true)}
-            title="Mở bảng nhập / sửa đề bài AI"
-          >
-            ✨ Soạn đề bài
-          </button>
-          {canSeeCode && (
-            <button
-              className="g3d-focus-nav-btn"
-              onClick={() => setShowDrawer(true)}
-              title="Mở bảng mã JSON hình không gian"
-            >
-              {'{ }'} Script JSON
-            </button>
-          )}
-          <button
-            className="g3d-focus-nav-btn g3d-focus-nav-btn--exit"
-            onClick={toggleFocus}
-            title="Thoát chế độ cô lập để xem giao diện mở rộng"
-          >
-            ✕ Thoát cô lập
-          </button>
-        </div>
-      )}
-
-      {/* Sân khấu 3D chính */}
+      {/* Sân khấu 3D chính. Ở chế độ cô lập, các nút "Soạn đề bài", "Script JSON", "Thoát cô lập"
+          nằm ngay trong thanh công cụ của viewer — trước đây là cụm nút nổi riêng ở góc trái,
+          đè lên các nút Xoay / Nối điểm bên dưới. */}
       <div className="g3d-stage">
         <div className="g3d-stage-main">
           <Geo3DViewer

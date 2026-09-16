@@ -6975,14 +6975,27 @@ button { font-family: inherit; }
 .g3d-canvas-panel:fullscreen,
 .g3d-canvas-panel:-webkit-full-screen { background: #fff; }
 
-/* ── Floating Glassmorphism Toolbar HUD (Cô lập không gian hiển thị) ── */
-.g3d-floating-hud {
+/* ── Lớp phủ phía trên canvas: thanh công cụ + dải hướng dẫn xếp theo luồng dọc,
+   nên không bao giờ chồng lên nhau dù thanh công cụ xuống dòng ── */
+.g3d-overlay-top {
   position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 12px;
+  left: 12px;
+  right: 12px;
   z-index: 10;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.g3d-overlay-top > * { pointer-events: auto; }
+
+/* ── Floating Glassmorphism Toolbar HUD — tự xuống dòng khi hẹp thay vì giấu nút ── */
+.g3d-floating-hud {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
@@ -6990,17 +7003,17 @@ button { font-family: inherit; }
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(226, 232, 240, 0.85);
-  border-radius: 99px;
+  border-radius: 22px;
   box-shadow: 0 10px 28px -4px rgba(15, 23, 42, 0.08), 0 3px 8px -2px rgba(15, 23, 42, 0.03);
-  max-width: calc(100% - 24px);
-  overflow-x: auto;
-  scrollbar-width: none;
+  max-width: 100%;
+  box-sizing: border-box;
   transition: all 0.2s ease;
 }
-.g3d-floating-hud::-webkit-scrollbar { display: none; }
 
 .g3d-hud-group {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 4px;
 }
@@ -7038,6 +7051,15 @@ button { font-family: inherit; }
 .g3d-hud-btn--icon {
   padding: 5px 9px;
   font-size: 0.85rem;
+}
+.g3d-hud-btn--exit {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+.g3d-hud-btn--exit:hover {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 .g3d-hud-badge {
   font-size: 0.72rem;
@@ -7097,26 +7119,23 @@ button { font-family: inherit; }
 
 /* ── Dải thông báo hướng dẫn chế độ tương tác ── */
 .g3d-mode-banner {
-  position: absolute;
-  top: 56px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 8px;
   padding: 6px 16px;
   background: rgba(15, 23, 42, 0.88);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-radius: 99px;
+  border-radius: 18px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
   font-size: 0.78rem;
   color: #f8fafc;
   animation: fadeIn 0.2s ease-out;
-  white-space: nowrap;
-  max-width: calc(100% - 32px);
-  overflow-x: auto;
+  text-align: center;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .g3d-mode-banner strong {
   color: #93c5fd;
@@ -7125,6 +7144,8 @@ button { font-family: inherit; }
 /* Bộ chọn nhóm bằng nhau trên Mode Banner */
 .g3d-eq-selector {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 6px;
 }
@@ -7220,6 +7241,33 @@ button { font-family: inherit; }
   align-items: center;
   justify-content: space-between;
   font-size: 0.78rem;
+}
+/* Nút chọn kiểu nét liền / đứt (segmented) */
+.g3d-seg-style {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+}
+.g3d-seg-style-btn {
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.g3d-seg-style-btn:hover { color: #0f172a; }
+.g3d-seg-style-btn--active {
+  background: #ffffff;
+  color: #6d28d9;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
 }
 .g3d-seg-info-row--col {
   flex-direction: column;
@@ -7320,47 +7368,6 @@ button { font-family: inherit; }
 .g3d-btn-xs--del:hover {
   background: #fef2f2;
   color: #b91c1c;
-}
-
-/* ── Thanh điều hướng nhanh góc trái khi ở Focus Mode ── */
-.g3d-focus-nav {
-  position: absolute;
-  top: 14px;
-  left: 16px;
-  z-index: 12;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.g3d-focus-nav-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid #e2e8f0;
-  border-radius: 99px;
-  color: #334155;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.g3d-focus-nav-btn:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  color: #0f172a;
-  transform: translateY(-1px);
-}
-.g3d-focus-nav-btn--exit {
-  color: #dc2626;
-}
-.g3d-focus-nav-btn--exit:hover {
-  background: #fef2f2;
-  border-color: #fca5a5;
 }
 
 /* ── Bảng Drawer trượt (Script JSON và Prompt AI) ── */
@@ -7771,26 +7778,15 @@ button { font-family: inherit; }
   .g3d-toolbar { gap: 6px; padding: 7px 10px; }
   .g3d-cams { flex-wrap: nowrap; max-width: 100%; }
   .g3d-tool-group--end { margin-left: 0; }
+  .g3d-overlay-top { top: 8px; left: 8px; right: 8px; gap: 6px; }
   .g3d-floating-hud {
-    top: auto;
-    bottom: 12px;
     padding: 5px 8px;
     gap: 4px;
-    max-width: calc(100% - 16px);
   }
   .g3d-hud-cams { display: none; }
-  .g3d-focus-nav {
-    top: 10px;
-    left: 10px;
-    gap: 6px;
-  }
-  .g3d-focus-nav-btn {
-    padding: 5px 10px;
-    font-size: 0.72rem;
-  }
   .g3d-hint-island { display: none; }
   .g3d-note--float {
-    bottom: 58px;
+    bottom: 10px;
     left: 10px;
     right: 10px;
     max-width: none;

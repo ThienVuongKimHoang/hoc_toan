@@ -345,7 +345,8 @@ function renderScene(ctx, W, H, scene, ptMap, bb, rx, ry, zoom, options = {}) {
     if (isSelected) col = '#f59e0b'
     else if (isHovered) col = '#3b82f6'
 
-    ctx.setLineDash([])
+    // Đoạn highlight vẫn phải theo kiểu nét — trước đây luôn vẽ liền nên đổi sang nét đứt không có tác dụng
+    ctx.setLineDash(seg.dashed ? [7, 5] : [])
     ctx.shadowColor = col
     ctx.shadowBlur  = 7 + pulse * 2.5
     ctx.strokeStyle = col
@@ -575,6 +576,14 @@ const CAMERAS = [
   { id: 'top',     name: 'Từ trên xuống', rx: -RX_LIMIT,     ry: 0 },
 ]
 
+/* Hai đoạn thẳng là một (không phân biệt chiều from/to) */
+const sameSeg = (a, b) =>
+  !!a && !!b && ((a.from === b.from && a.to === b.to) || (a.from === b.to && a.to === b.from))
+
+/* Kích thước ước lượng của popover đoạn thẳng — để kẹp nó nằm gọn trong khung canvas */
+const POPOVER_W = 250
+const POPOVER_H = 300
+
 /* ─────────────────── Component ─────────────────── */
 export default function Geo3DViewer({
   scene,
@@ -607,7 +616,9 @@ export default function Geo3DViewer({
   const [connectingFrom, setConnectingFrom] = useState(null)
   const [rubberBandPos, setRubberBandPos] = useState(null)
   const [rightAngleDraft, setRightAngleDraft] = useState([])
-  const [selectedSeg, setSelectedSeg]   = useState(null) // Object thông tin đoạn thẳng được click
+  /* Chỉ giữ {from, to} của đoạn đang chọn; dữ liệu đoạn luôn đọc lại từ cảnh (selectedSeg)
+     để popover cập nhật ngay khi đổi nét/nhóm và tự đóng khi đoạn bị xoá. */
+  const [selKey, setSelKey]             = useState(null)
   const [popoverPos, setPopoverPos]     = useState(null) // { x, y }
 
   /* Animation & Physics Refs */
@@ -622,13 +633,19 @@ export default function Geo3DViewer({
   const entranceRef    = useRef(1.0)
   const animTimeRef    = useRef(0)
   const rafRef         = useRef(null)
+  /* Cảnh mà chính viewer vừa sửa rồi đẩy lên cha qua onSceneChange */
+  const emittedRef     = useRef(null)
 
-  const drag  = useRef({ on: false, x: 0, y: 0, lastX: 0, lastY: 0, time: 0, moved: false })
+  const drag  = useRef({ on: false, x: 0, y: 0, lastX: 0, lastY: 0, time: 0, moved: false, consumed: false, cancelConnect: false })
   const touch = useRef({ on: false, x: 0, y: 0, lastX: 0, lastY: 0, time: 0, moved: false })
 
   const activeScene = scene ?? uncontrolled
   const isEmpty = !(activeScene?.points || []).length
 
+  const closePopover = useCallback(() => { setSelKey(null); setPopoverPos(null) }, [])
+  const clearConnect = useCallback(() => { setConnectingFrom(null); setRubberBandPos(null) }, [])
+
+  /* Hình MỚI (AI dựng / giáo viên áp script): về góc nhìn chuẩn, tỉ lệ 100%, bỏ lựa chọn cũ */
   const triggerEntrance = useCallback(() => {
     targetRxRef.current = INIT_RX
     targetRyRef.current = INIT_RY
@@ -637,7 +654,11 @@ export default function Geo3DViewer({
     entranceRef.current = 0.82
     isTransitionRef.current = true
     setActiveCam('default')
-  }, [])
+    setZoom(1.0)
+    closePopover()
+    clearConnect()
+    setRightAngleDraft([])
+  }, [closePopover, clearConnect])
 
   useEffect(() => {
     if (initialSceneData) {
@@ -647,7 +668,9 @@ export default function Geo3DViewer({
   }, [initialSceneData, triggerEntrance])
 
   useEffect(() => {
-    if (scene) {
+    // Cảnh do chính viewer sửa (nối điểm, đổi nét, xoá đoạn…) quay về qua prop `scene` thì
+    // KHÔNG chạy hiệu ứng vào — nếu không mỗi lần sửa camera lại nhảy về góc mặc định.
+    if (scene && scene !== emittedRef.current) {
       triggerEntrance()
     }
   }, [scene, triggerEntrance])
@@ -682,9 +705,15 @@ export default function Geo3DViewer({
     }
   }, [ptMap])
 
+  const selectedSeg = useMemo(
+    () => (selKey ? (activeScene.segments || []).find(s => sameSeg(s, selKey)) || null : null),
+    [activeScene.segments, selKey],
+  )
+
   /* Cập nhật scene và gọi callback */
   const updateScene = useCallback((newScene) => {
     if (onSceneChange) {
+      emittedRef.current = newScene
       onSceneChange(newScene)
     } else {
       setUncontrolled(newScene)
@@ -720,12 +749,12 @@ export default function Geo3DViewer({
         connectingFromId: connectingFrom,
         rubberBandPos,
         hoveredSegKey,
-        selectedSegKey: selectedSeg ? `${selectedSeg.from}-${selectedSeg.to}` : null,
+        selectedSegKey: selKey ? `${selKey.from}-${selKey.to}` : null,
         rightAngleDraft,
       }
     )
     ctx.restore()
-  }, [activeScene, ptMap, bb, zoom, hoveredPtId, connectingFrom, rubberBandPos, hoveredSegKey, selectedSeg, rightAngleDraft])
+  }, [activeScene, ptMap, bb, zoom, hoveredPtId, connectingFrom, rubberBandPos, hoveredSegKey, selKey, rightAngleDraft])
 
   /* ── Vòng lặp Animation 60fps ── */
   useEffect(() => {
@@ -833,24 +862,36 @@ export default function Geo3DViewer({
 
   /* ── Thao tác Chuột & Tương tác Điểm/Đoạn ── */
   const onDown = (e) => {
-    const rect = cvs.current?.getBoundingClientRect()
-    if (!rect) return
+    // Chỉ nhận thao tác BẮT ĐẦU trên canvas. Trước đây bấm nút trong popover cũng bị tính
+    // là click canvas: mouseup đóng popover trước khi sự kiện click tới nút, nên "Nét đứt"
+    // và "Xoá đoạn" không bao giờ ăn.
+    if (e.button !== 0 || e.target !== cvs.current) return
+    const rect = cvs.current.getBoundingClientRect()
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
 
-    drag.current = { on: true, x: e.clientX, y: e.clientY, lastX: e.clientX, lastY: e.clientY, time: performance.now(), moved: false }
+    drag.current = {
+      on: true, x: e.clientX, y: e.clientY, lastX: e.clientX, lastY: e.clientY,
+      time: performance.now(), moved: false, consumed: false, cancelConnect: false,
+    }
     velXRef.current = 0
     velYRef.current = 0
     isTransitionRef.current = false
     setIsDrag(true)
 
+    if (activeTool !== 'connect') return
     const hitPt = hitTestPoint(mx, my)
-
-    // Nếu đang ở chế độ Nối điểm và nhấn vào 1 điểm
-    if (activeTool === 'connect' && hitPt) {
+    if (!hitPt) return
+    if (connectingFrom && connectingFrom !== hitPt) {
+      // Cách click lần lượt 2 điểm: đây là điểm thứ hai
+      createSegment(connectingFrom, hitPt)
+      clearConnect()
+      drag.current.consumed = true
+    } else if (connectingFrom === hitPt) {
+      drag.current.cancelConnect = true   // click lại đúng điểm đầu → huỷ (xử lý ở mouseup)
+    } else {
       setConnectingFrom(hitPt)
       setRubberBandPos({ x: mx, y: my })
-      return
     }
   }
 
@@ -859,36 +900,38 @@ export default function Geo3DViewer({
     if (!rect) return
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
+    const d = drag.current
 
-    // Cập nhật điểm hover
-    const hitPt = hitTestPoint(mx, my)
-    setHoveredPtId(hitPt)
+    if (d.on && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) d.moved = true
 
-    // Cập nhật đoạn thẳng hover
+    // Chuột đang ở trên popover / khung trống (không kéo) → không hover xuyên xuống hình
+    if (!d.on && e.target !== cvs.current) {
+      setHoveredPtId(null)
+      setHoveredSegKey(null)
+      return
+    }
+
+    setHoveredPtId(hitTestPoint(mx, my))
     const hitSeg = hitTestSegment(mx, my)
     setHoveredSegKey(hitSeg ? `${hitSeg.from}-${hitSeg.to}` : null)
 
-    // Nếu đang kéo nối điểm (rubber-band)
+    // Đang nối điểm: đường cao su theo chuột, không xoay hình
     if (connectingFrom) {
       setRubberBandPos({ x: mx, y: my })
       return
     }
 
-    if (!drag.current.on) return
+    if (!d.on) return
 
     const now = performance.now()
-    const dx = e.clientX - drag.current.lastX
-    const dy = e.clientY - drag.current.lastY
+    const dx = e.clientX - d.lastX
+    const dy = e.clientY - d.lastY
 
-    if (Math.hypot(e.clientX - drag.current.x, e.clientY - drag.current.y) > 4) {
-      drag.current.moved = true
-    }
+    d.lastX = e.clientX
+    d.lastY = e.clientY
 
-    drag.current.lastX = e.clientX
-    drag.current.lastY = e.clientY
-
-    const dt = Math.max(1, now - drag.current.time)
-    drag.current.time = now
+    const dt = Math.max(1, now - d.time)
+    d.time = now
 
     velXRef.current = (dx / dt) * 0.09
     velYRef.current = (dy / dt) * 0.09
@@ -901,58 +944,50 @@ export default function Geo3DViewer({
   }, [connectingFrom, hitTestPoint, hitTestSegment])
 
   const onUp = (e) => {
-    const rect = cvs.current?.getBoundingClientRect()
-    const mx = rect ? e.clientX - rect.left : 0
-    const my = rect ? e.clientY - rect.top : 0
-
-    // Kết thúc nối điểm bằng kéo thả
-    if (connectingFrom) {
-      const hitPt = hitTestPoint(mx, my)
-      if (hitPt && hitPt !== connectingFrom) {
-        // Tạo đoạn thẳng mới
-        createSegment(connectingFrom, hitPt)
-      }
-      setConnectingFrom(null)
-      setRubberBandPos(null)
-    }
-
-    // Xử lý click (khi không kéo xoay)
-    if (!drag.current.moved && rect) {
-      handleClickCanvas(mx, my)
-    }
-
-    drag.current.on = false
+    const d = drag.current
+    if (!d.on) return            // mouseup không bắt đầu từ canvas (VD bấm nút popover) → bỏ qua
+    d.on = false
     setIsDrag(false)
-  }
+    if (d.consumed) return
 
-  /* ── Xử lý Click tương tác theo từng công cụ ── */
-  const handleClickCanvas = (mx, my) => {
-    const hitPt = hitTestPoint(mx, my)
-    const hitSeg = hitTestSegment(mx, my)
+    const rect = cvs.current?.getBoundingClientRect()
+    if (!rect) return
+    const mx = e.clientX - rect.left
+    const my = e.clientY - rect.top
 
-    // 1. Chế độ Nối điểm (Connect)
     if (activeTool === 'connect') {
-      if (hitPt) {
-        if (!connectingFrom) {
-          setConnectingFrom(hitPt)
-          setRubberBandPos({ x: mx, y: my })
-        } else if (connectingFrom !== hitPt) {
-          createSegment(connectingFrom, hitPt)
-          setConnectingFrom(null)
-          setRubberBandPos(null)
-        } else {
-          setConnectingFrom(null)
-          setRubberBandPos(null)
-        }
-      } else {
-        setConnectingFrom(null)
-        setRubberBandPos(null)
+      if (d.cancelConnect && !d.moved) { clearConnect(); return }
+      if (!connectingFrom) return
+      const hitPt = hitTestPoint(mx, my)
+      if (d.moved) {
+        // Kéo-thả: thả trúng điểm khác thì nối, thả ra chỗ khác thì huỷ
+        if (hitPt && hitPt !== connectingFrom) createSegment(connectingFrom, hitPt)
+        clearConnect()
+      } else if (!hitPt) {
+        clearConnect()             // click ra chỗ trống → huỷ
       }
+      // Click trúng điểm đầu (không kéo): giữ lại, chờ click điểm thứ hai
       return
     }
 
-    // 2. Chế độ Đánh dấu góc vuông (Right Angle)
+    if (!d.moved) handleClickCanvas(mx, my)
+  }
+
+  const onLeave = () => {
+    setHoveredPtId(null)
+    setHoveredSegKey(null)
+    const d = drag.current
+    if (!d.on) return
+    d.on = false
+    setIsDrag(false)
+    if (connectingFrom && d.moved) clearConnect()
+  }
+
+  /* ── Xử lý Click tương tác theo từng công cụ (nối điểm xử lý riêng ở onDown/onUp) ── */
+  const handleClickCanvas = (mx, my) => {
+    // 1. Chế độ Đánh dấu góc vuông (Right Angle)
     if (activeTool === 'rightAngle') {
+      const hitPt = hitTestPoint(mx, my)
       if (hitPt) {
         const nextDraft = [...rightAngleDraft, hitPt]
         if (nextDraft.length === 3) {
@@ -968,22 +1003,28 @@ export default function Geo3DViewer({
       return
     }
 
-    // 3. Chế độ Đánh dấu đoạn bằng nhau (Equal Mark)
+    // 2. Chế độ Đánh dấu đoạn bằng nhau (Equal Mark)
     if (activeTool === 'equalMark') {
+      const hitSeg = hitTestSegment(mx, my)
       if (hitSeg) {
         toggleSegmentEqualGroup(hitSeg, activeEqGroup)
       }
       return
     }
 
-    // 4. Chế độ Xoay (Rotate) mặc định: Click vào đoạn thẳng để xem thông tin
+    // 3. Chế độ Xoay (Rotate) mặc định: Click vào đoạn thẳng để mở bảng chỉnh đoạn
     if (activeTool === 'rotate') {
+      const hitSeg = hitTestSegment(mx, my)
       if (hitSeg) {
-        setSelectedSeg(hitSeg)
-        setPopoverPos({ x: Math.min(mx + 10, (wrap.current?.clientWidth || 300) - 240), y: Math.max(10, my - 60) })
+        const W = wrap.current?.clientWidth || 300
+        const H = wrap.current?.clientHeight || 300
+        setSelKey({ from: hitSeg.from, to: hitSeg.to })
+        setPopoverPos({
+          x: Math.max(8, Math.min(mx + 12, W - POPOVER_W - 8)),
+          y: Math.max(8, Math.min(my - 60, H - POPOVER_H - 8)),
+        })
       } else {
-        setSelectedSeg(null)
-        setPopoverPos(null)
+        closePopover()
       }
     }
   }
@@ -991,8 +1032,7 @@ export default function Geo3DViewer({
   /* ── Thao tác tạo/sửa đối tượng hình học ── */
   const createSegment = (from, to) => {
     const segs = [...(activeScene.segments || [])]
-    const exists = segs.find(s => (s.from === from && s.to === to) || (s.from === to && s.to === from))
-    if (!exists) {
+    if (!segs.some(s => sameSeg(s, { from, to }))) {
       segs.push({ from, to, color: '#2563eb', width: 2.0 })
       updateScene({ ...activeScene, segments: segs })
     }
@@ -1011,39 +1051,60 @@ export default function Geo3DViewer({
   }
 
   const toggleSegmentEqualGroup = (seg, groupId) => {
-    const segs = (activeScene.segments || []).map(s => {
-      if ((s.from === seg.from && s.to === seg.to) || (s.from === seg.to && s.to === seg.from)) {
-        return { ...s, equalGroup: s.equalGroup === groupId ? null : groupId }
-      }
-      return s
-    })
+    const segs = (activeScene.segments || []).map(s =>
+      sameSeg(s, seg) ? { ...s, equalGroup: s.equalGroup === groupId ? null : groupId } : s
+    )
     updateScene({ ...activeScene, segments: segs })
   }
 
-  const toggleSegmentDashed = (seg) => {
+  const setSegmentDashed = (seg, dashed) => {
     const segs = (activeScene.segments || []).map(s => {
-      if ((s.from === seg.from && s.to === seg.to) || (s.from === seg.to && s.to === seg.from)) {
-        return { ...s, dashed: !s.dashed }
-      }
-      return s
+      if (!sameSeg(s, seg)) return s
+      const next = { ...s }
+      if (dashed) next.dashed = true
+      else delete next.dashed          // giữ JSON gọn: nét liền là mặc định
+      return next
     })
     updateScene({ ...activeScene, segments: segs })
-    if (selectedSeg) setSelectedSeg({ ...selectedSeg, dashed: !selectedSeg.dashed })
   }
 
   const deleteSegment = (seg) => {
-    const segs = (activeScene.segments || []).filter(s =>
-      !((s.from === seg.from && s.to === seg.to) || (s.from === seg.to && s.to === seg.from))
-    )
+    const segs = (activeScene.segments || []).filter(s => !sameSeg(s, seg))
     updateScene({ ...activeScene, segments: segs })
-    setSelectedSeg(null)
-    setPopoverPos(null)
+    closePopover()
   }
 
-  const onWheel = useCallback((e) => {
-    e.preventDefault()
-    setZoom(v => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v * (e.deltaY < 0 ? 1.1 : 0.91))))
+  /* Cuộn chuột để zoom. Gắn tay với passive:false vì onWheel của React là passive —
+     preventDefault vô tác dụng, trang vẫn cuộn và hình bị zoom ngoài ý muốn khi lướt qua. */
+  useEffect(() => {
+    const el = wrap.current; if (!el) return
+    const onWheel = (e) => {
+      if (e.target !== cvs.current) return
+      e.preventDefault()
+      setZoom(v => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v * (e.deltaY < 0 ? 1.1 : 0.91))))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
   }, [])
+
+  /* Phím tắt: Esc huỷ thao tác dở / đóng bảng; Delete (Backspace trên Mac) xoá đoạn đang chọn */
+  useEffect(() => {
+    if (!selectedSeg && !connectingFrom && !rightAngleDraft.length) return
+    const onKey = (e) => {
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.key === 'Escape') {
+        closePopover()
+        clearConnect()
+        setRightAngleDraft([])
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedSeg) {
+        e.preventDefault()
+        deleteSegment(selectedSeg)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   /* ── Thao tác cơ bản ── */
   const resetView = useCallback(() => {
@@ -1078,7 +1139,8 @@ export default function Geo3DViewer({
     off.width = W * k; off.height = H * k
     const ctx = off.getContext('2d')
     ctx.scale(k, k)
-    renderScene(ctx, W, H, activeScene, ptMap, bb, rxRef.current, ryRef.current, zoom)
+    // Ảnh xuất luôn ở tỉ lệ 100% (giữ góc xoay hiện tại), không phụ thuộc mức zoom đang xem
+    renderScene(ctx, W, H, activeScene, ptMap, bb, rxRef.current, ryRef.current, 1.0)
     const d = new Date()
     const pad = n => String(n).padStart(2, '0')
     const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
@@ -1097,6 +1159,16 @@ export default function Geo3DViewer({
     else (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el)
   }
 
+  /* Bảng soạn đề / Script nằm NGOÀI khung toàn màn hình → thoát fullscreen trước, không thì
+     bảng mở ra mà không nhìn thấy. */
+  const openOutside = (fn) => {
+    const doc = document
+    if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+      (doc.exitFullscreen || doc.webkitExitFullscreen)?.call(doc)
+    }
+    fn()
+  }
+
   useEffect(() => {
     const sync = () =>
       setIsFull(!!(document.fullscreenElement || document.webkitFullscreenElement))
@@ -1112,8 +1184,7 @@ export default function Geo3DViewer({
   const equalCounterparts = useMemo(() => {
     if (!selectedSeg?.equalGroup) return []
     return (activeScene.segments || []).filter(s =>
-      s.equalGroup === selectedSeg.equalGroup &&
-      !((s.from === selectedSeg.from && s.to === selectedSeg.to) || (s.from === selectedSeg.to && s.to === selectedSeg.from))
+      s.equalGroup === selectedSeg.equalGroup && !sameSeg(s, selectedSeg)
     )
   }, [activeScene.segments, selectedSeg])
 
@@ -1123,148 +1194,167 @@ export default function Geo3DViewer({
     return dist3D(pA, pB).toFixed(2)
   }, [ptMap, selectedSeg])
 
+  const pickTool = (tool) => {
+    setActiveTool(tool)
+    clearConnect()
+    setRightAngleDraft([])
+    closePopover()
+  }
+
   return (
     <div className={`g3d-root ${isFocusMode ? 'g3d-root--focus' : ''}`}>
       <div ref={panel} className="g3d-canvas-panel g3d-canvas-panel--full">
 
-        {/* Floating Glassmorphism Toolbar HUD */}
-        {showTools && (
-          <div className="g3d-floating-hud">
+        {/* Lớp phủ phía trên: thanh công cụ + dải hướng dẫn xếp chồng theo luồng (không chồng
+            lên nhau), thanh công cụ tự xuống dòng khi khung hẹp thay vì giấu nút đi. */}
+        <div className="g3d-overlay-top">
+          {showTools && (
+            <div className="g3d-floating-hud">
 
-            {/* Bộ chọn Chế độ tương tác (Tool Palette) */}
-            <div className="g3d-hud-group g3d-hud-tools">
-              <button
-                className={`g3d-hud-btn ${activeTool === 'rotate' ? 'g3d-hud-btn--active' : ''}`}
-                onClick={() => { setActiveTool('rotate'); setConnectingFrom(null); setRightAngleDraft([]) }}
-                title="Chế độ xoay & quan sát (Click vào đoạn thẳng để xem thông tin)"
-              >
-                🔄 Xoay
-              </button>
-
-              <button
-                className={`g3d-hud-btn ${activeTool === 'connect' ? 'g3d-hud-btn--active' : ''}`}
-                onClick={() => { setActiveTool('connect'); setRightAngleDraft([]); setSelectedSeg(null) }}
-                title="Kéo từ điểm này sang điểm khác để vẽ đoạn thẳng mới"
-              >
-                ✏️ Nối điểm
-              </button>
-
-              <button
-                className={`g3d-hud-btn ${activeTool === 'rightAngle' ? 'g3d-hud-btn--active' : ''}`}
-                onClick={() => { setActiveTool('rightAngle'); setConnectingFrom(null); setSelectedSeg(null) }}
-                title="Bấm chọn 3 điểm để đánh dấu góc vuông"
-              >
-                📐 Góc vuông
-              </button>
-
-              <button
-                className={`g3d-hud-btn ${activeTool === 'equalMark' ? 'g3d-hud-btn--active' : ''}`}
-                onClick={() => { setActiveTool('equalMark'); setConnectingFrom(null); setRightAngleDraft([]); setSelectedSeg(null) }}
-                title="Bấm vào các đoạn thẳng để gán vào nhóm bằng nhau"
-              >
-                🏷️ Bằng nhau
-              </button>
-            </div>
-
-            {/* Nhóm hoạt hoạ xoay tự động & đặt lại */}
-            <div className="g3d-hud-group">
-              <button
-                className={`g3d-hud-btn ${isAutoRotating ? 'g3d-hud-btn--active' : ''}`}
-                onClick={toggleAutoRotate}
-                title={isAutoRotating ? 'Tạm dừng xoay tự động' : 'Bật xoay 3D tự động (Turntable)'}
-              >
-                <span className={`g3d-spin-icon ${isAutoRotating ? 'g3d-spin-icon--anim' : ''}`}>🔄</span>
-                <span className="g3d-hud-btn-txt">{isAutoRotating ? 'Dừng' : 'Xoay auto'}</span>
-              </button>
-
-              <button className="g3d-hud-btn" onClick={resetView} title="Về góc nhìn chuẩn">
-                ↺ Đặt lại
-              </button>
-            </div>
-
-            {/* Nhóm góc nhìn máy quay */}
-            <div className="g3d-hud-group g3d-hud-cams">
-              {CAMERAS.map(c => (
+              {/* Bộ chọn Chế độ tương tác (Tool Palette) */}
+              <div className="g3d-hud-group g3d-hud-tools">
                 <button
-                  key={c.id}
-                  className={`g3d-hud-chip ${activeCam === c.id ? 'g3d-hud-chip--active' : ''}`}
-                  onClick={() => setCamera(c)}
+                  className={`g3d-hud-btn ${activeTool === 'rotate' ? 'g3d-hud-btn--active' : ''}`}
+                  onClick={() => pickTool('rotate')}
+                  title="Chế độ xoay & quan sát (Click vào đoạn thẳng để đổi nét / xoá)"
                 >
-                  {c.name}
+                  🔄 Xoay
                 </button>
-              ))}
-            </div>
 
-            {/* Nhóm thu phóng */}
-            <div className="g3d-hud-group">
-              <button className="g3d-hud-btn g3d-hud-btn--icon" onClick={() => stepZoom(0.85)} title="Thu nhỏ">−</button>
-              <button className="g3d-hud-badge" onClick={() => setZoom(1.0)} title="Về tỉ lệ 100%">
-                {Math.round(zoom * 100)}%
-              </button>
-              <button className="g3d-hud-btn g3d-hud-btn--icon" onClick={() => stepZoom(1.2)} title="Phóng to">+</button>
-            </div>
-
-            {/* Nhóm thao tác & Chế độ cô lập */}
-            <div className="g3d-hud-group g3d-hud-group--end">
-              {onToggleFocus && (
                 <button
-                  className={`g3d-hud-btn ${isFocusMode ? 'g3d-hud-btn--active' : ''}`}
-                  onClick={onToggleFocus}
-                  title={isFocusMode ? 'Thoát chế độ cô lập' : 'Cô lập hình (ẩn các thành phần thừa)'}
+                  className={`g3d-hud-btn ${activeTool === 'connect' ? 'g3d-hud-btn--active' : ''}`}
+                  onClick={() => pickTool('connect')}
+                  title="Kéo từ điểm này sang điểm khác để vẽ đoạn thẳng mới"
                 >
-                  👁️ {isFocusMode ? 'Đang cô lập' : 'Cô lập'}
+                  ✏️ Nối điểm
                 </button>
-              )}
-              {canSeeCode && onOpenScript && (
-                <button
-                  className="g3d-hud-btn"
-                  onClick={onOpenScript}
-                  title="Mở bảng mã JSON hình"
-                >
-                  {'{ }'} Script
-                </button>
-              )}
-              <button className="g3d-hud-btn" onClick={savePNG} disabled={isEmpty} title="Tải ảnh PNG độ nét cao">
-                ⬇ PNG
-              </button>
-              <button className="g3d-hud-btn g3d-hud-btn--icon" onClick={toggleFull} title="Toàn màn hình">
-                {isFull ? '⤡' : '⤢'}
-              </button>
-            </div>
-          </div>
-        )}
 
-        {/* Thanh hướng dẫn ngữ cảnh theo chế độ thao tác */}
-        {activeTool !== 'rotate' && (
-          <div className="g3d-mode-banner">
-            {activeTool === 'connect' && (
-              <span>
-                ✏️ <strong>Nối điểm</strong>: {connectingFrom ? `Đã chọn điểm ${connectingFrom} — click hoặc thả vào điểm thứ 2 để nối.` : 'Kéo từ điểm này sang điểm khác hoặc click lần lượt 2 điểm để vẽ đoạn thẳng.'}
-              </span>
-            )}
-            {activeTool === 'rightAngle' && (
-              <span>
-                📐 <strong>Đánh dấu góc vuông</strong>: {rightAngleDraft.length === 0 ? 'Click đỉnh góc vuông (VD: điểm A).' : rightAngleDraft.length === 1 ? `Đỉnh [${rightAngleDraft[0]}] — click điểm tiếp theo trên cạnh thứ nhất.` : `Đã chọn [${rightAngleDraft[0]}, ${rightAngleDraft[1]}] — click điểm trên cạnh thứ hai.`}
-              </span>
-            )}
-            {activeTool === 'equalMark' && (
-              <div className="g3d-eq-selector">
-                <span>🏷️ <strong>Gán đoạn bằng nhau</strong>: Chọn nhóm:</span>
-                {EQUAL_PALETTE.map(g => (
+                <button
+                  className={`g3d-hud-btn ${activeTool === 'rightAngle' ? 'g3d-hud-btn--active' : ''}`}
+                  onClick={() => pickTool('rightAngle')}
+                  title="Bấm chọn 3 điểm để đánh dấu góc vuông"
+                >
+                  📐 Góc vuông
+                </button>
+
+                <button
+                  className={`g3d-hud-btn ${activeTool === 'equalMark' ? 'g3d-hud-btn--active' : ''}`}
+                  onClick={() => pickTool('equalMark')}
+                  title="Bấm vào các đoạn thẳng để gán vào nhóm bằng nhau"
+                >
+                  🏷️ Bằng nhau
+                </button>
+              </div>
+
+              {/* Nhóm hoạt hoạ xoay tự động & đặt lại */}
+              <div className="g3d-hud-group">
+                <button
+                  className={`g3d-hud-btn ${isAutoRotating ? 'g3d-hud-btn--active' : ''}`}
+                  onClick={toggleAutoRotate}
+                  title={isAutoRotating ? 'Tạm dừng xoay tự động' : 'Bật xoay 3D tự động (Turntable)'}
+                >
+                  <span className={`g3d-spin-icon ${isAutoRotating ? 'g3d-spin-icon--anim' : ''}`}>🔄</span>
+                  <span className="g3d-hud-btn-txt">{isAutoRotating ? 'Dừng' : 'Xoay auto'}</span>
+                </button>
+
+                <button className="g3d-hud-btn" onClick={resetView} title="Về góc nhìn chuẩn">
+                  ↺ Đặt lại
+                </button>
+              </div>
+
+              {/* Nhóm góc nhìn máy quay */}
+              <div className="g3d-hud-group g3d-hud-cams">
+                {CAMERAS.map(c => (
                   <button
-                    key={g.id}
-                    className={`g3d-eq-chip ${activeEqGroup === g.id ? 'g3d-eq-chip--active' : ''}`}
-                    style={{ '--eq-col': g.color }}
-                    onClick={() => setActiveEqGroup(g.id)}
+                    key={c.id}
+                    className={`g3d-hud-chip ${activeCam === c.id ? 'g3d-hud-chip--active' : ''}`}
+                    onClick={() => setCamera(c)}
                   >
-                    <span className="g3d-eq-dot" style={{ background: g.color }} />
-                    {g.name}
+                    {c.name}
                   </button>
                 ))}
               </div>
-            )}
-          </div>
-        )}
+
+              {/* Nhóm thu phóng */}
+              <div className="g3d-hud-group">
+                <button className="g3d-hud-btn g3d-hud-btn--icon" onClick={() => stepZoom(0.85)} title="Thu nhỏ">−</button>
+                <button className="g3d-hud-badge" onClick={() => setZoom(1.0)} title="Về tỉ lệ 100%">
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button className="g3d-hud-btn g3d-hud-btn--icon" onClick={() => stepZoom(1.2)} title="Phóng to">+</button>
+              </div>
+
+              {/* Nhóm thao tác: soạn đề, script, cô lập, xuất ảnh */}
+              <div className="g3d-hud-group g3d-hud-group--end">
+                {isFocusMode && onOpenPrompt && (
+                  <button
+                    className="g3d-hud-btn"
+                    onClick={() => openOutside(onOpenPrompt)}
+                    title="Mở bảng nhập / sửa đề bài AI"
+                  >
+                    ✨ Soạn đề bài
+                  </button>
+                )}
+                {isFocusMode && canSeeCode && onOpenScript && (
+                  <button
+                    className="g3d-hud-btn"
+                    onClick={() => openOutside(onOpenScript)}
+                    title="Mở bảng mã JSON hình"
+                  >
+                    {'{ }'} Script JSON
+                  </button>
+                )}
+                {onToggleFocus && (
+                  <button
+                    className={`g3d-hud-btn ${isFocusMode ? 'g3d-hud-btn--exit' : ''}`}
+                    onClick={onToggleFocus}
+                    title={isFocusMode ? 'Thoát chế độ cô lập để xem giao diện mở rộng' : 'Cô lập hình (ẩn các thành phần thừa)'}
+                  >
+                    {isFocusMode ? '✕ Thoát cô lập' : '👁️ Cô lập'}
+                  </button>
+                )}
+                <button className="g3d-hud-btn" onClick={savePNG} disabled={isEmpty} title="Tải ảnh PNG độ nét cao (tỉ lệ 100%)">
+                  ⬇ PNG
+                </button>
+                <button className="g3d-hud-btn g3d-hud-btn--icon" onClick={toggleFull} title="Toàn màn hình">
+                  {isFull ? '⤡' : '⤢'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Thanh hướng dẫn ngữ cảnh theo chế độ thao tác */}
+          {activeTool !== 'rotate' && (
+            <div className="g3d-mode-banner">
+              {activeTool === 'connect' && (
+                <span>
+                  ✏️ <strong>Nối điểm</strong>: {connectingFrom ? `Đã chọn điểm ${connectingFrom} — click hoặc thả vào điểm thứ 2 để nối (Esc để huỷ).` : 'Kéo từ điểm này sang điểm khác hoặc click lần lượt 2 điểm để vẽ đoạn thẳng.'}
+                </span>
+              )}
+              {activeTool === 'rightAngle' && (
+                <span>
+                  📐 <strong>Đánh dấu góc vuông</strong>: {rightAngleDraft.length === 0 ? 'Click đỉnh góc vuông (VD: điểm A).' : rightAngleDraft.length === 1 ? `Đỉnh [${rightAngleDraft[0]}] — click điểm tiếp theo trên cạnh thứ nhất.` : `Đã chọn [${rightAngleDraft[0]}, ${rightAngleDraft[1]}] — click điểm trên cạnh thứ hai.`}
+                </span>
+              )}
+              {activeTool === 'equalMark' && (
+                <div className="g3d-eq-selector">
+                  <span>🏷️ <strong>Gán đoạn bằng nhau</strong>: Chọn nhóm:</span>
+                  {EQUAL_PALETTE.map(g => (
+                    <button
+                      key={g.id}
+                      className={`g3d-eq-chip ${activeEqGroup === g.id ? 'g3d-eq-chip--active' : ''}`}
+                      style={{ '--eq-col': g.color }}
+                      onClick={() => setActiveEqGroup(g.id)}
+                    >
+                      <span className="g3d-eq-dot" style={{ background: g.color }} />
+                      {g.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Vùng Canvas hiển thị hình không gian */}
         <div
@@ -1280,23 +1370,21 @@ export default function Geo3DViewer({
           onMouseDown={onDown}
           onMouseMove={onMove}
           onMouseUp={onUp}
-          onMouseLeave={onUp}
-          onWheel={onWheel}
+          onMouseLeave={onLeave}
         >
           <canvas ref={cvs} style={{ display: 'block', touchAction: 'none' }} />
 
-          {/* Popover thông tin chi tiết khi click vào đoạn thẳng */}
+          {/* Popover chỉnh đoạn thẳng (mở khi click vào đoạn ở chế độ Xoay) */}
           {selectedSeg && popoverPos && (
             <div
               className="g3d-seg-popover"
               style={{ left: popoverPos.x, top: popoverPos.y }}
-              onClick={e => e.stopPropagation()}
             >
               <div className="g3d-seg-popover-header">
                 <div className="g3d-seg-popover-title">
                   Đoạn thẳng <strong>{selectedSeg.from}{selectedSeg.to}</strong>
                 </div>
-                <button className="g3d-seg-popover-close" onClick={() => { setSelectedSeg(null); setPopoverPos(null) }}>✕</button>
+                <button className="g3d-seg-popover-close" onClick={closePopover} title="Đóng (Esc)">✕</button>
               </div>
 
               <div className="g3d-seg-popover-body">
@@ -1307,9 +1395,22 @@ export default function Geo3DViewer({
 
                 <div className="g3d-seg-info-row">
                   <span className="g3d-seg-info-label">Kiểu nét:</span>
-                  <button className="g3d-btn-xs" onClick={() => toggleSegmentDashed(selectedSeg)}>
-                    {selectedSeg.dashed ? 'Nét đứt (---)' : 'Nét liền (—)'}
-                  </button>
+                  <div className="g3d-seg-style">
+                    <button
+                      className={`g3d-seg-style-btn ${!selectedSeg.dashed ? 'g3d-seg-style-btn--active' : ''}`}
+                      onClick={() => setSegmentDashed(selectedSeg, false)}
+                      title="Cạnh nhìn thấy"
+                    >
+                      ━ Nét liền
+                    </button>
+                    <button
+                      className={`g3d-seg-style-btn ${selectedSeg.dashed ? 'g3d-seg-style-btn--active' : ''}`}
+                      onClick={() => setSegmentDashed(selectedSeg, true)}
+                      title="Cạnh bị che khuất"
+                    >
+                      ┅ Nét đứt
+                    </button>
+                  </div>
                 </div>
 
                 <div className="g3d-seg-info-row g3d-seg-info-row--col">
@@ -1347,7 +1448,7 @@ export default function Geo3DViewer({
                 )}
 
                 <div className="g3d-seg-actions">
-                  <button className="g3d-btn-xs g3d-btn-xs--del" onClick={() => deleteSegment(selectedSeg)}>
+                  <button className="g3d-btn-xs g3d-btn-xs--del" onClick={() => deleteSegment(selectedSeg)} title="Phím Delete">
                     🗑 Xoá đoạn này
                   </button>
                 </div>
@@ -1362,7 +1463,7 @@ export default function Geo3DViewer({
                 <p className="g3d-empty-title">Chưa có hình không gian</p>
                 <p className="g3d-empty-sub">Nhập đề bài hoặc tải ảnh đề bài lên để AI dựng hình 3D tự động.</p>
                 {onOpenPrompt && (
-                  <button className="g3d-btn-primary" onClick={onOpenPrompt}>
+                  <button className="g3d-btn-primary" onClick={() => openOutside(onOpenPrompt)}>
                     ✨ Nhập đề bài
                   </button>
                 )}
@@ -1372,7 +1473,7 @@ export default function Geo3DViewer({
 
           {!isEmpty && showTools && (
             <div className="g3d-hint-island">
-              <span>✦ Kéo để xoay · Click vào điểm hoặc đoạn thẳng để tương tác</span>
+              <span>✦ Kéo để xoay · Click vào đoạn thẳng để đổi nét hoặc xoá</span>
             </div>
           )}
         </div>

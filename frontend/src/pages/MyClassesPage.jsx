@@ -6,12 +6,17 @@ import { BandChip, IeltsGradeModal, IeltsStatsModal } from '../components/IeltsG
 import { ListeningGradeModal, ListeningStatsModal } from '../components/ListeningGrade.jsx'
 import { SpeakingGradeModal, SpeakingStatsModal } from '../components/SpeakingGrade.jsx'
 import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
+import Geo3DWorkbench from '../components/Geo3DWorkbench.jsx'
 import { isExerciseDoc, sortDocsByOrder } from '../utils/exerciseDocs.js'
 import { youtubeEmbedUrl, youtubeThumbnail } from '../utils/youtube.js'
 
 /* Môn "chính" của lớp (fallback dữ liệu cũ chưa gắn môn) */
 const primarySubject = (cls) => cls?.subject || cls?.subjects?.[0] || null
 const inSubject = (item, subject, cls) => ((item?.subject || primarySubject(cls)) === subject)
+/* Vẽ hình không gian: học sinh lớp Toán khối 11-12 (chương hình học không gian).
+   Phía giáo viên (ClassManagementPage) mở cho mọi lớp Toán. */
+const GEO3D_GRADES = ['11', '12']
+const hasGeo3dAccess = (cls, subject) => subject === 'toan' && GEO3D_GRADES.includes(String(cls?.grade))
 /* Các môn mà học sinh này ĐÃ ĐĂNG KÝ trong lớp */
 const myEnrolledSubjects = (cls, user) => {
   const mine = (cls?.members || []).filter(m =>
@@ -767,7 +772,8 @@ function ClassView({ cls, user, pendingCount = 0, onBack, initialAsgnTab }) {
   }, [hasPendingGrade, refreshKey])
 
   const subject = primarySubject(localCls)             // mỗi lớp = 1 môn
-  const [tab, setTab] = useState('assignments')       // 'assignments' | 'documents'
+  const [tab, setTab] = useState('assignments')       // 'assignments' | 'documents' | 'geo3d'
+  const canDrawGeo3d = hasGeo3dAccess(localCls, subject)
   const [asgnTab, setAsgnTab] = useState(initialAsgnTab === 'exam' ? 'exam' : 'homework')  // 'homework' | 'exam'
   const [viewingFile, setViewingFile] = useState(null)
   const [openFolder, setOpenFolder] = useState(null)
@@ -797,6 +803,9 @@ function ClassView({ cls, user, pendingCount = 0, onBack, initialAsgnTab }) {
       <div className="cm-tabs">
         <button className={`cm-tab ${tab==='assignments' ? 'cm-tab--active' : ''}`} onClick={() => setTab('assignments')}>📝 Bài tập</button>
         <button className={`cm-tab ${tab==='documents' ? 'cm-tab--active' : ''}`} onClick={() => setTab('documents')}>📎 Tài liệu</button>
+        {canDrawGeo3d && (
+          <button className={`cm-tab ${tab==='geo3d' ? 'cm-tab--active' : ''}`} onClick={() => setTab('geo3d')}>📐 Vẽ hình</button>
+        )}
       </div>
 
       <div className="cm-tab-body">
@@ -897,6 +906,13 @@ function ClassView({ cls, user, pendingCount = 0, onBack, initialAsgnTab }) {
             </div>
           )
         })()}
+
+        {/* ── Vẽ hình không gian (Toán 11-12) — cùng khung với tab của giáo viên ── */}
+        {tab === 'geo3d' && canDrawGeo3d && (
+          <div style={{ height: '84vh', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', display: 'flex' }}>
+            <Geo3DWorkbench user={user} />
+          </div>
+        )}
       </div>
 
       {viewingFile && <FileViewerModal file={viewingFile} onClose={() => setViewingFile(null)} />}
