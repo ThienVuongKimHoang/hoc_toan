@@ -56,6 +56,14 @@ const ZOOM_MAX = 6
 
 /* Màu nhấn cho phần đang được vẽ khi dựng hình từng bước */
 const BUILD_ACCENT = '#7c3aed'
+const BUILD_SPEEDS = [0.5, 1, 1.5, 2]
+const BUILD_SPEED_KEY = 'g3d-build-speed'   // nhớ tốc độ học sinh đã chọn (tiện ích riêng máy)
+const readBuildSpeed = () => {
+  try {
+    const v = parseFloat(localStorage.getItem(BUILD_SPEED_KEY))
+    return BUILD_SPEEDS.includes(v) ? v : 1
+  } catch { return 1 }
+}
 const easeOutBack = (x) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * (x - 1) ** 3 + c1 * (x - 1) ** 2 }
 
 /* Bảng màu và ký hiệu cho các nhóm đoạn thẳng bằng nhau */
@@ -698,6 +706,8 @@ export default function Geo3DViewer({
   /* Dựng hình từng bước: danh sách bước (null = không dựng) và bước đang vẽ */
   const [buildSteps, setBuildSteps]     = useState(null)
   const [buildIdx, setBuildIdx]         = useState(0)
+  const [buildPaused, setBuildPaused]   = useState(false)
+  const [buildSpeed, setBuildSpeed]     = useState(readBuildSpeed)
   const isBuilding = !!buildSteps
 
   /* Animation & Physics Refs */
@@ -714,7 +724,8 @@ export default function Geo3DViewer({
   const rafRef         = useRef(null)
   /* Cảnh mà chính viewer vừa sửa rồi đẩy lên cha qua onSceneChange */
   const emittedRef     = useRef(null)
-  const buildRef       = useRef(null)   // { layout, t0, idx } khi đang dựng hình
+  const buildRef       = useRef(null)   // { layout, elapsed, lastTs, idx, paused, speed } khi đang dựng hình
+  const speedRef       = useRef(buildSpeed)
   const revealRef      = useRef(null)   // trạng thái hiện hình của khung hình hiện tại
   const logListRef     = useRef(null)
   /* Đọc prop qua ref: Workbench tắt animateNextScene lúc dựng xong không được làm dựng lại */
@@ -779,11 +790,28 @@ export default function Geo3DViewer({
     if (reduceMotion || !steps.length) { finishBuild(); return }
 
     const layout = layoutBuild(steps)
-    buildRef.current = { layout, t0: performance.now(), idx: 0 }
+    buildRef.current = {
+      layout, elapsed: 0, lastTs: performance.now(), idx: 0, paused: false, speed: speedRef.current,
+    }
     revealRef.current = revealAt(layout, 0).reveal
     setBuildSteps(steps)
     setBuildIdx(0)
+    setBuildPaused(false)
   }, [closePopover, clearConnect, finishBuild])
+
+  const toggleBuildPause = useCallback(() => {
+    const b = buildRef.current
+    if (!b) return
+    b.paused = !b.paused
+    setBuildPaused(b.paused)
+  }, [])
+
+  const changeBuildSpeed = useCallback((v) => {
+    speedRef.current = v
+    if (buildRef.current) buildRef.current.speed = v
+    setBuildSpeed(v)
+    try { localStorage.setItem(BUILD_SPEED_KEY, String(v)) } catch { /* bỏ qua: chỉ là tiện ích */ }
+  }, [])
 
   useEffect(() => {
     if (initialSceneData) {
@@ -899,7 +927,12 @@ export default function Geo3DViewer({
       // Dựng hình từng bước: tính phần nào đã hiện ở thời điểm này
       const b = buildRef.current
       if (b) {
-        const { reveal, stepIdx, done } = revealAt(b.layout, performance.now() - b.t0)
+        // Cộng dồn thời gian theo tốc độ; đang dừng thì đứng yên. Chặn bước nhảy >100ms để
+        // chuyển tab rồi quay lại không bị vẽ vọt tới cuối.
+        const now = performance.now()
+        if (!b.paused) b.elapsed += Math.min(now - b.lastTs, 100) * b.speed
+        b.lastTs = now
+        const { reveal, stepIdx, done } = revealAt(b.layout, b.elapsed)
         if (done) {
           finishBuild()
         } else {
@@ -1014,7 +1047,9 @@ export default function Geo3DViewer({
     // Chỉ nhận thao tác BẮT ĐẦU trên canvas. Trước đây bấm nút trong popover cũng bị tính
     // là click canvas: mouseup đóng popover trước khi sự kiện click tới nút, nên "Nét đứt"
     // và "Xoá đoạn" không bao giờ ăn.
-    if (e.button !== 0 || e.target !== cvs.current || buildRef.current) return
+    if (e.button !== 0 || e.target !== cvs.current) return
+    // Đang dựng hình: chỉ cho kéo xoay khi đã tạm dừng
+    if (buildRef.current && !buildRef.current.paused) return
     const rect = cvs.current.getBoundingClientRect()
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
@@ -1045,7 +1080,8 @@ export default function Geo3DViewer({
   }
 
   const onMove = useCallback((e) => {
-    if (buildRef.current) return   // đang dựng hình: chỉ xem, không tương tác
+    const building = buildRef.current
+    if (building && !building.paused) return   // đang dựng hình: chỉ xem, không tương tác
     const rect = cvs.current?.getBoundingClientRect()
     if (!rect) return
     const mx = e.clientX - rect.left
@@ -1061,9 +1097,12 @@ export default function Geo3DViewer({
       return
     }
 
-    setHoveredPtId(hitTestPoint(mx, my))
-    const hitSeg = hitTestSegment(mx, my)
-    setHoveredSegKey(hitSeg ? `${hitSeg.from}-${hitSeg.to}` : null)
+    // Tạm dừng dựng hình chỉ để xoay xem — không hover (điểm/đoạn chưa vẽ vẫn có trong ptMap)
+    if (!building) {
+      setHoveredPtId(hitTestPoint(mx, my))
+      const hitSeg = hitTestSegment(mx, my)
+      setHoveredSegKey(hitSeg ? `${hitSeg.from}-${hitSeg.to}` : null)
+    }
 
     // Đang nối điểm: đường cao su theo chuột, không xoay hình
     if (connectingFrom) {
@@ -1098,7 +1137,7 @@ export default function Geo3DViewer({
     if (!d.on) return            // mouseup không bắt đầu từ canvas (VD bấm nút popover) → bỏ qua
     d.on = false
     setIsDrag(false)
-    if (d.consumed) return
+    if (d.consumed || buildRef.current) return   // lúc tạm dừng dựng hình: kéo xoay thôi, không mở popover
 
     const rect = cvs.current?.getBoundingClientRect()
     if (!rect) return
@@ -1231,7 +1270,7 @@ export default function Geo3DViewer({
     const onWheel = (e) => {
       if (e.target !== cvs.current) return
       e.preventDefault()
-      if (buildRef.current) return
+      if (buildRef.current && !buildRef.current.paused) return
       setZoom(v => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v * (e.deltaY < 0 ? 1.1 : 0.91))))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
@@ -1239,7 +1278,7 @@ export default function Geo3DViewer({
   }, [])
 
   /* Phím tắt: Esc bỏ qua hoạt ảnh dựng hình / huỷ thao tác dở / đóng bảng;
-     Delete (Backspace trên Mac) xoá đoạn đang chọn */
+     Space dừng / tiếp tục dựng hình; Delete (Backspace trên Mac) xoá đoạn đang chọn */
   useEffect(() => {
     if (!isBuilding && !selectedSeg && !connectingFrom && !rightAngleDraft.length) return
     const onKey = (e) => {
@@ -1247,6 +1286,11 @@ export default function Geo3DViewer({
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       if (isBuilding) {
         if (e.key === 'Escape') finishBuild()
+        // Nút đang được focus thì Space đã tự "bấm" nút đó — không bật/tắt dừng thêm lần nữa
+        else if (e.key === ' ' && t?.tagName !== 'BUTTON') {
+          e.preventDefault()
+          toggleBuildPause()
+        }
         return
       }
       if (e.key === 'Escape') {
@@ -1543,6 +1587,11 @@ export default function Geo3DViewer({
                     <span className="g3d-build-mark">✓</span>
                     <span>{s.text.charAt(0).toUpperCase() + s.text.slice(1)}</span>
                   </li>
+                ) : buildPaused ? (
+                  <li key={i} className="is-current is-paused">
+                    <span className="g3d-build-mark">⏸</span>
+                    <span>Đã dừng ở bước: {s.text}</span>
+                  </li>
                 ) : (
                   <li key={i} className="is-current">
                     <span className="g3d-build-mark g3d-build-pen">✎</span>
@@ -1557,10 +1606,36 @@ export default function Geo3DViewer({
                 </li>
               )}
             </ol>
+            {buildPaused && (
+              <div className="g3d-build-paused-hint">Đang dừng — có thể kéo để xoay, cuộn để phóng to hình.</div>
+            )}
             <div className="g3d-build-log-foot">
-              <button className="g3d-build-skip" onClick={finishBuild} title="Hiện ngay toàn bộ hình (Esc)">
-                Bỏ qua ⏭
-              </button>
+              <div className="g3d-build-speed" role="group" aria-label="Tốc độ vẽ">
+                <span className="g3d-build-speed-label">Tốc độ</span>
+                {BUILD_SPEEDS.map(v => (
+                  <button
+                    key={v}
+                    className={`g3d-build-speed-btn ${buildSpeed === v ? 'g3d-build-speed-btn--active' : ''}`}
+                    onClick={() => changeBuildSpeed(v)}
+                    aria-pressed={buildSpeed === v}
+                    title={v < 1 ? 'Vẽ chậm lại' : v > 1 ? 'Vẽ nhanh hơn' : 'Tốc độ bình thường'}
+                  >
+                    {v}×
+                  </button>
+                ))}
+              </div>
+              <div className="g3d-build-actions">
+                <button
+                  className={`g3d-build-btn ${buildPaused ? 'g3d-build-btn--primary' : ''}`}
+                  onClick={toggleBuildPause}
+                  title={buildPaused ? 'Vẽ tiếp (Space)' : 'Tạm dừng (Space)'}
+                >
+                  {buildPaused ? '▶ Tiếp tục' : '⏸ Tạm dừng'}
+                </button>
+                <button className="g3d-build-btn" onClick={finishBuild} title="Hiện ngay toàn bộ hình (Esc)">
+                  Bỏ qua ⏭
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1570,7 +1645,9 @@ export default function Geo3DViewer({
           ref={wrap}
           className="g3d-wrap"
           style={{
-            cursor: activeTool === 'connect'
+            cursor: isBuilding && !buildPaused
+              ? 'default'
+              : activeTool === 'connect'
               ? 'crosshair'
               : activeTool === 'rightAngle' || activeTool === 'equalMark'
               ? 'pointer'

@@ -7537,14 +7537,62 @@ button { font-family: inherit; }
   0%, 100% { transform: translate(0, 0) rotate(0deg); }
   50%      { transform: translate(2px, -2px) rotate(-12deg); }
 }
+.g3d-build-steps li.is-paused .g3d-build-mark { color: #d97706; }
+.g3d-build-paused-hint {
+  margin: 0 14px 8px;
+  padding: 5px 9px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+}
 .g3d-build-log-foot {
   display: flex;
-  justify-content: flex-end;
-  padding: 6px 10px 10px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 10px;
   border-top: 1px solid #f1f5f9;
 }
-.g3d-build-skip {
-  padding: 4px 12px;
+/* Chọn tốc độ vẽ (segmented) */
+.g3d-build-speed {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.g3d-build-speed-label {
+  margin-right: auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+}
+.g3d-build-speed-btn {
+  min-width: 38px;
+  padding: 3px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.g3d-build-speed-btn:hover { color: #0f172a; border-color: #cbd5e1; }
+.g3d-build-speed-btn--active {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: #ffffff;
+}
+.g3d-build-speed-btn--active:hover { color: #ffffff; border-color: #6d28d9; }
+.g3d-build-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.g3d-build-btn {
+  padding: 5px 12px;
   font-size: 0.74rem;
   font-weight: 600;
   border: 1px solid #e2e8f0;
@@ -7552,13 +7600,20 @@ button { font-family: inherit; }
   color: #475569;
   border-radius: 99px;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.15s;
 }
-.g3d-build-skip:hover {
+.g3d-build-btn:hover {
   background: #ede9fe;
   border-color: #c4b5fd;
   color: #5b21b6;
 }
+.g3d-build-btn--primary {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  border-color: #6d28d9;
+  color: #ffffff;
+}
+.g3d-build-btn--primary:hover { opacity: 0.92; color: #ffffff; background: linear-gradient(135deg, #7c3aed, #6d28d9); }
 
 /* ── Gợi ý lơ lửng đáy màn hình ── */
 .g3d-hint-island {
