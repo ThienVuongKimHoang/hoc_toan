@@ -3828,7 +3828,7 @@ async def delete_submission_image(filename: str):
 import re as _re
 import base64 as _base64
 
-GROQ_SOLVER_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"
+GROQ_SOLVER_MODEL = "qwen/qwen3.8-27b"  # llama-4-maverick bị Groq gỡ 16/09/2026 (giải bài chết hẳn vì dòng này)
 
 def _fix_json_escapes(s):
     """Fix LaTeX backslashes trong JSON string từ LLM.
@@ -4193,11 +4193,11 @@ _GEN_SECTION_PROMPTS = {
 }
 
 
-_GEN_VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
+_GEN_VISION_MODEL = "qwen/qwen3.8-27b"  # qwen3.6 bị Groq gỡ 16/09/2026; qwen3.8 là model thị giác duy nhất còn lại
 _GEN_TEXT_MODEL   = "openai/gpt-oss-120b"
 # Model dự phòng khi _GEN_TEXT_MODEL hết quota: mỗi model có bucket rate-limit riêng trên Groq,
 # nên xoay model mới né được giới hạn token/ngày dùng chung giữa các key cùng org.
-_GEN_TEXT_MODEL_FALLBACKS = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b"]
+_GEN_TEXT_MODEL_FALLBACKS = ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]  # llama-3.3-70b bị gỡ 16/09/2026
 _GEN_REASONING_MODELS = ("openai/gpt-oss",)
 
 

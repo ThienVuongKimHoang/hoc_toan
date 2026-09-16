@@ -27,7 +27,7 @@ _CRITERIA_DIR = _BASE / "tieu_chi_writing"
 # Model chấm điểm (text) — theo lựa chọn: GPT OSS 120B trên Groq
 GRADER_MODEL = "openai/gpt-oss-120b"
 # Model vision — đọc ảnh đề bài Task 1 & OCR bài viết tay (70B không có vision)
-VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+VISION_MODEL = "qwen/qwen3.8-27b"  # llama-4-scout bị Groq gỡ 16/09/2026
 
 _IMG_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 

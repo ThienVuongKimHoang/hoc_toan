@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 # ---------------------------------------------------------------------------
 
 ROOT_DIR = Path(__file__).parent.parent
-VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
+VISION_MODEL = "qwen/qwen3.8-27b"  # qwen3.6 bị Groq gỡ 16/09/2026; qwen3.8 là model thị giác duy nhất còn lại
 TEXT_MODEL   = "openai/gpt-oss-120b"   # model text-only nhanh hơn, tiết kiệm token
 IMAGE_DPI    = 150   # DPI render ảnh nhúng (đủ để nhận dạng nội dung)
 CONTEXT_CHARS = 800  # số ký tự text xung quanh ảnh để đánh giá relevance

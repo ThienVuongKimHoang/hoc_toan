@@ -68,7 +68,7 @@ def _section_header_pattern(sec: str) -> re.Pattern:
     roman = sec.replace("PHẦN ", "").strip()
     return re.compile(rf"PHẦN\s+{re.escape(roman)}\b")
 
-VISION_MODEL = "qwen/qwen3.6-27b"  # llama-4-scout bị Groq khai tử 17/07/2026
+VISION_MODEL = "qwen/qwen3.8-27b"  # qwen3.6 bị Groq gỡ 16/09/2026; qwen3.8 là model thị giác duy nhất còn lại
 PAGE_DPI = 200
 MAX_TOKENS_DEFAULT = 4096
 MAX_TOKENS_RETRY = 8192
