@@ -4,6 +4,7 @@ import { getExamWindow } from '../store/classStore.js'
 import QuestionCard, { SECTION_PREFIX } from '../components/QuestionCard.jsx'
 import ReadingTakeView from '../components/ReadingTakeView.jsx'
 import { buildShuffleMap, reorderByQuestionNumber } from '../utils/shuffle.js'
+import { beginLockGrace, endLockGrace, isLockGrace } from '../utils/examLockGrace.js'
 import './ExamTakePage.css'
 
 const SECTION_LABELS = {
@@ -116,6 +117,7 @@ function useExamLock(enabled) {
   const [violations, setViolations] = useState(0)
   const [warning, setWarning] = useState('')
   const [blocked, setBlocked] = useState(false)   // đề bị che, phải quay lại mới làm tiếp
+  const [softPause, setSoftPause] = useState(false)   // tạm dừng hợp lệ (vừa chụp ảnh/chụp màn hình), KHÔNG tính vi phạm
   const [askUnlock, setAskUnlock] = useState(false)   // đang hỏi mật khẩu thoát
   const [unlocked, setUnlocked] = useState(false)   // đã thoát khóa bằng mật khẩu
   const countRef = useRef(0)
@@ -124,8 +126,12 @@ function useExamLock(enabled) {
   useEffect(() => {
     if (!enabled || unlocked) return
     const pressed = new Set()   // các phím đang được giữ (theo e.code)
+    let softTimer = null
 
     const flag = (reason, doBlock = true) => {
+      // Học sinh đang chụp ảnh bài làm / chọn ảnh / chụp màn hình → thao tác hợp lệ,
+      // cửa sổ mất tiêu điểm là bình thường: không đếm vi phạm, không che đề.
+      if (isLockGrace()) return
       const now = Date.now()
       if (now - lastRef.current > 500) {   // gộp sự kiện trùng (blur + visibilitychange)
         lastRef.current = now
@@ -136,7 +142,12 @@ function useExamLock(enabled) {
       if (doBlock) setBlocked(true)
     }
 
-    const onVisibility = () => { if (document.hidden) flag('Bạn đã rời khỏi màn hình làm bài!') }
+    // Trên điện thoại, mở camera làm ẩn trang; lúc quay lại có khi chỉ có
+    // visibilitychange chứ không có focus → hạ miễn trừ ở cả hai nơi.
+    const onVisibility = () => {
+      if (document.hidden) flag('Bạn đã rời khỏi màn hình làm bài!')
+      else onFocus()
+    }
     const onBlur = () => flag('Cửa sổ làm bài bị mất tiêu điểm!')
     const onFsChange = () => {
       if (!isFs()) {
@@ -155,13 +166,19 @@ function useExamLock(enabled) {
         return false
       }
       const k = (e.key || '').toLowerCase()
+      // Chụp màn hình (PrintScreen, Win+Shift+S, ⌘+Shift+3/4/5): cho phép bình thường —
+      // để hệ thống xử lý và bật miễn trừ để hộp thoại chụp không bị tính là vi phạm.
+      if (e.key === 'PrintScreen' || ((e.metaKey || e.altKey) && e.shiftKey && ['s', '3', '4', '5'].includes(k))) {
+        beginLockGrace(60_000)
+        return
+      }
       // Chặn Esc (thoát fullscreen) và Alt+F4 (đóng cửa sổ)
       if (e.key === 'Escape' || (e.altKey && e.key === 'F4')) {
         e.preventDefault(); e.stopPropagation()
         return false
       }
       const combo =
-        e.key === 'F12' || e.key === 'PrintScreen' ||
+        e.key === 'F12' ||
         (e.ctrlKey && ['c', 'v', 'x', 'p', 'u', 's', 'a', 'w'].includes(k)) ||
         (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(k)) ||
         ((e.metaKey || e.ctrlKey) && ['c', 'v', 'x', 'p'].includes(k)) ||
@@ -171,8 +188,37 @@ function useExamLock(enabled) {
     }
     const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; return '' }
 
+    // Quay lại sau khi chụp ảnh / chọn ảnh / chụp màn hình → hạ miễn trừ. Camera trên
+    // điện thoại hay làm thoát toàn màn hình: mời học sinh vào lại, không tính vi phạm.
+    const onFocus = () => {
+      if (!isLockGrace()) return
+      endLockGrace()
+      clearTimeout(softTimer)
+      softTimer = setTimeout(() => { if (!isFs()) setSoftPause(true) }, 1800)
+    }
+
+    // Trình duyệt hỏi quyền camera / quay màn hình cũng làm mất tiêu điểm → bọc các
+    // lời gọi này để tự bật miễn trừ, học sinh cứ bấm "Cho phép" như bình thường.
+    const md = navigator.mediaDevices
+    const patched = []
+    for (const name of ['getUserMedia', 'getDisplayMedia']) {
+      const orig = md?.[name]
+      if (typeof orig !== 'function') continue
+      md[name] = function (...args) {
+        beginLockGrace(60_000)
+        try {
+          return Promise.resolve(orig.apply(md, args)).finally(() => endLockGrace())
+        } catch (err) {
+          endLockGrace()
+          return Promise.reject(err)
+        }
+      }
+      patched.push([name, orig])
+    }
+
     document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('blur', onBlur)
+    window.addEventListener('focus', onFocus)
     document.addEventListener('fullscreenchange', onFsChange)
     document.addEventListener('webkitfullscreenchange', onFsChange)
     document.addEventListener('contextmenu', block)
@@ -185,8 +231,11 @@ function useExamLock(enabled) {
     window.addEventListener('beforeunload', onBeforeUnload)
 
     return () => {
+      clearTimeout(softTimer)
+      for (const [name, orig] of patched) md[name] = orig
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('blur', onBlur)
+      window.removeEventListener('focus', onFocus)
       document.removeEventListener('fullscreenchange', onFsChange)
       document.removeEventListener('webkitfullscreenchange', onFsChange)
       document.removeEventListener('contextmenu', block)
@@ -206,6 +255,7 @@ function useExamLock(enabled) {
   const resume = async () => {
     await enterFsLock()
     setBlocked(false)
+    setSoftPause(false)
     setWarning('')
   }
 
@@ -216,6 +266,7 @@ function useExamLock(enabled) {
       setUnlocked(true)
       setAskUnlock(false)
       setBlocked(false)
+      setSoftPause(false)
       setWarning('')
       releaseKeyboard()
       if (isFs()) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)
@@ -224,7 +275,7 @@ function useExamLock(enabled) {
   }
 
   return {
-    violations, warning, blocked, resume, unlocked,
+    violations, warning, blocked, softPause, resume, unlocked,
     askUnlock, closeUnlock: () => setAskUnlock(false), tryUnlock,
     dismissWarning: () => setWarning(''),
   }
@@ -469,7 +520,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   const lockOn = !!exam.settings?.lockScreen
   const [lockStarted, setLockStarted] = useState(!lockOn)
   const [startedAt, setStartedAt] = useState(() => savedAttempt?.startedAt ?? (lockOn ? null : Date.now()))
-  const { violations, warning, blocked, resume, unlocked,
+  const { violations, warning, blocked, softPause, resume, unlocked,
     askUnlock, closeUnlock, tryUnlock, dismissWarning } = useExamLock(lockOn && lockStarted && !submitted)
   const lockActive = lockOn && !unlocked
 
@@ -617,6 +668,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
               <li>Bài làm chạy ở chế độ <strong>toàn màn hình bắt buộc</strong>.</li>
               <li>Rời tab / thoát toàn màn hình sẽ <strong>che kín đề</strong> — phải quay lại mới làm tiếp được.</li>
               <li>Copy / dán / chuột phải / phím tắt (kể cả Esc) bị vô hiệu hóa.</li>
+              <li><strong>Chụp ảnh bài làm bằng camera và chụp màn hình vẫn dùng được bình thường</strong> — không bị tính vi phạm.</li>
               <li>Mỗi lần vi phạm được <strong>ghi lại cho giáo viên</strong>.</li>
             </ul>
           </div>
@@ -699,6 +751,23 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
               Lần vi phạm này đã được ghi lại cho giáo viên.
             </p>
             <div className="et-lock-overlay-count">Tổng số lần vi phạm: <strong>{violations}</strong></div>
+            <button className="btn-submit-exam et-lock-resume" onClick={resume}>
+              ↩️ Quay lại làm bài (toàn màn hình)
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Vừa chụp ảnh bài làm / chụp màn hình xong mà rớt khỏi toàn màn hình —
+          mời vào lại, KHÔNG tính vi phạm và không báo cho giáo viên. */}
+      {lockActive && softPause && !blocked && !submitted && (
+        <div className="et-lock-overlay is-soft">
+          <div className="et-lock-overlay-card">
+            <div className="et-lock-overlay-icon">📷</div>
+            <h1>Tạm dừng để chụp ảnh</h1>
+            <p className="et-lock-overlay-reason">Thao tác này được phép — không tính là vi phạm.</p>
+            <p className="et-lock-overlay-sub">
+              Bấm nút dưới đây để quay lại chế độ toàn màn hình và làm bài tiếp.
+            </p>
             <button className="btn-submit-exam et-lock-resume" onClick={resume}>
               ↩️ Quay lại làm bài (toàn màn hình)
             </button>

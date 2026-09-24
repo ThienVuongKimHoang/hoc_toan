@@ -253,6 +253,7 @@ export default function PublishModal({ exam, teacherId, onClose, onPublished }) 
             {lockScreen && (
               <div className="pm-hide-note">
                 Học sinh phải làm bài ở chế độ toàn màn hình. Rời tab, thoát toàn màn hình hoặc dùng phím tắt sẽ bị ghi nhận vi phạm và báo cho bạn.
+                Riêng chụp ảnh bài làm bằng camera và chụp màn hình vẫn dùng được bình thường, không tính vi phạm.
               </div>
             )}
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import MarkerText, { InlineImage, referencedImageIds } from './MarkerText.jsx'
+import { beginLockGrace, endLockGrace } from '../utils/examLockGrace.js'
 
 const CONTENT_EDITABLE_TAG = /<(strong|em|u|b|i|div|br|span|p)\b/i
 
@@ -352,17 +353,27 @@ function EssayUploadCard({ q, examMode, onAnswerChange, saved, readOnly = false 
 
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files) }
 
+  // Mở camera / hộp chọn ảnh của hệ thống làm cửa sổ làm bài mất tiêu điểm. Báo trước
+  // cho chế độ khóa màn hình biết đây là thao tác hợp lệ để không bị tính vi phạm.
+  const openPicker = (ref) => {
+    beginLockGrace()
+    ref.current?.click()
+  }
+  const onPicked = (e) => {
+    endLockGrace()
+    addFiles(e.target.files)
+    e.target.value = ''
+  }
+
   return (
     <div className="q-body">
       <p className="q-text"><QuestionText q={q} /></p>
       <FigureImages path={q.figure_path} />
 
       <input ref={cameraRef} type="file" accept="image/*" capture="environment"
-        style={{ display: 'none' }}
-        onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+        style={{ display: 'none' }} onChange={onPicked} />
       <input ref={libraryRef} type="file" accept="image/*" multiple
-        style={{ display: 'none' }}
-        onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+        style={{ display: 'none' }} onChange={onPicked} />
 
       <div
         className={`essay-dropzone ${dragOver ? 'drag-over' : ''}`}
@@ -376,11 +387,11 @@ function EssayUploadCard({ q, examMode, onAnswerChange, saved, readOnly = false 
         </div>
         <div className="essay-dz-actions">
           <button type="button" className="essay-btn essay-btn-camera"
-            onClick={() => cameraRef.current?.click()} disabled={uploading}>
+            onClick={() => openPicker(cameraRef)} disabled={uploading}>
             📷 Chụp ảnh
           </button>
           <button type="button" className="essay-btn essay-btn-library"
-            onClick={() => libraryRef.current?.click()} disabled={uploading}>
+            onClick={() => openPicker(libraryRef)} disabled={uploading}>
             🖼 Chọn từ thư viện
           </button>
         </div>

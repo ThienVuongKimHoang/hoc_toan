@@ -4751,6 +4751,11 @@ button { font-family: inherit; }
 .et-lock-overlay-count strong { font-size: 1.15rem; }
 .et-lock-resume { margin-top: 8px; width: 100%; }
 
+/* Tạm dừng hợp lệ (chụp ảnh bài làm / chụp màn hình) — nhắc nhẹ, không phải vi phạm */
+.et-lock-overlay.is-soft { background: rgba(15, 23, 42, 0.92); }
+.et-lock-overlay.is-soft .et-lock-overlay-card h1 { color: #0f172a; }
+.et-lock-overlay.is-soft .et-lock-overlay-reason { color: #047857; }
+
 /* Ô nhập mật khẩu thoát khóa — trên cả lớp phủ khóa cứng */
 .et-unlock-overlay {
   position: fixed; inset: 0; z-index: 10000;

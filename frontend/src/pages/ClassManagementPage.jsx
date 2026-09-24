@@ -1261,6 +1261,7 @@ function AssignmentModal({ teacherId, cls, subject, mode: initialMode, presetExa
                     <div className="cm-lock-title">🔒 Khóa màn hình khi làm bài</div>
                     <div className="cm-lock-sub">
                       Bắt buộc toàn màn hình, chặn rời tab / copy / phím tắt. Mỗi lần vi phạm được ghi lại cho bạn xem.
+                      Camera (chụp ảnh bài làm) và chụp màn hình vẫn được phép.
                     </div>
                   </div>
                 </label>
