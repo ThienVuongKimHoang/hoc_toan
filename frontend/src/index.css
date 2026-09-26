@@ -12594,3 +12594,58 @@ button { font-family: inherit; }
   .rp-select { max-width: none; flex: 1 1 140px; }
   .rp-dates { width: 100%; overflow-x: auto; }
 }
+
+/* ═══════════════════════════════════════════
+   BANNER "CÓ BẢN MỚI"
+   Chỉ hiện khi KHÔNG thể tự reload (đang làm bài / trích xuất / chấm điểm).
+   Các trường hợp còn lại tab đã tự nạp lại — xem realtime/appVersion.js.
+═══════════════════════════════════════════ */
+.update-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 12px 10px 16px;
+  border-radius: 999px;
+  background: #1E3A5F;
+  color: #fff;
+  font-size: 14px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.28);
+  animation: update-banner-in 0.25s ease-out;
+}
+
+@keyframes update-banner-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.update-banner-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: #E8B84B;
+}
+
+.update-banner-btn {
+  flex: none;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 999px;
+  background: #E8B84B;
+  color: #1E3A5F;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.update-banner-btn:hover { background: #f0c95f; }
+
+@media (prefers-reduced-motion: reduce) {
+  .update-banner { animation: none; }
+}

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { blockReload } from '../realtime/reloadGuard.js'
 import { fetchExamById, getPracticeInfo, verifyPracticePassword } from '../store/examStore.js'
 import QuestionCard from '../components/QuestionCard.jsx'
 import ReadingTakeView from '../components/ReadingTakeView.jsx'
@@ -257,6 +258,9 @@ function SectionNav({ sections, sectionList, active, onChange }) {
 
 /* ── Root ── */
 export default function PracticeExamPage({ examId, onGoHome }) {
+  // Đang luyện đề → không tự reload, tránh mất bài đang làm dở.
+  useEffect(() => blockReload('dang-luyen-de'), [])
+
   const [step,    setStep]    = useState('loading') // loading | gate-disabled | gate-schedule | gate-password | timer-setup | practice | ended
   const [info,    setInfo]    = useState(null)
   const [exam,    setExam]    = useState(null)

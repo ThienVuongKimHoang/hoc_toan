@@ -13,9 +13,9 @@ import sys
 import tempfile
 import time
 import uuid
-from collections import deque
+from collections import defaultdict, deque
 from pathlib import Path
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Iterable, Optional
 
 import fitz
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -176,12 +176,167 @@ async def security_check_ip():
     return {"ok": True}
 
 
+# ─── Kênh realtime (SSE): đẩy thay đổi tới tab đang mở, user không phải F5 ───
+#
+# Giống TASKS / BANNED_IPS / ATTEMPT_TICKETS, toàn bộ state dưới đây nằm trong RAM
+# của MỘT process. Backend hiện chạy đúng 1 worker (Dockerfile: uvicorn không có
+# --workers). Thêm --workers hay nhân bản container sẽ làm MẤT SỰ KIỆN ÂM THẦM —
+# không có lỗi nào được ném ra, user chỉ đơn giản là không nhận được cập nhật.
+
+# user_id → các hàng đợi đang mở (mỗi tab một hàng đợi)
+STREAMS: dict[str, set[asyncio.Queue]] = defaultdict(set)
+
+# Vé dùng MỘT LẦN để mở /api/events. EventSource của trình duyệt không gửi được
+# header Authorization, mà nhét thẳng session token vào query string thì token rơi
+# vào access log của nginx — nên đổi token lấy vé ngắn hạn qua một request có xác thực.
+EVENT_TICKETS: dict[str, dict] = {}
+EVENT_TICKET_TTL     = 60    # giây, chỉ đủ để mở EventSource ngay sau khi xin vé
+EVENT_QUEUE_MAX      = 50    # hàng đợi đầy = client treo → gộp lại thành một lệnh resync
+EVENT_HEARTBEAT      = 25    # giây; PHẢI nhỏ hơn proxy_read_timeout 300s của cả hai tầng nginx
+MAX_STREAMS_PER_USER = 10    # chặn một tài khoản mở vô hạn kết nối
+
+
+def _purge_event_tickets() -> None:
+    now = datetime.now(_tz.utc).timestamp()
+    for key in [k for k, v in EVENT_TICKETS.items() if v.get("exp", 0) < now]:
+        EVENT_TICKETS.pop(key, None)
+
+
+def publish(user_ids: Iterable, event: dict) -> None:
+    """Đẩy một sự kiện tới mọi tab đang mở của những user được chỉ định.
+
+    Payload chỉ là GỢI Ý INVALIDATE ("có gì đó đổi ở lớp X"), không phải dữ liệu.
+    Client nhận hint rồi gọi lại đúng API sẵn có của trang — nhờ vậy không phải
+    đồng bộ shape dữ liệu giữa server và client ở hai nơi.
+
+    KHÔNG BAO GIỜ ném lỗi: realtime hỏng thì request chính vẫn phải thành công.
+    """
+    try:
+        payload = {**event, "ts": int(time.time() * 1000)}
+        seen: set[str] = set()
+        for uid in user_ids:
+            uid = str(uid)
+            if not uid or uid in seen:
+                continue
+            seen.add(uid)
+            for q in list(STREAMS.get(uid, ())):
+                try:
+                    q.put_nowait(payload)
+                except asyncio.QueueFull:
+                    # Client nhận không kịp → xả sạch hàng đợi, thay bằng đúng một
+                    # lệnh quét lại toàn bộ. Không để hàng đợi phình vô hạn.
+                    try:
+                        while True:
+                            q.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+                    try:
+                        q.put_nowait({"type": "resync", "ts": payload["ts"]})
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+def broadcast(event: dict) -> None:
+    """Đẩy sự kiện tới TẤT CẢ tab đang mở — dùng cho nội dung công khai (site-content)."""
+    publish(list(STREAMS.keys()), event)
+
+
+def _notify(n: dict) -> None:
+    """Ghi thông báo vào DB rồi báo ngay cho tab của người nhận.
+    Dùng thay cho db.add_notif() ở mọi chỗ, để không sót điểm phát sự kiện."""
+    db.add_notif(n)
+    publish([n.get("targetUserId")], {"type": "notif.new"})
+
+
+async def _event_stream(user_id: str, q: asyncio.Queue) -> AsyncGenerator[str, None]:
+    """Vòng lặp này TUYỆT ĐỐI không được chạm database: các route khác đang gọi
+    psycopg2 blocking thẳng trên event loop, nên một truy vấn chậm ở đây sẽ làm
+    đứng đồng thời MỌI stream đang mở."""
+    try:
+        yield ": connected\n\n"
+        while True:
+            try:
+                evt = await asyncio.wait_for(q.get(), timeout=EVENT_HEARTBEAT)
+                yield f"data: {json.dumps(evt)}\n\n"
+            except asyncio.TimeoutError:
+                # Comment giữ nhịp. Thiếu nó, nginx cắt kết nối sau 300s im lặng.
+                yield ": ping\n\n"
+    finally:
+        streams = STREAMS.get(user_id)
+        if streams is not None:
+            streams.discard(q)
+            if not streams:
+                STREAMS.pop(user_id, None)
+
+
+@app.post("/api/events/ticket")
+async def create_event_ticket(caller: dict = Depends(require_auth)):
+    """Đổi session token lấy vé ngắn hạn, dùng một lần, để mở /api/events."""
+    _purge_event_tickets()
+    ticket = secrets.token_urlsafe(32)
+    EVENT_TICKETS[ticket] = {
+        "userId": str(caller["id"]),
+        "exp": datetime.now(_tz.utc).timestamp() + EVENT_TICKET_TTL,
+    }
+    return {"ticket": ticket, "expiresIn": EVENT_TICKET_TTL}
+
+
+@app.get("/api/events")
+async def events(ticket: str = ""):
+    """Server-Sent Events: mọi thay đổi liên quan tới user đang đăng nhập."""
+    info = EVENT_TICKETS.pop(ticket, None)          # vé dùng một lần
+    if not info or info["exp"] < datetime.now(_tz.utc).timestamp():
+        raise HTTPException(401, "Vé không hợp lệ hoặc đã hết hạn.")
+
+    user_id = info["userId"]
+    if len(STREAMS.get(user_id, ())) >= MAX_STREAMS_PER_USER:
+        raise HTTPException(429, "Quá nhiều kết nối realtime đang mở.")
+
+    q: asyncio.Queue = asyncio.Queue(maxsize=EVENT_QUEUE_MAX)
+    STREAMS[user_id].add(q)
+    return StreamingResponse(
+        _event_stream(user_id, q),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+_SWEEP_INTERVAL = 600      # 10 phút
+
+
+async def _sweeper_loop():
+    """Dọn state in-memory hết hạn. TASKS trước đây không bao giờ được dọn nên rò rỉ
+    theo từng lần trích xuất PDF (mỗi task giữ nguyên cả đề đã trích trong RAM)."""
+    while True:
+        await asyncio.sleep(_SWEEP_INTERVAL)
+        try:
+            _purge_event_tickets()
+            _purge_attempt_tickets()
+            cutoff = time.time() - 2 * 3600
+            for tid in [
+                k for k, v in TASKS.items()
+                if v.get("status") in ("done", "error") and v.get("created", 0) < cutoff
+            ]:
+                TASKS.pop(tid, None)
+        except Exception:
+            pass
+
+
 @app.on_event("startup")
 async def _startup():
     db.init_db()
     BANNED_IPS.update(ip["ip"] for ip in db.list_banned_ips())
     _migrate_split_multisubject_classes()
     asyncio.create_task(_report_scanner_loop())
+    asyncio.create_task(_sweeper_loop())
 
 
 _CLASSIFY_BATCH = 15   # câu mỗi lần gọi Groq
@@ -500,7 +655,12 @@ async def extract(
 ):
     """Nhận PDF upload, bắt đầu trích xuất nền, trả về task_id."""
     task_id = str(uuid.uuid4())
-    TASKS[task_id] = {"status": "pending", "progress": [], "result": None, "error": None}
+    # "created": mốc để _sweeper_loop dọn task đã xong — mỗi task giữ nguyên cả đề
+    # đã trích trong RAM, không dọn thì rò rỉ dần theo từng lần upload.
+    TASKS[task_id] = {
+        "status": "pending", "progress": [], "result": None,
+        "error": None, "created": time.time(),
+    }
 
     original_name = file.filename or "upload.pdf"
     content = await file.read()
@@ -1443,6 +1603,14 @@ async def save_display_settings(exam_id: str, request: Request, caller: dict = D
     }
 
 
+def _exam_student_ids(exam_id: str) -> list:
+    """Học sinh đã nộp đề này — người cần biết ngay khi điểm được công bố/ẩn đi."""
+    try:
+        return [str(s.get("studentId")) for s in db.get_submissions(exam_id) if s.get("studentId")]
+    except Exception:
+        return []
+
+
 @app.post("/api/exams/{exam_id}/reveal")
 async def reveal_results(exam_id: str, caller: dict = Depends(require_auth)):
     """Giáo viên công bố kết quả."""
@@ -1453,6 +1621,7 @@ async def reveal_results(exam_id: str, caller: dict = Depends(require_auth)):
         return JSONResponse({"error": "Không có quyền công bố kết quả đề này"}, status_code=403)
     if not db.update_exam_field(exam_id, "resultsRevealed", True):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    publish(_exam_student_ids(exam_id), {"type": "exam.results", "examId": exam_id})
     return {"ok": True}
 
 
@@ -1466,6 +1635,7 @@ async def hide_results_endpoint(exam_id: str, caller: dict = Depends(require_aut
         return JSONResponse({"error": "Không có quyền ẩn kết quả đề này"}, status_code=403)
     if not db.update_exam_field(exam_id, "resultsRevealed", False):
         return JSONResponse({"error": "Không tìm thấy đề thi"}, status_code=404)
+    publish(_exam_student_ids(exam_id), {"type": "exam.results", "examId": exam_id})
     return {"ok": True}
 
 
@@ -1823,6 +1993,9 @@ async def save_site_content(request: Request, caller: dict = Depends(require_adm
     """Super admin lưu nội dung trang chủ."""
     body = await request.json()
     db.save_config({"site_content": body})
+    # Nội dung công khai → mọi tab đang mở đều cần biết, kể cả khách chưa đăng nhập
+    # (khách không có stream nên sẽ nhận bản mới ở lần mở trang kế tiếp).
+    broadcast({"type": "site.updated"})
     return {"ok": True}
 
 
@@ -1836,7 +2009,7 @@ async def site_register(request: Request):
     if not name or not phone:
         return JSONResponse({"error": "Thiếu họ tên hoặc số điện thoại"}, status_code=400)
     for adm in db.get_super_admins():
-        db.add_notif({
+        _notify({
             "id": _cls_id(), "type": "register",
             "targetUserId": str(adm.get("id")), "classId": None,
             "className": "", "assignmentId": "",
@@ -2267,6 +2440,20 @@ def _is_class_teacher(cls: dict, user_id) -> bool:
     return (viewer or {}).get("role") in ("admin", "super_admin")
 
 
+def _class_teacher_ids(cls: dict) -> list:
+    """Giáo viên chính + giáo viên phụ của lớp (dùng để chọn người nhận sự kiện realtime)."""
+    ids = [cls.get("teacherId")] + [ct.get("userId") for ct in cls.get("coTeachers") or []]
+    return [str(i) for i in ids if i]
+
+
+def _class_audience(cls: dict) -> list:
+    """Mọi người cần biết khi lớp có thay đổi: giáo viên + toàn bộ học sinh.
+    Admin/super_admin không nằm trong đây — họ không phải thành viên lớp, và đã có
+    lưới an toàn (refetch khi quay lại tab) ở phía client lo."""
+    members = [str(m.get("userId")) for m in cls.get("members") or [] if m.get("userId")]
+    return _class_teacher_ids(cls) + members
+
+
 def _sanitize_class(cls: dict) -> dict:
     """Bản trả về cho HỌC SINH: không lộ mật khẩu tham gia lớp."""
     out = dict(cls)
@@ -2421,7 +2608,9 @@ async def join_class_by_code(request: Request, caller: dict = Depends(require_au
         c["members"] = members
         if not joined:
             return False   # không có gì mới để tham gia
-    db.update_class_atomic(cls["id"], mutate)
+    updated = db.update_class_atomic(cls["id"], mutate)
+    publish(_class_teacher_ids(updated or cls) + [caller["id"]],
+            {"type": "class.membership", "classId": cls["id"]})
     return {"ok": True, "classId": cls["id"], "className": cls["name"], "subjects": joined}
 
 
@@ -2536,6 +2725,8 @@ async def add_member_endpoint(cls_id: str, request: Request, caller: dict = Depe
     cls = db.update_class_atomic(cls_id, mutate)
     if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
     if err: return JSONResponse({"error": err["msg"]}, status_code=403)
+    publish(_class_teacher_ids(cls) + [body.get("userId")],
+            {"type": "class.membership", "classId": cls_id})
     return {"ok": True}
 
 
@@ -2581,6 +2772,10 @@ async def remove_member_endpoint(cls_id: str, user_id: str, subject: str = None,
         cls_id, user_id, assignment_ids=(None if subj is None else scope["asgn_ids"]))
     if not scope["still_enrolled"]:
         db.delete_class_attendance_for_student(cls_id, user_id)
+    # Gửi cả cho học sinh vừa bị gỡ: tab của em ấy phải cập nhật ngay, không hiển
+    # thị tiếp một lớp mình không còn thuộc về.
+    publish(_class_teacher_ids(cls) + [user_id],
+            {"type": "class.membership", "classId": cls_id})
     return {"ok": True}
 
 
@@ -2716,7 +2911,7 @@ async def add_assignment_endpoint(cls_id: str, request: Request, caller: dict = 
         if muid in notified:
             continue
         notified.add(muid)
-        db.add_notif({
+        _notify({
             "id": _cls_id(), "type": "assignment",
             "targetUserId": muid, "classId": cls_id,
             "className": cls.get("name", ""), "assignmentId": asgn["id"],
@@ -2724,6 +2919,7 @@ async def add_assignment_endpoint(cls_id: str, request: Request, caller: dict = 
             "message": f"Lớp {cls.get('name','')} vừa giao bài tập mới. Hạn nộp: {asgn.get('dueDate','')}",
             "createdAt": _now_iso(), "read": False,
         })
+    publish(_class_audience(cls), {"type": "assignment.new", "classId": cls_id})
     return asgn
 
 
@@ -2821,6 +3017,7 @@ async def delete_assignment_endpoint(cls_id: str, asgn_id: str, caller: dict = D
         cls["assignments"] = [a for a in cls.get("assignments", []) if a["id"] != asgn_id]
     cls = db.update_class_atomic(cls_id, mutate)
     if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    publish(_class_audience(cls), {"type": "class.updated", "classId": cls_id})
     return {"ok": True}
 
 
@@ -2871,6 +3068,8 @@ async def extend_assignment_deadline_endpoint(cls_id: str, asgn_id: str, request
         msg, status = err["resp"]
         return JSONResponse({"error": msg}, status_code=status)
     asgn = _find_assignment(cls, asgn_id)
+    publish(_class_audience(cls),
+            {"type": "assignment.updated", "classId": cls_id, "assignmentId": asgn_id})
     return asgn
 
 
@@ -2911,6 +3110,9 @@ async def submit_assignment_endpoint(cls_id: str, asgn_id: str, request: Request
     if "resp" in err:
         msg, status = err["resp"]
         return JSONResponse({"error": msg}, status_code=status)
+    # Giáo viên đang mở bảng bài nộp thấy bài mới hiện ra ngay, không phải F5.
+    publish(_class_teacher_ids(cls),
+            {"type": "submission.new", "classId": cls_id, "assignmentId": asgn_id})
     return {"ok": True}
 
 
@@ -3029,6 +3231,9 @@ async def grade_submission_endpoint(cls_id: str, asgn_id: str, student_id: str,
     grade = await asyncio.to_thread(_grade_submission_sync, cls_id, asgn_id, student_id)
     if grade.get("status") == "error":
         return JSONResponse({"error": grade.get("error", "Chấm thất bại"), "aiGrade": grade}, status_code=422)
+    # Học sinh đang mở trang lớp thấy điểm hiện ra ngay khi giáo viên chấm xong.
+    publish([student_id] + _class_teacher_ids(cls0),
+            {"type": "grade.updated", "classId": cls_id, "assignmentId": asgn_id})
     return {"ok": True, "aiGrade": grade}
 
 
@@ -3056,6 +3261,8 @@ async def edit_ai_grade_endpoint(cls_id: str, asgn_id: str, student_id: str, req
     else:
         updated = ielts.apply_manual_edit(sub["aiGrade"], patch, caller["id"])
     _save_ai_grade(cls_id, asgn_id, student_id, updated)
+    publish([student_id] + _class_teacher_ids(cls0),
+            {"type": "grade.updated", "classId": cls_id, "assignmentId": asgn_id})
     return {"ok": True, "aiGrade": updated}
 
 
@@ -3139,6 +3346,7 @@ async def add_class_doc_endpoint(cls_id: str, request: Request, caller: dict = D
         cls.setdefault("documents", []).append(body)
     cls = db.update_class_atomic(cls_id, mutate)
     if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    publish(_class_audience(cls), {"type": "class.updated", "classId": cls_id})
     return {"ok": True}
 
 
@@ -3153,6 +3361,7 @@ async def remove_class_doc_endpoint(cls_id: str, doc_id: str, caller: dict = Dep
         cls["documents"] = [d for d in cls.get("documents", []) if d.get("id") != doc_id]
     cls = db.update_class_atomic(cls_id, mutate)
     if cls is None: return JSONResponse({"error": "Không tìm thấy lớp"}, status_code=404)
+    publish(_class_audience(cls), {"type": "class.updated", "classId": cls_id})
     return {"ok": True}
 
 
@@ -3543,7 +3752,7 @@ async def admin_reports_notify(request: Request, caller: dict = Depends(require_
             continue
         kind = _REPORT_LABELS.get(r["type"], "Nhắc nhở")
         ctx = _report_context(r)
-        db.add_notif({
+        _notify({
             "id": _cls_id(), "type": "nhac_nho",
             "targetUserId": str(r["studentId"]),
             "classId": r.get("classId"), "className": r.get("className", ""),
@@ -3638,7 +3847,7 @@ def _scan_pending_attendance_notifs() -> None:
 
         if title:
             for adm in db.get_super_admins():
-                db.add_notif({
+                _notify({
                     # classId=None: thông báo cho SUPER ADMIN, không phải học sinh của lớp
                     # (super admin không phải "member" của lớp) — để trống để NotificationBell
                     # không cố mở lớp qua luồng "Lớp của tôi" (chỉ dành cho học sinh) khi bấm vào.
@@ -3719,7 +3928,7 @@ def _scan_overdue_assignments() -> None:
                 if missed: parts.append(f"{len(missed)} bỏ bài: {', '.join(missed)}")
                 if low_score: parts.append(f"{len(low_score)} điểm thấp: {', '.join(low_score)}")
                 for adm in db.get_super_admins():
-                    db.add_notif({
+                    _notify({
                         # classId=None: thông báo cho super admin — xem giải thích ở notif "attendance" phía trên.
                         "id": _cls_id(), "type": "report",
                         "targetUserId": str(adm.get("id")), "classId": None,

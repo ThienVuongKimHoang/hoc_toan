@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import RoleBadge from '../components/RoleBadge.jsx'
 import { ROLES, hasTeacherAccess, authHeaders } from '../auth/mockUsers.js'
-import { getExamsByTeacher, getAllExams, fetchMySubmissions, scaledScore } from '../store/examStore.js'
+import { fetchMyExams, fetchMySubmissions, scaledScore } from '../store/examStore.js'
 
 const USER_KEY = 'hoctoan_user'
 
@@ -209,7 +209,11 @@ function StudentStats({ submissions }) {
 }
 
 function TeacherStats({ userId }) {
-  const exams = getExamsByTeacher(userId)
+  // Trước đây đọc localStorage nên chỉ đếm được đề đã mở trên CHÍNH trình duyệt này
+  // — số liệu sai, và đổi máy là về 0. Giờ lấy thẳng từ server.
+  const [exams, setExams] = useState([])
+  useEffect(() => { fetchMyExams().then(setExams) }, [userId])
+
   const pub   = exams.filter(e => e.published).length
   const draft = exams.length - pub
   const pubPercent = exams.length ? Math.round((pub / exams.length) * 100) : 0
@@ -218,7 +222,7 @@ function TeacherStats({ userId }) {
     <div className="prof-section">
       <h3 className="prof-section-title">{IcChart(16)} Thống kê giảng dạy</h3>
       <div className="prof-info-grid">
-        <StatRow icon={IcBook(18)}  color="#059669" label="Đề đã tạo"     value={exams.length} sub="Đề thi trong bộ nhớ" />
+        <StatRow icon={IcBook(18)}  color="#059669" label="Đề đã tạo"     value={exams.length} sub="Tổng số đề bạn đã tạo" />
         <StatRow icon={IcChart(18)} color="#2563eb" label="Đã phát hành"  value={pub}   sub={`Tỷ lệ phát hành: ${pubPercent}%`} />
         <StatRow icon={IcClock(18)} color="#f59e0b" label="Chưa phát link" value={draft} sub={draft > 0 ? 'Cần cấu hình liên kết' : 'Đã mở tất cả đề'} />
       </div>
@@ -227,7 +231,15 @@ function TeacherStats({ userId }) {
 }
 
 function AdminStats() {
-  const exams = getAllExams()
+  // Cũng vậy: trước đây đếm từ localStorage của riêng máy này.
+  const [exams, setExams] = useState([])
+  useEffect(() => {
+    fetch('/api/admin/exams', { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : [])
+      .then(list => setExams(Array.isArray(list) ? list : []))
+      .catch(() => {})
+  }, [])
+
   return (
     <div className="prof-section">
       <h3 className="prof-section-title">{IcChart(16)} Thống kê hệ thống</h3>

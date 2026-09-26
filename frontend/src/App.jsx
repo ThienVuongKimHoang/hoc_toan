@@ -22,6 +22,8 @@ import ExerciseSolver from './components/ExerciseSolver.jsx'
 import GeoViewerPage from './pages/GeoViewerPage.jsx'
 import WhiteboardPage from './pages/WhiteboardPage.jsx'
 import VocabPage from './pages/VocabPage.jsx'
+import { startEventStream, stopEventStream } from './realtime/eventStream.js'
+import { startVersionWatch } from './realtime/appVersion.js'
 
 const SECTIONS = ['PHẦN I', 'PHẦN II', 'PHẦN III']
 const SECTION_LABELS = {
@@ -190,9 +192,21 @@ export default function App() {
     }
 
     syncRole() // chạy ngay khi mount/F5
-    const interval = setInterval(syncRole, 30_000)
+    // 120s thay vì 30s: đổi role/tên giờ đã được server đẩy qua kênh realtime,
+    // vòng poll này chỉ còn là lưới an toàn.
+    const interval = setInterval(syncRole, 120_000)
     return () => clearInterval(interval)
   }, [user?.id]) // re-run khi login/logout
+
+  // ── Kênh realtime: mở khi đăng nhập, đóng khi đăng xuất ──
+  useEffect(() => {
+    if (!user?.id) { stopEventStream(); return }
+    startEventStream()
+    return () => stopEventStream()
+  }, [user?.id])
+
+  // Theo dõi bản build mới — chạy cho cả khách chưa đăng nhập.
+  useEffect(() => { startVersionWatch() }, [])
 
 
 

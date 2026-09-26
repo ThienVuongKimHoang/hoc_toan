@@ -1,4 +1,5 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
+import { blockReload } from '../realtime/reloadGuard.js'
 import UploadStep       from '../components/create-exam/UploadStep.jsx'
 import ProcessingStep   from '../components/create-exam/ProcessingStep.jsx'
 import ReviewStep       from '../components/create-exam/ReviewStep.jsx'
@@ -73,6 +74,10 @@ const EMPTY_RESULT = {
  *   mixResult     — pre-filled result từ Phối đề ngẫu nhiên (optional)
  */
 export default function CreateExamPage({ user, classId, onDone, editingExam, manualMode, mixResult, subject = 'toan' }) {
+  // Suốt cả màn hình soạn đề: đang trích xuất PDF hoặc đang sửa câu hỏi mà reload
+  // là mất sạch công sức — chỉ hiện banner, nạp bản mới sau khi lưu xong.
+  useEffect(() => blockReload('dang-soan-de'), [])
+
   const isEditing = !!editingExam
   const isManual  = !!manualMode && !isEditing
   const isMix     = !!mixResult && !isEditing && !isManual
@@ -146,9 +151,10 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
     const t = title.trim() || 'Đề thi chưa đặt tên'
     let exam
     if (isEditing) {
-      exam = updateExam(editingExam.id, { title: t, result: edited, grade: examGrade })
+      exam = updateExam(editingExam, { title: t, result: edited, grade: examGrade })
     } else {
-      // Manual mode: tạo đề mới và lưu vào localStorage (chưa publish), gắn với lớp đang mở
+      // Manual mode: dựng object đề mới (chưa publish), gắn với lớp đang mở —
+      // syncToServer ngay bên dưới mới là bước ghi thật.
       exam = createExam({ title: t, result: edited, userId: user.id, classId, subject: examSubject, grade: examGrade })
     }
     const res = await syncToServer(exam)

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { blockReload } from '../realtime/reloadGuard.js'
 import { examStatus, fetchExamById, startAttempt, submitResult, scaledScore, verifyLockEscape } from '../store/examStore.js'
 import { getExamWindow } from '../store/classStore.js'
 import QuestionCard, { SECTION_PREFIX } from '../components/QuestionCard.jsx'
@@ -963,6 +964,10 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
 
 /* ── Root component ── */
 export default function ExamTakePage({ examId, classId, assignmentId, user, onGoHome, onGoClass, onGoLogin }) {
+  // Có bản app mới cũng KHÔNG được tự reload khi học sinh đang làm bài — chỉ hiện
+  // banner. Rời màn hình này (nộp xong / thoát) thì khoá tự gỡ và bản mới được nạp.
+  useEffect(() => blockReload('dang-lam-bai'), [])
+
   const [exam, setExam] = useState(null)
   const [notFound, setNotFound] = useState(false)
   const [status, setStatus] = useState('pending')

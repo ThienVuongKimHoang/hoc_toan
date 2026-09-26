@@ -1,58 +1,30 @@
 import { authHeaders } from '../auth/mockUsers.js'
 
-const KEY = 'hoctoan_exams'
+/* Store này TỪNG cache toàn bộ đề thi vào localStorage['hoctoan_exams'].
+   Cache đó đã được bỏ hẳn vì hai lý do:
+     1. Một đề kèm ảnh base64 nặng vài MB, localStorage chỉ ~5 MB/origin → tràn
+        quota và setItem ném QuotaExceededError.
+     2. Đọc cache trước server khiến giáo viên sửa đề xong vẫn thấy bản cũ.
+   Server là nguồn thật duy nhất. main.jsx xoá nốt key cũ trên máy người dùng. */
 
 function genId() {
   return Math.random().toString(36).slice(2, 10)
 }
 
-export function getAllExams() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || [] }
-  catch { return [] }
-}
-
-export function getExamById(id) {
-  return getAllExams().find(e => e.id === id) || null
-}
-
-/* localStorage chỉ ~5 MB/origin, trong khi một đề có ảnh nhúng base64 nặng tới vài MB
-   (ảnh chiếm >99% dung lượng JSON) — hai đề như vậy là đã tràn quota và setItem ném
-   QuotaExceededError. Server mới là nguồn thật, cache chỉ để đỡ tải lại, nên tràn cache
-   TUYỆT ĐỐI không được làm hỏng luồng đang chạy: bỏ dần đề nặng nhất rồi ghi lại, hết
-   cách thì thôi (lần sau chỉ đơn giản là tải lại từ server). */
-function persist(list) {
-  try { localStorage.setItem(KEY, JSON.stringify(list)); return }
-  catch { /* đầy — dọn bớt bên dưới */ }
-
-  const kept = list
-    .map(e => ({ e, size: JSON.stringify(e).length }))
-    .sort((a, b) => a.size - b.size)   // nhẹ trước, nặng sau
-  while (kept.length) {
-    kept.pop()                          // loại đề nặng nhất còn lại
-    try { localStorage.setItem(KEY, JSON.stringify(kept.map(k => k.e))); return }
-    catch { /* vẫn đầy — loại tiếp */ }
-  }
-  try { localStorage.removeItem(KEY) } catch { /* bó tay, bỏ qua cache */ }
-}
-
-export function saveExam(exam) {
-  const list = getAllExams()
-  const idx  = list.findIndex(e => e.id === exam.id)
-  if (idx >= 0) list[idx] = exam
-  else list.push(exam)
-  persist(list)
-  return exam
-}
-
 export function deleteExam(id, teacherId) {
-  persist(getAllExams().filter(e => e.id !== id))
   // trả promise để caller chờ server xóa xong rồi mới reload danh sách từ DB
   return fetch(`/api/exams/${id}`, { method: 'DELETE', headers: authHeaders() }).catch(() => {})
 }
 
-export function getExamsByTeacher(userId) {
-  // So sánh lỏng theo chuỗi: createdBy có thể là số (dữ liệu cũ) hoặc chuỗi (server)
-  return getAllExams().filter(e => String(e.createdBy) === String(userId))
+/** Đề thi do giáo viên đang đăng nhập tạo (metadata, không kèm sections). */
+export async function fetchMyExams() {
+  try {
+    const res = await fetch('/api/my-exams', { headers: authHeaders() })
+    if (!res.ok) return []
+    return res.json()
+  } catch {
+    return []
+  }
 }
 
 /** Đề thi thuộc MỘT LỚP cụ thể, lấy từ server — dùng cho tab "Đề thi" trong lớp
@@ -84,13 +56,13 @@ export function createExam({ title, result, userId, classId, subject = 'toan', g
     published:      false,
     settings:       null,
   }
-  saveExam(exam)
   return exam
 }
 
-/** Cập nhật đề thi đã tồn tại (sau khi edit) */
-export function updateExam(examId, { title, result, grade }) {
-  const exam = getExamById(examId)
+/** Cập nhật đề thi đã tồn tại (sau khi edit).
+ *  Nhận nguyên object đề đang sửa thay vì tra theo id: trước đây hàm này đọc
+ *  localStorage nên sửa đề trên MÁY KHÁC (cache trống) sẽ trả null và mất bài sửa. */
+export function updateExam(exam, { title, result, grade }) {
   if (!exam) return null
   const updated = {
     ...exam,
@@ -101,13 +73,10 @@ export function updateExam(examId, { title, result, grade }) {
     sections:       result.sections,
     updatedAt:      new Date().toISOString(),
   }
-  saveExam(updated)
   return updated
 }
 
-/** Phát đề — lưu settings, đánh dấu published, đồng bộ lên server.
-    Lấy đề từ localStorage, nếu trình duyệt này không có thì tải từ server
-    (để "Phát đề / Cài đặt" vẫn dùng được trên máy khác). */
+/** Phát đề — lưu settings, đánh dấu published, đồng bộ lên server. */
 export async function publishExam(examId, settings, teacherId) {
   const exam = await fetchExamById(examId)
   if (!exam) return null
@@ -131,7 +100,6 @@ export async function publishExam(examId, settings, teacherId) {
     resultsRevealed: settings.resultsRevealed ?? exam.resultsRevealed ?? false,
     classes: settings.classes || exam.classes || [],
   }
-  saveExam(updated)
   try {
     await fetch(`/api/exams/${examId}`, {
       method:  'POST',
@@ -171,33 +139,18 @@ export function classShareUrl(examId, classId) {
 }
 
 /** Tải đề thi. Truyền teacherId khi giáo viên cần xem/sửa đề (kèm đáp án đúng) —
- * không truyền thì server tự ẩn đáp án (học sinh làm bài thật). Cache localStorage
- * chỉ dùng cho lượt fetch có teacherId, tránh lộ/kẹt bản đã ẩn đáp án giữa các vai trò
- * dùng chung trình duyệt. */
-export async function fetchExamById(id, teacherId, { fresh = false } = {}) {
-  // fresh=true: BỎ QUA bản cache localStorage. Bắt buộc dùng khi chấm điểm/xem kết
-  // quả — bản cache có thể là đề CŨ (giáo viên vừa sửa thang điểm ở tab khác), khiến
-  // ô chấm tự luận lấy điểm tối đa cũ và chấm lệch thang so với đề thật.
-  if (teacherId && !fresh) {
-    const local = getExamById(id)
-    if (local) return local
-  }
-  let exam
+ * không truyền thì server tự ẩn đáp án (học sinh làm bài thật).
+ * Luôn đi thẳng server: đề là dữ liệu vừa nặng vừa hay đổi (thang điểm, đáp án),
+ * cache lại chỉ sinh ra bản cũ chấm lệch thang. */
+export async function fetchExamById(id, teacherId) {
   try {
     const qs = teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : ''
     const res = await fetch(`/api/exams/${id}${qs}`, { headers: authHeaders() })
     if (!res.ok) return null
-    exam = await res.json()
+    return await res.json()
   } catch {
     return null
   }
-  // Ghi cache là việc PHỤ và nằm NGOÀI try ở trên: trước đây nó chung một khối try,
-  // nên localStorage đầy là ném lỗi rồi bị nuốt thành `return null` — đề tải về hoàn
-  // toàn hợp lệ vẫn báo "Không tải được nội dung đề thi từ server".
-  if (teacherId) {
-    try { saveExam(exam) } catch { /* cache hỏng thì kệ, đã có dữ liệu thật */ }
-  }
-  return exam
 }
 
 /** Học sinh nộp bài */
@@ -345,11 +298,7 @@ export async function saveDisplaySettings(examId, cfg) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || 'Lưu cài đặt hiển thị thất bại')
   }
-  const data = await res.json()
-  // Đồng bộ bản cache localStorage để danh sách đề khỏi hiện cấu hình cũ
-  const exam = getExamById(examId)
-  if (exam) saveExam({ ...exam, ...data })
-  return data
+  return res.json()
 }
 
 /** Giáo viên công bố kết quả */
@@ -368,8 +317,6 @@ export async function hideResultsToggle(examId, teacherId) {
 
 /** Bật/tắt chế độ công khai đề thi */
 export async function setExamPublic(examId, isPublic, teacherId) {
-  const exam = getExamById(examId)
-  if (exam) saveExam({ ...exam, isPublic })
   const res = await fetch(`/api/exams/${examId}/toggle-public`, {
     method:  'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -388,8 +335,6 @@ export async function fetchPublicExams() {
 
 /** Giáo viên lưu cài đặt chế độ luyện tập */
 export async function savePracticeSettings(examId, settings, teacherId) {
-  const exam = getExamById(examId)
-  if (exam) saveExam({ ...exam, practiceSettings: settings })
   const res = await fetch(`/api/exams/${examId}/practice-settings`, {
     method:  'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),

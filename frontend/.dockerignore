@@ -1,0 +1,12 @@
+# Dockerfile chạy `npm ci` TRƯỚC rồi mới `COPY . .`. Nếu không loại hai thư mục này,
+# node_modules/dist của máy dev sẽ đè lên kết quả npm ci — build mất tính tái lập
+# (và trên macOS còn kéo theo binary esbuild/rollup sai kiến trúc).
+node_modules
+dist
+
+.git
+.gitignore
+*.log
+.DS_Store
+.env
+.env.*

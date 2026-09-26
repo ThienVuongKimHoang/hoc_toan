@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { getNotifications, markAllRead, markRead } from '../store/notificationStore.js'
+import { useRealtime } from '../realtime/useRealtime.js'
 
 const isReportNotif = (n) => n.type === 'attendance' || n.type === 'report'
 
@@ -14,11 +15,11 @@ export default function NotificationBell({ user, onOpenClass, onOpenReports }) {
     setNotifs(list)
   }
 
-  useEffect(() => {
-    load()
-    const t = setInterval(load, 30_000)
-    return () => clearInterval(t)
-  }, [user?.id])
+  useEffect(() => { load() }, [user?.id])
+
+  // Server đẩy notif.new ngay khi có thông báo mới nên không cần poll 30s nữa;
+  // useRealtime đã kèm sẵn lưới an toàn (refetch khi quay lại tab + poll chậm).
+  useRealtime(['notif.new'], load, !!user)
 
   useEffect(() => {
     const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }

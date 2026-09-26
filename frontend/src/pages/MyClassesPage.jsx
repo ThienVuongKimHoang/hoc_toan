@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { useRealtime } from '../realtime/useRealtime.js'
 import { getClassByCode, getClassesByStudent, getExamWindow, getPendingForStudent, joinClassByCode, submitAssignment, uploadFile } from '../store/classStore.js'
 import { getPracticeInfo, fetchMySubmissions, scaledScore } from '../store/examStore.js'
 import SubjectBadge, { SUBJECTS, SUBJECT_BG, GradeBadge, gradeLabel } from '../components/SubjectBadge.jsx'
@@ -771,6 +772,12 @@ function ClassView({ cls, user, pendingCount = 0, onBack, initialAsgnTab }) {
     return () => clearTimeout(t)
   }, [hasPendingGrade, refreshKey])
 
+  // Thay đổi trong ĐÚNG lớp đang mở → nạp lại chi tiết lớp ngay.
+  useRealtime(
+    ['assignment.new', 'assignment.updated', 'grade.updated', 'class.updated', 'exam.results'],
+    () => setRefreshKey(k => k + 1),
+  )
+
   const subject = primarySubject(localCls)             // mỗi lớp = 1 môn
   const [tab, setTab] = useState('assignments')       // 'assignments' | 'documents' | 'geo3d'
   const canDrawGeo3d = hasGeo3dAccess(localCls, subject)
@@ -1025,8 +1032,10 @@ export default function MyClassesPage({ user, initialJoinCode, initialClassId, i
   // hiện tại (vd quay lại từ bài thi vừa nộp); mở lớp khác thủ công thì xoá gợi ý này.
   const [pendingAsgnTab, setPendingAsgnTab] = useState(initialAsgnTab || null)
 
-  const reload = async () => {
-    setLoading(true)
+  // silent=true: làm mới ngầm do server đẩy sự kiện xuống — KHÔNG bật spinner,
+  // nếu không màn hình sẽ nhấp nháy mỗi lần giáo viên thao tác.
+  const reload = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true)
     const [list, pend] = await Promise.all([
       getClassesByStudent(String(user.id), user.email),
       getPendingForStudent(String(user.id), user.email).catch(() => ({ items: [] })),
@@ -1034,10 +1043,16 @@ export default function MyClassesPage({ user, initialJoinCode, initialClassId, i
     setClasses(list)
     setPendingItems(pend.items || [])
     if (selected) setSelected(list.find(c => c.id === selected.id) || null)
-    setLoading(false)
+    if (!silent) setLoading(false)
   }
 
   useEffect(() => { reload() }, []) // eslint-disable-line
+
+  // Giáo viên giao bài / chấm điểm / đổi hạn nộp → hiện ra ngay, không phải F5.
+  useRealtime(
+    ['assignment.new', 'assignment.updated', 'grade.updated', 'class.updated', 'class.membership'],
+    () => reload({ silent: true }),
+  )
 
   // Mở thẳng một lớp khi điều hướng từ thông báo hoặc sau khi nộp bài (#class/<id>[/<tab>])
   useEffect(() => {

@@ -1,4 +1,5 @@
 // HomePage.jsx — Trang chủ Trung tâm Ánh Sáng (thiết kế "Nắng vàng" v2)
+import { useRealtime } from '../realtime/useRealtime.js'
 // Nội dung load từ /api/site-content — super admin chỉnh sửa trong trang Quản trị.
 // Data contract giữ nguyên: info / stats / teachers / courses / schedule / achievements / testimonials.
 import React, { useEffect, useRef, useState } from 'react'
@@ -663,12 +664,17 @@ export default function HomePage() {
   const [showAdvice, setShowAdvice] = useState(false)
   const rootRef = useRef(null)
 
-  useEffect(() => {
+  const loadContent = () => {
     fetch('/api/site-content')
       .then(r => r.json())
       .then(setContent)
       .catch(() => setContent({}))
-  }, [])
+  }
+
+  useEffect(() => { loadContent() }, [])
+
+  // Super admin sửa nội dung trang chủ → khách đang mở trang thấy bản mới ngay.
+  useRealtime(['site.updated'], loadContent)
 
   // Scroll-reveal (tôn trọng prefers-reduced-motion)
   useEffect(() => {

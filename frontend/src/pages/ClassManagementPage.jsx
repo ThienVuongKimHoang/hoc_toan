@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useRealtime } from '../realtime/useRealtime.js'
 import {
   fetchExamsByClass, getSubmissions as getExamSubmissions, fetchExamById, scaledScore,
   deleteStudentSubmissions, deleteExam, setExamPublic, SHOW, showTypeLabel,
@@ -421,9 +422,9 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
         : assignment.id
       Promise.all([
         getExamSubmissions(assignment.examId, teacherId),
-        // fresh: luôn lấy đề MỚI NHẤT từ server. Dùng bản cache có thể ra thang điểm cũ →
-        // ô chấm tự luận chặn theo điểm tối đa cũ, chấm xong lệch với đề thật.
-        fetchExamById(assignment.examId, teacherId, { fresh: true }),
+        // Luôn lấy đề MỚI NHẤT từ server: thang điểm cũ sẽ chặn ô chấm tự luận
+        // theo điểm tối đa cũ, chấm xong lệch với đề thật.
+        fetchExamById(assignment.examId, teacherId),
       ])
         .then(([d, examObj]) => {
           const all = (d.submissions || []).filter(s =>
@@ -472,6 +473,9 @@ function SubmissionsPanel({ classId, assignment, members, allAssignments, teache
   }, [classId, assignment.id, isExam])
 
   useEffect(() => { reload() }, [reload])
+
+  // Học sinh nộp bài trong lúc giáo viên đang mở bảng này → bài mới hiện ra ngay.
+  useRealtime(['submission.new', 'grade.updated'], reload)
 
   // Dữ liệu về xong mới cuộn được (trước đó khung còn rỗng) — cuộn 1 lần rồi bỏ cờ,
   // để lần mở bảng điểm sau không bị nhảy về chỗ cũ nữa.
@@ -1720,7 +1724,7 @@ function ExamBankPanel({ classId, teacherId, user, subject, grade, onAssign }) {
   const handleEdit = async (exam) => {
     // Luôn lấy bản mới nhất từ server trước khi mở trình soạn: mở từ bản cache cũ rồi
     // bấm Lưu sẽ ghi đè mất thay đổi mà người khác (hoặc máy khác) vừa sửa.
-    const full = await fetchExamById(exam.id, teacherId, { fresh: true })
+    const full = await fetchExamById(exam.id, teacherId)
     if (full) setEditor({ editingExam: full, manualMode: false, mixResult: null })
     else alert('Không tải được nội dung đề thi từ server.')
   }
@@ -2556,6 +2560,12 @@ export default function ClassManagementPage({ user, onOpenClass }) {
   }
 
   useEffect(() => { reload() }, [])
+
+  // Học sinh nộp bài / tham gia lớp → danh sách lớp của giáo viên tự cập nhật.
+  useRealtime(
+    ['submission.new', 'class.updated', 'class.membership', 'assignment.new', 'assignment.updated', 'grade.updated'],
+    reload,
+  )
   useEffect(() => {
     getClassesByStudent(String(user.id), user.email).then(setMemberClasses).catch(() => {})
   }, [user.id, user.email])

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ROLE_META, authHeaders } from '../auth/mockUsers.js'
-import { getAllExams } from '../store/examStore.js'
 import { STUDENT_GRADES, gradeLabel } from '../components/SubjectBadge.jsx'
 import SiteContentTab from './SiteContentTab.jsx'
 import ReportsTab from './ReportsTab.jsx'

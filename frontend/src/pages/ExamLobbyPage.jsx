@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { useRealtime } from '../realtime/useRealtime.js'
 import { fetchExamById, fetchPublicExams } from '../store/examStore.js'
 import MathText from '../components/MathText.jsx'
 
@@ -136,6 +137,11 @@ export default function ExamLobbyPage({ onGoExam, onGoPractice, onGoHome, initia
       .finally(() => setLoadingList(false))
     inputRef.current?.focus()
   }, [])
+
+  // Giáo viên công bố/ẩn kết quả hoặc đổi chế độ công khai → danh sách tự cập nhật.
+  useRealtime(['exam.results', 'class.updated'], () => {
+    fetchPublicExams().then(setPublicExams).catch(() => {})
+  })
 
   // Auto-submit khi có mã đề từ URL (#lobby/MÃĐỀ)
   useEffect(() => {
