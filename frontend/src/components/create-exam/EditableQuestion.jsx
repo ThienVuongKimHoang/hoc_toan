@@ -389,7 +389,7 @@ function LatexToolbar({ taRef, value, onChange, onImageFile }) {
 /* ─── Inline image preview in split pane ─── */
 function PreviewWithImages({ text, images }) {
   if (!text) return <span className="eq-placeholder">Xem trước xuất hiện ở đây…</span>
-  return <MarkerText text={text} images={images} showMissingPlaceholder />
+  return <MarkerText text={text} images={images} showMissingPlaceholder emphasizeSai />
 }
 
 /* ─── Detect garbled LaTeX from LLM failure ─── */
@@ -1319,7 +1319,7 @@ export default function EditableQuestion({
               <div className="eq-ai-result-label">Xem trước câu hỏi AI tạo</div>
 
               <div className="eq-ai-result-text">
-                <MathText text={aiResult.question_text || ''} />
+                <MathText text={aiResult.question_text || ''} emphasizeSai />
               </div>
 
               {/* MCQ choices */}
@@ -1585,7 +1585,7 @@ export default function EditableQuestion({
             ) : (
               <div className="eq-qtext-display" onClick={startEdit} title="Click để chỉnh sửa">
                 {q.question_text
-                  ? <MathText text={q.question_text} />
+                  ? <MathText text={q.question_text} emphasizeSai />
                   : <span className="eq-placeholder">Click để nhập nội dung câu hỏi…</span>}
                 <span className="eq-edit-hint"><PencilIcon /></span>
               </div>

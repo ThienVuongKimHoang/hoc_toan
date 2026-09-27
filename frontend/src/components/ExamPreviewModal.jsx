@@ -211,7 +211,7 @@ export default function ExamPreviewModal({ result, title, onClose, onSave, onEdi
                       <div className="ep-q-header-row">
                         <span className="ep-q-num">Câu {q.question_number}.</span>
                         <span className="ep-q-text">
-                          <MathText text={q.question_text} />
+                          <MathText text={q.question_text} emphasizeSai />
                         </span>
                         {/* Quick edit button */}
                         <button

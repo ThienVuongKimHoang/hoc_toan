@@ -40,6 +40,38 @@ function renderMathHtml(math, displayMode) {
   }
 }
 
+// ── Nhấn mạnh chữ "sai" trong đề bài ─────────────────────────────────────────
+// Câu "Khẳng định nào sau đây là sai?" rất dễ bị đọc vội thành "đúng" rồi chọn
+// ngược đáp án, nên chữ "sai" được in đậm + to hơn (class .mt-sai).
+// Chỉ bật cho ĐỀ BÀI qua prop `emphasizeSai`: đáp án A/B/C/D và các ý a–d của
+// PHẦN II giữ nguyên, nếu không cả câu sẽ lỗ chỗ chữ đậm và mất tác dụng nhấn.
+const SAI_RE = /\bsai\b/gi
+// Thuật ngữ có chứa "sai" (sai số, sai lệch…) — không phải yêu cầu chọn phương
+// án sai, tô đậm là nhấn nhầm chỗ. Chặn cuối bằng (?!\p{L}) chứ không phải \b:
+// chữ có dấu ("số", "lệch") kết thúc bằng ký tự ngoài ASCII nên \b không khớp.
+const SAI_COMPOUND_RE = /^\s*(?:số|lệch|sót|khác|biệt|phân|lầm|dấu)(?!\p{L})/iu
+// "đúng hay sai", "Đúng/Sai", "xét tính đúng sai" — đề hỏi cả hai chiều (hay gặp
+// ở đề bài PHẦN II), nhấn mạnh một bên là làm lệch đề.
+const BOTH_WAYS_RE = /đúng\s*(?:hay|hoặc|\/|,|-|–)?\s*$/i
+
+// Trả về mảng node đã chèn <strong>, hoặc null nếu không có gì cần nhấn —
+// null để phía gọi render nguyên chuỗi như cũ, khỏi bọc thêm node vô ích.
+function emphasizeSaiNodes(value, keyPrefix) {
+  const nodes = []
+  let last = 0
+  for (const m of value.matchAll(SAI_RE)) {
+    const end = m.index + m[0].length
+    if (SAI_COMPOUND_RE.test(value.slice(end))) continue
+    if (BOTH_WAYS_RE.test(value.slice(0, m.index))) continue
+    if (m.index > last) nodes.push(value.slice(last, m.index))
+    nodes.push(<strong key={`${keyPrefix}-s${m.index}`} className="mt-sai">{m[0]}</strong>)
+    last = end
+  }
+  if (!nodes.length) return null
+  if (last < value.length) nodes.push(value.slice(last))
+  return nodes
+}
+
 // ── Markdown table ────────────────────────────────────────────────────────────
 
 function isTableBlock(text) {
@@ -114,7 +146,7 @@ function parseLatexSegments(text) {
   return segments
 }
 
-function renderLatexSegment(seg, idx) {
+function renderLatexSegment(seg, idx, emphasizeSai) {
   if (seg.type === 'inline') {
     return (
       <span
@@ -131,22 +163,24 @@ function renderLatexSegment(seg, idx) {
       />
     )
   }
+  // Chỉ chữ thường mới được nhấn — phần trong $...$ đã tách thành segment riêng
+  // ở trên nên KaTeX không bao giờ nhận thêm thẻ HTML lạ.
   return seg.value.split('\n').map((line, i, arr) => (
     <React.Fragment key={`${idx}-${i}`}>
-      {line}
+      {emphasizeSai ? (emphasizeSaiNodes(line, `${idx}-${i}`) || line) : line}
       {i < arr.length - 1 && <br />}
     </React.Fragment>
   ))
 }
 
-function RichText({ text }) {
+function RichText({ text, emphasizeSai }) {
   const segs = parseLatexSegments(text)
-  return <>{segs.map((s, i) => renderLatexSegment(s, i))}</>
+  return <>{segs.map((s, i) => renderLatexSegment(s, i, emphasizeSai))}</>
 }
 
 // ── Public component ──────────────────────────────────────────────────────────
 
-export default function MathText({ text, className = '' }) {
+export default function MathText({ text, className = '', emphasizeSai = false }) {
   if (text == null || text === '') return null
   // Ép về chuỗi: đáp án trả lời ngắn có thể là số (vd 42, 2.5) — nếu để nguyên,
   // các hàm chuỗi (matchAll/split) sẽ ném lỗi và làm trắng cả trang.
@@ -157,7 +191,7 @@ export default function MathText({ text, className = '' }) {
       {blocks.map((b, i) =>
         b.type === 'table'
           ? renderTable(b.value, i)
-          : <RichText key={i} text={b.value} />
+          : <RichText key={i} text={b.value} emphasizeSai={emphasizeSai} />
       )}
     </span>
   )

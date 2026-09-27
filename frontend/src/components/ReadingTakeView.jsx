@@ -157,7 +157,7 @@ function ReadingQuestion({ q, examMode, isCloze, selected, onSelect, flash, regi
       </div>
 
       {!isCloze && q.question_text && (
-        <p className="rt-q-stem"><MathText text={q.question_text} /></p>
+        <p className="rt-q-stem"><MathText text={q.question_text} emphasizeSai /></p>
       )}
 
       <div className={`rt-q-choices ${isCloze ? 'horizontal' : ''}`}>

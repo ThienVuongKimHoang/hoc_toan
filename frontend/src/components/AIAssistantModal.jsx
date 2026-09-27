@@ -27,7 +27,7 @@ function QuestionPreview({ q, checked, onToggle }) {
         <div className="ai-q-num">Câu {q.question_number}</div>
 
         <div className="ai-q-text">
-          <MathText text={q.question_text || ''} />
+          <MathText text={q.question_text || ''} emphasizeSai />
         </div>
 
         {isMCQ && q.choices && (

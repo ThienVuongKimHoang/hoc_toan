@@ -32,7 +32,7 @@ export function InlineImage({ img, className = 'figure-img' }) {
 // Render text với marker [img:id] → ảnh thật; phần chữ còn lại qua MathText.
 // `showMissingPlaceholder`: hiện 📷 thay chỗ ảnh chưa tìm thấy trong `images`
 // (dùng cho preview trong editor — giúp GV biết đang thiếu ảnh).
-export default function MarkerText({ text, images, showMissingPlaceholder = false }) {
+export default function MarkerText({ text, images, showMissingPlaceholder = false, emphasizeSai = false }) {
   const str = text == null ? '' : String(text)
   if (!str) return null
   const parts = str.split(MARKER_SPLIT_RE)
@@ -47,7 +47,7 @@ export default function MarkerText({ text, images, showMissingPlaceholder = fals
             ? <span key={i} className="eq-img-ref-placeholder">📷</span>
             : null
         }
-        return part ? <MathText key={i} text={part} /> : null
+        return part ? <MathText key={i} text={part} emphasizeSai={emphasizeSai} /> : null
       })}
     </>
   )

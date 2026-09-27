@@ -46,7 +46,7 @@ export function QuestionText({ q }) {
   if (!text && orphans.length === 0) return null
   return (
     <>
-      <MarkerText text={text} images={images} />
+      <MarkerText text={text} images={images} emphasizeSai />
       {orphans.map((img, i) => <InlineImage key={img.id || `o${i}`} img={img} />)}
     </>
   )

@@ -286,7 +286,7 @@ export default function GradeEssayModal({ exam, students = [], initialSubId, tea
                     <span className="ge-qmax">Tối đa {max}đ</span>
                   </div>
                   {q.question_text && (
-                    <div className="ge-qtext"><MathText text={q.question_text} /></div>
+                    <div className="ge-qtext"><MathText text={q.question_text} emphasizeSai /></div>
                   )}
                   {q.answer && (
                     <div className="ge-rubric">💡 Gợi ý chấm: <MathText text={q.answer} /></div>

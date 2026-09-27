@@ -1123,6 +1123,11 @@ button { font-family: inherit; }
 .answer-feedback.wrong   { background: #fef2f2; color: #991b1b; }
 .answer-feedback.neutral { background: #f8fafc; color: #64748b; }
 
+/* Chữ "sai" trong đề bài (MathText emphasizeSai) — đậm + to hơn 15% để không ai
+   đọc nhầm "chọn phương án sai" thành "chọn phương án đúng". Giữ nguyên màu chữ:
+   trang làm bài/xem lại đã dùng đỏ cho câu trả lời sai, thêm đỏ ở đây là rối. */
+.mt-sai { font-weight: 700; font-size: 1.15em; }
+
 /* ── Markdown table ── */
 .md-table-wrap { overflow-x: auto; margin: 10px 0; }
 .md-table { border-collapse: collapse; font-size: 0.88rem; min-width: 100%; }
