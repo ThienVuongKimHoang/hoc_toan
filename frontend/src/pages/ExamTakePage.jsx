@@ -484,6 +484,8 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitErr, setSubmitErr] = useState('')
+  const submitButtonRef = useRef(null)
+  const autoSubmitTriggeredRef = useRef(false)
   const [finalScore, setFinalScore] = useState(null)
   const [finalMax, setFinalMax] = useState(null)
   // Cài đặt hiển thị của đề, do SERVER quyết định lúc nộp bài: có được xem điểm
@@ -538,10 +540,14 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
   const endIso = new Date(endTime).toISOString()
   const msLeft = useCountdown(endIso)
 
-  // Hết giờ → tự động nộp bài
+  // Hết giờ → kích hoạt đúng nút "Nộp bài" trên giao diện. Dùng click thật thay
+  // vì gọi thẳng API để trạng thái nút chuyển sang "Đang nộp…", tránh màn hình bị
+  // đứng ở bước nộp khi timer và React cập nhật cùng một nhịp.
   useEffect(() => {
-    if (msLeft === 0 && !submitted) handleSubmit(true)
-  }, [msLeft])
+    if (msLeft !== 0 || submitted || submitting || autoSubmitTriggeredRef.current) return
+    autoSubmitTriggeredRef.current = true
+    requestAnimationFrame(() => submitButtonRef.current?.click())
+  }, [msLeft, submitted, submitting])
 
   // Lưu lại lượt làm bài (giờ bắt đầu + đáp án) sau mỗi thay đổi, để thoát ra rồi
   // quay lại (F5, mất mạng, đóng tab...) không bị tính lại từ đầu.
@@ -807,7 +813,7 @@ function ExamView({ exam, studentName, studentId, className, classId, assignment
               title="Chỉ hiển thị 1 câu mỗi màn hình">
               {focusMode ? '▦ Xem tất cả' : '◎ Tập trung'}
             </button>
-            <button className="etx-submit" disabled={submitting} onClick={() => handleSubmit(false)}>
+            <button ref={submitButtonRef} className="etx-submit" disabled={submitting} onClick={() => handleSubmit(autoSubmitTriggeredRef.current)}>
               {submitting ? '⏳ Đang nộp…' : '✅ Nộp bài'}
             </button>
           </div>
