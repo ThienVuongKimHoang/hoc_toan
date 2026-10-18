@@ -1531,6 +1531,17 @@ def get_user_by_email(email: str, pwd: bool = False) -> Optional[dict]:
     return _user_from_row(dict(row), pwd=pwd) if row else None
 
 
+def find_users_by_password(password: str) -> list:
+    """Tìm nội bộ các tài khoản dùng cùng mật khẩu để hỗ trợ nhận diện nhập nhầm email."""
+    if not password:
+        return []
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT id, email, password, role FROM users WHERE password <> ''")
+            rows = cur.fetchall()
+    return [dict(row) for row in rows if verify_password(password, row.get("password") or "")]
+
+
 def get_user_by_id(uid: str, pwd: bool = False) -> Optional[dict]:
     with _C() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:

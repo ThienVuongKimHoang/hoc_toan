@@ -2120,6 +2120,21 @@ async def api_login(request: Request):
     password = body.get("password") or ""
     user = db.get_user_by_email(email, pwd=True)
     is_super_admin_login = bool(user and user.get("role") == "super_admin")
+
+    def password_hint():
+        if is_super_admin_login or not password:
+            return None
+        matches = [m for m in db.find_users_by_password(password) if m.get("role") != "super_admin"]
+        if len(matches) != 1:
+            return None
+        candidate = (matches[0].get("email") or "").lower()
+        typed_local = email.split("@", 1)[0]
+        candidate_local = candidate.split("@", 1)[0]
+        if not typed_local or not candidate_local:
+            return None
+        if typed_local not in candidate_local and candidate_local not in typed_local:
+            return None
+        return candidate
     if is_super_admin_login:
         locked_for = db.get_login_lock_seconds(ip)
         if locked_for > 0:
@@ -2136,13 +2151,17 @@ async def api_login(request: Request):
                 {"error": "Sai tên tài khoản hoặc mật khẩu. Vui lòng thử lại sau %s giây." % locked_for},
                 status_code=429,
             )
-        return JSONResponse({"error": "Sai mật khẩu." if user else "Sai tên tài khoản và mật khẩu."}, status_code=401)
+        hint = password_hint()
+        error_message = "Sai tên tài khoản hoặc mật khẩu." if is_super_admin_login else (f"Sai tên tài khoản. Tài khoản đúng của bạn là {hint}." if hint else ("Sai mật khẩu." if user else "Sai tên tài khoản và mật khẩu."))
+        return JSONResponse({"error": error_message}, status_code=401)
     if not user or not db.verify_password(password, user.get("password") or ""):
         failure_type = "wrong_password" if user else "wrong_both"
         locked_for = db.register_login_failure(ip, email, failure_type) if is_super_admin_login else 0
         if locked_for > 0:
             return JSONResponse({"error": f"Sai tên tài khoản hoặc mật khẩu. Vui lòng thử lại sau {locked_for} giây."}, status_code=429)
-        return JSONResponse({"error": "Sai mật khẩu." if user else "Sai tên tài khoản và mật khẩu."}, status_code=401)
+        hint = password_hint()
+        error_message = "Sai tên tài khoản hoặc mật khẩu." if is_super_admin_login else (f"Sai tên tài khoản. Tài khoản đúng của bạn là {hint}." if hint else ("Sai mật khẩu." if user else "Sai tên tài khoản và mật khẩu."))
+        return JSONResponse({"error": error_message}, status_code=401)
     # Đăng nhập thành công → xoá lịch sử nhập sai của IP này
     db.clear_login_attempts(ip)
     # Bản ghi cũ còn plaintext → nâng cấp sang hash ngay khi đăng nhập thành công
