@@ -6652,6 +6652,18 @@ button { font-family: inherit; }
 .sa-refresh-btn:hover { background: #f1f5f9; }
 .sa-refresh-btn--sm { padding: 5px 8px; }
 
+.sa-security-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 24px; margin-bottom: 16px; border: 1px solid #dbe7f4; border-radius: 16px; background: linear-gradient(135deg, #f8fbff, #eef5ff); }
+.sa-security-hero h2 { margin: 2px 0 5px; color: #0f2747; font-size: 1.35rem; }
+.sa-security-hero p { margin: 0; color: #64748b; font-size: .85rem; }
+.sa-security-kpis { margin-bottom: 18px; }
+.sa-security-toolbar { padding: 12px 0; }
+.sa-login-identity { font-weight: 600; color: #1e293b; margin-bottom: 4px; }
+.sa-failure { display: inline-flex; padding: 3px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; color: #475569; background: #f1f5f9; }
+.sa-failure--password { color: #b45309; background: #fff7ed; }
+.sa-failure--account { color: #7c3aed; background: #f5f3ff; }
+.sa-failure--both { color: #be123c; background: #fff1f2; }
+@media (max-width: 640px) { .sa-security-hero { flex-direction: column; } }
+
 /* ── KPI Grid ── */
 .sa-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
 .sa-kpi-card {

@@ -921,9 +921,12 @@ function SecurityTab({ viewerId }) {
   const bannedSet = new Set(banned.map(b => b.ip))
   const fmt     = iso => iso ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
   const fmtLock = s => s <= 0 ? '—' : (s >= 60 ? `${Math.ceil(s / 60)} phút` : `${s} giây`)
+  const failureLabel = type => ({ wrong_password: 'Sai mật khẩu', wrong_account: 'Sai tên tài khoản', wrong_both: 'Sai tài khoản & mật khẩu', unknown: 'Không xác định' }[type] || 'Không xác định')
+  const failureClass = type => type === 'wrong_password' ? 'sa-failure sa-failure--password' : type === 'wrong_account' ? 'sa-failure sa-failure--account' : type === 'wrong_both' ? 'sa-failure sa-failure--both' : 'sa-failure'
+  const lockedCount = attempts.filter(a => a.lockedSeconds > 0).length
 
   return (
-    <div className="sa-exams">
+    <div className="sa-exams sa-security-page">
       {banning && (
         <BanIpModal
           initialIp={typeof banning === 'string' ? banning : ''}
@@ -940,8 +943,17 @@ function SecurityTab({ viewerId }) {
         />
       )}
 
-      <div className="sa-toolbar">
-        <div className="sa-count-badge">{attempts.length} IP có lịch sử đăng nhập sai</div>
+      <div className="sa-security-hero">
+        <div><div className="sa-section-title">Trung tâm bảo mật</div><h2>Theo dõi đăng nhập & kiểm soát IP</h2><p>Chỉ các lần thử vào tài khoản <strong>super_admin</strong> mới kích hoạt khóa tạm thời.</p></div>
+        <button className="sa-refresh-btn" onClick={load}>{IcRefresh(14)} Làm mới</button>
+      </div>
+      <div className="sa-kpi-grid sa-security-kpis">
+        <div className="sa-kpi-card"><div className="sa-kpi-icon" style={{ background: '#eff6ff', color: '#2563eb' }}>{IcUsers(20)}</div><div><div className="sa-kpi-label">IP có lịch sử</div><div className="sa-kpi-value">{attempts.length}</div><div className="sa-kpi-sub">lần đăng nhập sai</div></div></div>
+        <div className="sa-kpi-card"><div className="sa-kpi-icon" style={{ background: '#fff7ed', color: '#ea580c' }}>{IcLock(20)}</div><div><div className="sa-kpi-label">Đang khóa tạm</div><div className="sa-kpi-value">{lockedCount}</div><div className="sa-kpi-sub">chỉ áp dụng cho super_admin</div></div></div>
+        <div className="sa-kpi-card"><div className="sa-kpi-icon" style={{ background: '#fef2f2', color: '#dc2626' }}>{IcBan(20)}</div><div><div className="sa-kpi-label">IP bị cấm thủ công</div><div className="sa-kpi-value">{banned.length}</div><div className="sa-kpi-sub">bị chặn toàn hệ thống</div></div></div>
+      </div>
+      <div className="sa-toolbar sa-security-toolbar">
+        <div className="sa-count-badge">{attempts.length} IP đang được theo dõi</div>
         <button className="sa-btn sa-btn--primary" onClick={() => setBanning(true)}>
           {IcBan(14)} Cấm IP thủ công
         </button>
@@ -958,7 +970,7 @@ function SecurityTab({ viewerId }) {
               <thead>
                 <tr>
                   <th>Địa chỉ IP</th>
-                  <th>Tài khoản đang cố đăng nhập</th>
+                  <th>Tài khoản / nguyên nhân</th>
                   <th>Số lần sai</th>
                   <th>Đang khoá</th>
                   <th>Cập nhật lúc</th>
@@ -971,7 +983,7 @@ function SecurityTab({ viewerId }) {
                 ) : attempts.map(a => (
                   <tr key={a.ip}>
                     <td><code className="sa-code">{a.ip}</code></td>
-                    <td>{a.lastEmail || '—'}</td>
+                    <td><div className="sa-login-identity">{a.lastEmail || 'Không rõ tài khoản'}</div><span className={failureClass(a.failureType)}>{failureLabel(a.failureType)}</span></td>
                     <td>{a.failCount}</td>
                     <td>{a.lockedSeconds > 0
                       ? <span className="sa-badge" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>{IcLock(12)} {fmtLock(a.lockedSeconds)}</span>

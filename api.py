@@ -2115,28 +2115,34 @@ def _issue_session(user: dict) -> dict:
 @app.post("/api/auth/login")
 async def api_login(request: Request):
     ip = _client_ip(request)
-    locked_for = db.get_login_lock_seconds(ip)
-    if locked_for > 0:
-        return JSONResponse(
-            {"error": f"Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau {locked_for} giây."},
-            status_code=429,
-        )
     body     = await request.json()
     email    = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
-    # Chặn đăng nhập bằng mật khẩu rỗng (tài khoản Google có password = "")
-    if not password:
-        db.register_login_failure(ip, email)
-        return JSONResponse({"error": "Email hoặc mật khẩu không đúng."}, status_code=401)
     user = db.get_user_by_email(email, pwd=True)
-    if not user or not db.verify_password(password, user.get("password") or ""):
-        locked_for = db.register_login_failure(ip, email)
+    is_super_admin_login = bool(user and user.get("role") == "super_admin")
+    if is_super_admin_login:
+        locked_for = db.get_login_lock_seconds(ip)
         if locked_for > 0:
             return JSONResponse(
-                {"error": f"Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau {locked_for} giây."},
+                {"error": f"Sai tên tài khoản hoặc mật khẩu. Vui lòng thử lại sau {locked_for} giây."},
                 status_code=429,
             )
-        return JSONResponse({"error": "Email hoặc mật khẩu không đúng."}, status_code=401)
+    # Chặn đăng nhập bằng mật khẩu rỗng (tài khoản Google có password = "")
+    if not password:
+        failure_type = "wrong_password" if user else "wrong_both"
+        locked_for = db.register_login_failure(ip, email, failure_type) if is_super_admin_login else 0
+        if locked_for > 0:
+            return JSONResponse(
+                {"error": "Sai tên tài khoản hoặc mật khẩu. Vui lòng thử lại sau %s giây." % locked_for},
+                status_code=429,
+            )
+        return JSONResponse({"error": "Sai mật khẩu." if user else "Sai tên tài khoản và mật khẩu."}, status_code=401)
+    if not user or not db.verify_password(password, user.get("password") or ""):
+        failure_type = "wrong_password" if user else "wrong_both"
+        locked_for = db.register_login_failure(ip, email, failure_type) if is_super_admin_login else 0
+        if locked_for > 0:
+            return JSONResponse({"error": f"Sai tên tài khoản hoặc mật khẩu. Vui lòng thử lại sau {locked_for} giây."}, status_code=429)
+        return JSONResponse({"error": "Sai mật khẩu." if user else "Sai tên tài khoản và mật khẩu."}, status_code=401)
     # Đăng nhập thành công → xoá lịch sử nhập sai của IP này
     db.clear_login_attempts(ip)
     # Bản ghi cũ còn plaintext → nâng cấp sang hash ngay khi đăng nhập thành công
