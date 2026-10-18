@@ -3058,6 +3058,35 @@ async def extend_assignment_deadline_endpoint(cls_id: str, asgn_id: str, request
         new_close_iso = new_close.isoformat()
         asgn["closeTime"] = new_close_iso
         asgn["dueDate"] = new_close_iso
+        if "duration" in body:
+            try:
+                duration = int(body.get("duration"))
+                if duration < 1: raise ValueError()
+                asgn["duration"] = duration
+            except (TypeError, ValueError):
+                err["resp"] = ("Thời gian làm bài phải là số phút lớn hơn 0.", 422)
+                return False
+        if "openTime" in body:
+            raw_open = body.get("openTime")
+            try:
+                open_dt = datetime.fromisoformat(str(raw_open).replace("Z", "+00:00"))
+                if new_close <= open_dt:
+                    err["resp"] = ("Hạn mới phải sau thời gian mở đề.", 422)
+                    return False
+                asgn["openTime"] = open_dt.isoformat()
+            except Exception:
+                err["resp"] = ("Thời gian mở đề không hợp lệ.", 422)
+                return False
+        if "maxAttempts" in body:
+            raw_max = body.get("maxAttempts")
+            try:
+                asgn["maxAttempts"] = int(raw_max) if raw_max not in (None, "") else None
+                if asgn["maxAttempts"] is not None and asgn["maxAttempts"] < 1: raise ValueError()
+            except (TypeError, ValueError):
+                err["resp"] = ("Số lần làm tối đa phải từ 1 trở lên hoặc để trống.", 422)
+                return False
+        if body.get("scoreMode") in ("highest", "average", "latest"):
+            asgn["scoreMode"] = body["scoreMode"]
         # Bài đã quá hạn gần như chắc chắn đã bị quét (xem _scan_overdue_assignments) — reset
         # cờ để bài được quét lại theo hạn mới, không bị bỏ sót vĩnh viễn.
         asgn.pop("reportScanned", None)

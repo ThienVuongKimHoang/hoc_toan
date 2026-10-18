@@ -8531,6 +8531,14 @@ button { font-family: inherit; }
   flex-direction: column;
   gap: 8px;
 }
+.cm-assignment-settings-modal .modal-header h2 { display: flex; align-items: center; gap: 9px; color: #0f2747; }
+.cm-settings-intro { background: #f5f8fc; border: 1px solid #e3ebf5; color: #64748b; line-height: 1.55; }
+.cm-settings-intro strong { color: #0f2747; font-size: 1rem; }
+.cm-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+.cm-date-row { display: grid; grid-template-columns: 1.35fr 1fr; gap: 8px; }
+.cm-settings-modal .cm-label, .cm-assignment-settings-modal .cm-label { display: flex; align-items: center; gap: 6px; }
+.cm-settings-current { margin: -5px 0 10px; color: #64748b; font-size: .82rem; }
+@media (max-width: 560px) { .cm-settings-grid { grid-template-columns: 1fr; gap: 4px; } }
 .cm-assignment-card {
   display: flex;
   align-items: flex-start;

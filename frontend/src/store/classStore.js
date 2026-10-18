@@ -188,11 +188,11 @@ export async function removeAssignment(classId, assignmentId) {
 }
 
 /** Gia hạn (sửa) hạn nộp của một lượt giao bài/đề đã có, không mất bài đã nộp. */
-export async function updateAssignmentDeadline(classId, assignmentId, closeTime) {
+export async function updateAssignmentDeadline(classId, assignmentId, settings) {
   const res = await fetch(`${API}/${classId}/assignments/${assignmentId}/deadline`, {
     method: 'PUT',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ closeTime }),
+    body: JSON.stringify(typeof settings === 'string' ? { closeTime: settings } : settings),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Gia hạn thất bại')

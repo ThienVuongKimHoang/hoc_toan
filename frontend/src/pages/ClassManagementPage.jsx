@@ -984,6 +984,7 @@ function ExtendDeadlineModal({ assignment, onClose, onSave }) {
     ? new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     : '—'
   const current = assignment.closeTime || assignment.dueDate
+  const isExam = Boolean(assignment.examId)
   const currentDt = current ? new Date(current) : null
   const [date, setDate] = useState(currentDt ? localDateStr(currentDt) : localDateStr())
   const [time, setTime] = useState(currentDt
@@ -991,14 +992,24 @@ function ExtendDeadlineModal({ assignment, onClose, onSave }) {
     : '23:59')
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
+  const openDt = assignment.openTime ? new Date(assignment.openTime) : null
+  const [openDate, setOpenDate] = useState(openDt ? localDateStr(openDt) : localDateStr())
+  const [openTime, setOpenTime] = useState(openDt ? `${String(openDt.getHours()).padStart(2, '0')}:${String(openDt.getMinutes()).padStart(2, '0')}` : '08:00')
+  const [duration, setDuration] = useState(String(assignment.duration || 45))
+  const [maxAttempts, setMaxAttempts] = useState(assignment.maxAttempts == null ? '' : String(assignment.maxAttempts))
+  const [scoreMode, setScoreMode] = useState(assignment.scoreMode || 'highest')
 
   const submit = async () => {
     setErr('')
     if (!date) { setErr('Vui lòng chọn ngày hạn mới.'); return }
     const iso = new Date(`${date}T${time}`).toISOString()
+    const settings = isExam ? {
+      closeTime: iso, openTime: new Date(`${openDate}T${openTime}`).toISOString(),
+      duration: Number(duration), maxAttempts: maxAttempts || null, scoreMode,
+    } : { closeTime: iso }
     setSaving(true)
     try {
-      await onSave(iso)
+      await onSave(settings)
     } catch (e) {
       setErr(e.message || 'Gia hạn thất bại, vui lòng thử lại.')
       setSaving(false)
@@ -1007,24 +1018,38 @@ function ExtendDeadlineModal({ assignment, onClose, onSave }) {
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: 420 }}>
-        <div className="modal-header"><h2>⏰ Gia hạn nộp bài</h2><button className="modal-close" onClick={onClose}>✕</button></div>
+      <div className="modal-box cm-assignment-settings-modal" style={{ maxWidth: 520 }}>
+        <div className="modal-header"><h2>{IC.clock(20)} Cài đặt lượt giao</h2><button className="modal-close" onClick={onClose}>{IC.x(18)}</button></div>
         <div style={{ padding: '0 24px 24px' }}>
-          <div className="cm-info-note" style={{ marginBottom: 14 }}>
-            <strong>{assignment.title}</strong><br />Hạn hiện tại: {formatDt(current)}
+            <div className="cm-info-note cm-settings-intro" style={{ marginBottom: 14 }}>
+            <strong>{assignment.title}</strong><br />Chỉnh cấu hình riêng cho lượt giao này, không ảnh hưởng đề công khai.
+            </div>
+          {isExam && <>
+          <label className="cm-label">{IC.clock(15)} Thời gian làm bài (phút) *</label>
+          <input type="number" min="1" className="cm-input" value={duration} onChange={e => setDuration(e.target.value)} />
+          <div className="cm-settings-grid">
+            <div><label className="cm-label">{IC.check(15)} Mở đề *</label><div className="cm-date-row"><input type="date" className="cm-input" value={openDate} onChange={e => setOpenDate(e.target.value)} /><input type="time" className="cm-input" value={openTime} onChange={e => setOpenTime(e.target.value)} /></div></div>
+            <div><label className="cm-label">{IC.x(15)} Đóng đề *</label><div className="cm-date-row"><input type="date" className="cm-input" value={date} onChange={e => setDate(e.target.value)} /><input type="time" className="cm-input" value={time} onChange={e => setTime(e.target.value)} /></div></div>
           </div>
-          <label className="cm-label">Hạn nộp mới *</label>
+          <div className="cm-settings-grid">
+            <div><label className="cm-label">{IC.copy(15)} Số lần làm tối đa</label><input type="number" min="1" className="cm-input" placeholder="Không giới hạn" value={maxAttempts} onChange={e => setMaxAttempts(e.target.value)} /></div>
+            <div><label className="cm-label">{IC.chart(15)} Cách tính điểm</label><select className="cm-input cm-select" value={scoreMode} onChange={e => setScoreMode(e.target.value)}><option value="highest">Điểm cao nhất</option><option value="average">Điểm trung bình</option><option value="latest">Lần gần nhất</option></select></div>
+          </div></>}
+          {!isExam && <label className="cm-label">Hạn nộp mới *</label>}
+          {!isExam && <div className="cm-settings-current">Hạn hiện tại: {formatDt(current)}</div>}
+          {!isExam && <>
           <div style={{ display: 'flex', gap: 8 }}>
             <input type="date" className="cm-input" style={{ flex: 2 }}
               value={date} onChange={e => setDate(e.target.value)} />
             <input type="time" className="cm-input" style={{ flex: 1 }}
               value={time} onChange={e => setTime(e.target.value)} />
           </div>
+          </>}
           {err && <div className="cm-error">{err}</div>}
           <div className="cm-footer">
             <button className="pm-cancel" onClick={onClose}>Huỷ</button>
             <button className="btn-primary cm-submit" onClick={submit} disabled={saving}>
-              {saving ? 'Đang lưu...' : '⏰ Gia hạn'}
+              {saving ? 'Đang lưu...' : 'Lưu cài đặt'}
             </button>
           </div>
         </div>
@@ -1969,9 +1994,9 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
     await removeAssignment(cls.id, aId)
     refresh()
   }
-  const handleExtendDeadline = async (aId, newCloseIso) => {
+  const handleExtendDeadline = async (aId, settings) => {
     try {
-      await updateAssignmentDeadline(cls.id, aId, newCloseIso)
+      await updateAssignmentDeadline(cls.id, aId, settings)
       setExtendingAsgn(null)
       refresh()
     } catch (err) { alert(err.message) }
@@ -2130,7 +2155,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
               <button className="cm-remove-btn cm-gear-btn" title="Cấu hình hiển thị điểm & đáp án"
                 onClick={() => setDisplayAsgn(a)}>{gearIcon(14)}</button>
             )}
-            <button className="cm-remove-btn" title="Gia hạn nộp bài" onClick={() => setExtendingAsgn(a)}>{IC.pencil(14)}</button>
+            <button className="cm-remove-btn cm-gear-btn" title="Cài đặt lượt giao" onClick={() => setExtendingAsgn(a)}>{IC.pencil(14)}</button>
             <button className="cm-remove-btn" title="Xoá bài tập" onClick={() => handleRemoveAssignment(a.id)}>{IC.trash(14)}</button>
           </div>
         </div>
