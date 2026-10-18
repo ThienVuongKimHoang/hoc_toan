@@ -1018,7 +1018,7 @@ function ExtendDeadlineModal({ assignment, onClose, onSave }) {
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box cm-assignment-settings-modal" style={{ maxWidth: 520 }}>
+      <div className="modal-box cm-assignment-settings-modal" style={{ maxWidth: 680 }}>
         <div className="modal-header"><h2>{IC.clock(20)} Cài đặt lượt giao</h2><button className="modal-close" onClick={onClose}>{IC.x(18)}</button></div>
         <div style={{ padding: '0 24px 24px' }}>
             <div className="cm-info-note cm-settings-intro" style={{ marginBottom: 14 }}>

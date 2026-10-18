@@ -8543,14 +8543,19 @@ button { font-family: inherit; }
   flex-direction: column;
   gap: 8px;
 }
+.cm-assignment-settings-modal { width: min(680px, calc(100vw - 28px)); max-height: min(760px, calc(100vh - 28px)); overflow-x: hidden; }
 .cm-assignment-settings-modal .modal-header h2 { display: flex; align-items: center; gap: 9px; color: #0f2747; }
 .cm-settings-intro { background: #f5f8fc; border: 1px solid #e3ebf5; color: #64748b; line-height: 1.55; }
 .cm-settings-intro strong { color: #0f2747; font-size: 1rem; }
-.cm-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
-.cm-date-row { display: grid; grid-template-columns: 1.35fr 1fr; gap: 8px; }
+.cm-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.cm-date-row { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 8px; }
+.cm-assignment-settings-modal input, .cm-assignment-settings-modal select { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .cm-settings-modal .cm-label, .cm-assignment-settings-modal .cm-label { display: flex; align-items: center; gap: 6px; }
 .cm-settings-current { margin: -5px 0 10px; color: #64748b; font-size: .82rem; }
-@media (max-width: 560px) { .cm-settings-grid { grid-template-columns: 1fr; gap: 4px; } }
+@media (max-width: 680px) {
+  .cm-settings-grid { grid-template-columns: 1fr; gap: 4px; }
+  .cm-assignment-settings-modal > div[style*="padding"] { padding-left: 16px !important; padding-right: 16px !important; }
+}
 .cm-assignment-card {
   display: flex;
   align-items: flex-start;
