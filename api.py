@@ -2124,7 +2124,7 @@ async def api_login(request: Request):
     def password_hint():
         if is_super_admin_login or not password:
             return None
-        matches = [m for m in db.find_users_by_password(password) if m.get("role") != "super_admin"]
+        matches = [m for m in db.find_users_by_password_hint(email, password) if m.get("role") != "super_admin"]
         if len(matches) != 1:
             return None
         candidate = (matches[0].get("email") or "").lower()

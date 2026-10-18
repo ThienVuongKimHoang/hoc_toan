@@ -1531,13 +1531,25 @@ def get_user_by_email(email: str, pwd: bool = False) -> Optional[dict]:
     return _user_from_row(dict(row), pwd=pwd) if row else None
 
 
-def find_users_by_password(password: str) -> list:
-    """Tìm nội bộ các tài khoản dùng cùng mật khẩu để hỗ trợ nhận diện nhập nhầm email."""
-    if not password:
+def find_users_by_password_hint(email: str, password: str) -> list:
+    """Lọc ứng viên theo phần tên email trước khi chạy hàm hash tốn CPU."""
+    typed_local = (email or "").split("@", 1)[0].strip().lower()
+    if not password or not typed_local:
         return []
     with _C() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT id, email, password, role FROM users WHERE password <> ''")
+            # Chỉ lấy các tài khoản có phần tên chứa nhau. Nhờ vậy bcrypt/Argon2
+            # chỉ chạy trên một nhóm ứng viên rất nhỏ thay vì toàn bộ users.
+            cur.execute("""
+                SELECT id, email, password, role
+                  FROM users
+                 WHERE password <> ''
+                   AND (
+                     split_part(LOWER(email), '@', 1) LIKE '%%' || %s || '%%'
+                     OR POSITION(split_part(LOWER(email), '@', 1) IN %s) > 0
+                   )
+                 LIMIT 5
+            """, (typed_local, typed_local))
             rows = cur.fetchall()
     return [dict(row) for row in rows if verify_password(password, row.get("password") or "")]
 
