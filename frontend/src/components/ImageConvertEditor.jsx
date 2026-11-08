@@ -2,6 +2,7 @@ import React, { useDeferredValue, useLayoutEffect, useRef, useState } from 'reac
 import MathText from './MathText.jsx'
 
 const FIG_RE = /\[\[FIG:(\d+)\]\]/g
+const TAB_RE = /\s*\[\[TAB\]\]\s*/
 const PASTE_MAX_BYTES = 8 * 1024 * 1024
 const PASTE_FULL_WIDTH_PX = 1000   // ảnh dán rộng từng này px trở lên thì chiếm hết khổ trang
 
@@ -41,18 +42,31 @@ const paneTitleStyle = {
 const paneBodyStyle = { flex: 1, minHeight: 0, overflow: 'auto' }
 const navButtonStyle = (disabled) => ({ color: disabled ? '#cbd5e1' : '#0369a1', cursor: disabled ? 'default' : 'pointer' })
 
-/* MathText không xử lý **đậm**, nên tách ở đây; dòng bảng giữ nguyên để không vỡ bảng. */
+/* MathText không xử lý **đậm**, nên tách ở đây. */
+function BoldText({ text }) {
+  return text.split(/\*\*(.+?)\*\*/s).map((part, i) => (
+    i % 2 ? <strong key={i}><MathText text={part} /></strong> : <MathText key={i} text={part} />
+  ))
+}
+
+/* Dòng có [[TAB]] chia đều thành các cột, giống tab stop trong file Word. */
+function PreviewLine({ line }) {
+  const cells = line.split(TAB_RE)
+  if (cells.length === 1) return <div><BoldText text={line} /></div>
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cells.length}, minmax(0, 1fr))`, gap: 8 }}>
+      {cells.map((cell, i) => <div key={i}><BoldText text={cell} /></div>)}
+    </div>
+  )
+}
+
 function PreviewText({ text }) {
   return text.split(/(\n\s*\n)/).map((block, i) => {
     if (!block.trim()) return <div key={i} style={{ height: 8 }} />
+    // Dòng bảng phải giữ nguyên để MathText dựng bảng.
     if (block.trim().startsWith('|')) return <MathText key={i} text={block.trim()} />
-    return (
-      <div key={i}>
-        {block.split(/\*\*(.+?)\*\*/s).map((part, j) => (
-          j % 2 ? <strong key={j}><MathText text={part} /></strong> : <MathText key={j} text={part} />
-        ))}
-      </div>
-    )
+    if (!TAB_RE.test(block)) return <div key={i}><BoldText text={block} /></div>
+    return block.split('\n').map((line, j) => <PreviewLine key={`${i}-${j}`} line={line} />)
   })
 }
 
@@ -154,7 +168,7 @@ export default function ImageConvertEditor({ pages, currentId, saveLabel, onSele
         </section>
 
         <section style={paneStyle}>
-          <div style={paneTitleStyle}>Nội dung (công thức đặt giữa hai dấu $, Ctrl+V để dán ảnh tại con trỏ)</div>
+          <div style={paneTitleStyle}>Nội dung ($công thức$, [[TAB]] chia cột, Ctrl+V dán ảnh)</div>
           <textarea
             key={page.id}
             ref={textareaRef}

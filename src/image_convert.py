@@ -39,7 +39,8 @@ PROMPT = r"""Transcribe this document image into Markdown, exactly as printed.
 Rules:
 - Keep the original language, wording and reading order. Do not solve, translate, summarise, correct or add anything.
 - Write EVERY mathematical expression in LaTeX, even a single variable or number with a unit in a formula: $...$ for inline, $$...$$ for display. Never use Unicode math symbols, \( \) or \[ \].
-- Join lines that are only wrapped by the page width into one line. Start a new line for each new paragraph, question and answer option (A., B., C., D. or a), b), c), d)).
+- Join lines that are only wrapped by the page width into one line. Start a new line for each new paragraph and question.
+- Answer options (A., B., C., D. or a), b), c), d)) must keep the row arrangement printed in the image. Options printed side by side on the same row go on one line, separated by [[TAB]], for example: A. $1$. [[TAB]] B. $2$. [[TAB]] C. $3$. [[TAB]] D. $4$. Options printed on separate rows go on separate lines: two rows of two options are two lines with one [[TAB]] each, and four rows of one option are four lines with no [[TAB]].
 - Write tables as Markdown pipe tables, with formulas inside cells.
 - Write fill-in blanks as a run of dots (......), never as underscores.
 - Bold text may use **...**. Do not use Markdown headings or code blocks.
@@ -48,6 +49,10 @@ Rules:
 
 _FIGURE_RE = re.compile(r"\[\[\s*FIGURE\b[^\]\n]*\]\]", re.I)
 _FIG_REF_RE = re.compile(r"\[\[FIG:(\d+)\]\]")
+_COLUMN_RE = re.compile(r"[ \t]*\[\[\s*TAB\s*\]\][ \t]*", re.I)
+_COLUMN_TOKEN = "IMGCONVCOLUMNTOKEN"       # chữ-số để pandoc giữ nguyên, thay sau khi convert
+_COLUMN_SPLIT_RE = re.compile(rf"\s*{_COLUMN_TOKEN}\s*")
+_DOCX_TEXT_WIDTH = 9000                    # twip, khoảng bề ngang vùng chữ của trang
 
 # Tắt các cú pháp Markdown dễ "ăn" nhầm chữ trong đề thi, và tắt raw_* để nội dung
 # model đọc từ ảnh không thể chèn LaTeX/HTML tuỳ ý vào file đầu ra.
@@ -139,7 +144,9 @@ def _clean_output(raw: str) -> str:
     text = re.sub(r"^```[a-zA-Z]*\s*\n|\n```\s*$", "", text)
     text = unicodedata.normalize("NFC", text)      # font T5 chỉ có dấu tiếng Việt dựng sẵn
     text = _normalize_math(text)
-    return re.sub(r"^[ \t]+", "", text, flags=re.M)  # thụt ≥4 dấu cách thành code block
+    text = re.sub(r"^[ \t]+", "", text, flags=re.M)  # thụt ≥4 dấu cách thành code block
+    # Pandoc chỉ nhận bảng khi có dòng trống phía trước.
+    return re.sub(r"(?:^\|.*\n?){2,}", lambda m: f"\n{m.group(0).rstrip()}\n\n", text, flags=re.M)
 
 
 def _is_table_like(mask: np.ndarray) -> bool:
@@ -361,7 +368,78 @@ def _substitute_figures(pages: list[dict], render) -> str:
         # Làm sạch lại vì người dùng có thể đã sửa: "$ x $" hay dòng thụt đầu sẽ bị
         # pandoc hiểu khác hẳn phần xem trước trên trình duyệt.
         parts.append(_FIG_REF_RE.sub(replace, _clean_output(str(page.get("markdown") or ""))))
-    return "\n\n".join(parts)
+    return _mark_columns("\n\n".join(parts))
+
+
+def _mark_columns(markdown: str) -> str:
+    """Mỗi dòng có [[TAB]] (đáp án xếp ngang) thành một đoạn riêng, để chia cột theo từng dòng."""
+    def replace(match: re.Match) -> str:
+        line = match.group(0)
+        if line.lstrip().startswith("|") or not _COLUMN_RE.search(line):
+            return line
+        return f"\n{_COLUMN_RE.sub(f' {_COLUMN_TOKEN} ', line)}\n"
+
+    return re.sub(r"^.+$", replace, markdown, flags=re.M)
+
+
+def _docx_column_runs(match: re.Match) -> str:
+    """Tách một run chứa token thành các run chữ xen kẽ dấu tab, giữ nguyên định dạng."""
+    props = match.group(1) or ""
+    runs = []
+    for index, part in enumerate(_COLUMN_SPLIT_RE.split(match.group(2))):
+        if index:
+            runs.append(f"<w:r>{props}<w:tab/></w:r>")
+        if part:
+            runs.append(f'<w:r>{props}<w:t xml:space="preserve">{part}</w:t></w:r>')
+    return "".join(runs)
+
+
+def _docx_paragraph_tabs(match: re.Match) -> str:
+    """Đặt tab stop chia đều vùng chữ: căn thẳng hàng như giáo viên vẫn gõ đề, và sửa được trong Word."""
+    paragraph = match.group(0)
+    tabs = paragraph.count("<w:tab/>")
+    if not tabs:
+        return paragraph
+    stops = "".join(
+        f'<w:tab w:val="left" w:pos="{_DOCX_TEXT_WIDTH * i // (tabs + 1)}"/>' for i in range(1, tabs + 1)
+    )
+    block = f"<w:tabs>{stops}</w:tabs>"
+    style = re.search(r"<w:pStyle [^>]*/>", paragraph)
+    if style:   # theo schema của Word, tabs phải đứng sau pStyle
+        return paragraph[:style.end()] + block + paragraph[style.end():]
+    if "<w:pPr>" in paragraph:
+        return paragraph.replace("<w:pPr>", f"<w:pPr>{block}", 1)
+    return re.sub(r"^<w:p(?: [^>]*)?>", lambda m: f"{m.group(0)}<w:pPr>{block}</w:pPr>", paragraph, count=1)
+
+
+def _apply_docx_columns(docx: bytes) -> bytes:
+    source = zipfile.ZipFile(io.BytesIO(docx))
+    xml = source.read("word/document.xml").decode("utf-8")
+    if _COLUMN_TOKEN not in xml:
+        return docx
+    xml = re.sub(
+        rf"<w:r(?: [^>]*)?>(<w:rPr>(?:(?!</w:rPr>).)*</w:rPr>|<w:rPr ?/>)?<w:t(?: [^>]*)?>([^<]*{_COLUMN_TOKEN}[^<]*)</w:t></w:r>",
+        _docx_column_runs, xml, flags=re.S,
+    )
+    xml = re.sub(r"<w:p(?: [^>]*)?>(?:(?!</w:p>).)*</w:p>", _docx_paragraph_tabs, xml, flags=re.S)
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as target:
+        for info in source.infolist():
+            data = xml.encode("utf-8") if info.filename == "word/document.xml" else source.read(info.filename)
+            target.writestr(info, data)
+    return output.getvalue()
+
+
+def _latex_columns(body: str) -> str:
+    def render(paragraph: str) -> str:
+        if _COLUMN_TOKEN not in paragraph:
+            return paragraph
+        cells = _COLUMN_SPLIT_RE.split(paragraph.strip())
+        width = 0.98 / len(cells)
+        boxes = [f"\\begin{{minipage}}[t]{{{width:.3f}\\linewidth}}\n{cell}\n\\end{{minipage}}" for cell in cells]
+        return "\\noindent " + "\\hfill\n".join(boxes)
+
+    return "".join(render(part) for part in re.split(r"(\n\s*\n)", body))
 
 
 def _pandoc(markdown: str, to: str) -> bytes:
@@ -381,7 +459,7 @@ def build_docx(pages: list[dict]) -> bytes:
         mime = "jpeg" if figure["data"].startswith("data:image/jpeg") else "png"
         return f"![](data:image/{mime};base64,{b64}){{width={_width_pct(figure)}%}}"
 
-    return _pandoc(_substitute_figures(pages, render), "docx")
+    return _apply_docx_columns(_pandoc(_substitute_figures(pages, render), "docx"))
 
 
 def build_latex_zip(pages: list[dict]) -> bytes:
@@ -401,7 +479,7 @@ def build_latex_zip(pages: list[dict]) -> bytes:
         )
         return token
 
-    body = _pandoc(_substitute_figures(pages, render), "latex").decode("utf-8")
+    body = _latex_columns(_pandoc(_substitute_figures(pages, render), "latex").decode("utf-8"))
     for token, latex in includes.items():
         body = body.replace(token, latex)
 
