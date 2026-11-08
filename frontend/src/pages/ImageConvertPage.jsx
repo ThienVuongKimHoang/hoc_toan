@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { blockReload } from '../realtime/reloadGuard.js'
 import { exportDocument, recognizeImage } from '../store/imageConvertStore.js'
+import ImageConvertEditor from '../components/ImageConvertEditor.jsx'
 
 const MAX_FILES = 50
 const ACCEPT = 'image/jpeg,image/png,image/webp'
@@ -39,11 +40,20 @@ export default function ImageConvertPage({ onBack }) {
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const inputRef = useRef(null)
   const itemsRef = useRef(items)
   itemsRef.current = items
 
   useEffect(() => () => itemsRef.current.forEach(it => URL.revokeObjectURL(it.preview)), [])
+
+  // Nội dung đã nhận dạng và đã sửa chỉ nằm trong state: tự reload là mất hết.
+  const hasResults = items.some(it => it.status === 'done')
+  useEffect(() => (hasResults ? blockReload('chuyen-anh-ket-qua') : undefined), [hasResults])
+
+  const leave = () => {
+    if (!hasResults || confirm('Rời trang sẽ mất nội dung đã nhận dạng và đã sửa. Tiếp tục?')) onBack()
+  }
 
   const addFiles = (fileList) => {
     setError('')
@@ -63,6 +73,9 @@ export default function ImageConvertPage({ onBack }) {
       return kept
     })
   }
+
+  const updateMarkdown = (id, markdown) =>
+    setItems(prev => prev.map(it => (it.id === id ? { ...it, result: { ...it.result, markdown } } : it)))
 
   const removeItem = (id) => setItems(prev => {
     const target = prev.find(it => it.id === id)
@@ -114,7 +127,7 @@ export default function ImageConvertPage({ onBack }) {
   return (
     <div className="es-page" style={{ overflowY: 'auto' }}>
       <div className="es-header">
-        <button className="tool-page-back" onClick={onBack} disabled={converting}>
+        <button className="tool-page-back" onClick={leave} disabled={converting}>
           <ArrowLeftIcon /> Quay lại
         </button>
         <span className="es-header-title"><FileIcon /> Chuyển ảnh sang Word / LaTeX</span>
@@ -158,6 +171,9 @@ export default function ImageConvertPage({ onBack }) {
                     <div key={w} style={{ fontSize: 13, color: '#b45309' }}>{w}</div>
                   ))}
                 </div>
+                {it.status === 'done' && (
+                  <button type="button" className="cm-tab" style={{ color: '#0369a1' }} onClick={() => setEditingId(it.id)}>Chỉnh sửa</button>
+                )}
                 <button type="button" className="cm-remove-btn" title="Bỏ ảnh này" disabled={converting}
                   onClick={() => removeItem(it.id)}>Bỏ</button>
               </div>
@@ -194,9 +210,19 @@ export default function ImageConvertPage({ onBack }) {
           </button>
         </div>
         <p style={{ fontSize: 13, color: '#64748b', marginTop: 12 }}>
-          Nội dung do AI đọc từ ảnh nên có thể sai sót, hãy đối chiếu trước khi dùng.
+          Nội dung do AI đọc từ ảnh nên có thể sai sót, hãy bấm Chỉnh sửa để đối chiếu với ảnh gốc trước khi tải.
         </p>
       </div>
+
+      {editingId && items.some(it => it.id === editingId && it.status === 'done') && (
+        <ImageConvertEditor
+          pages={items.filter(it => it.status === 'done')}
+          currentId={editingId}
+          onSelect={setEditingId}
+          onChange={updateMarkdown}
+          onClose={() => setEditingId(null)}
+        />
+      )}
     </div>
   )
 }

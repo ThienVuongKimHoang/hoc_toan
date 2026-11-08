@@ -333,7 +333,9 @@ def _substitute_figures(pages: list[dict], render) -> str:
             figure = by_id.get(match.group(1))
             return render(page_index, figure) if figure else ""
 
-        parts.append(_FIG_REF_RE.sub(replace, str(page.get("markdown") or "")))
+        # Làm sạch lại vì người dùng có thể đã sửa: "$ x $" hay dòng thụt đầu sẽ bị
+        # pandoc hiểu khác hẳn phần xem trước trên trình duyệt.
+        parts.append(_FIG_REF_RE.sub(replace, _clean_output(str(page.get("markdown") or ""))))
     return "\n\n".join(parts)
 
 
