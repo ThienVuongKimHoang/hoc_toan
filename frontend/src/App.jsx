@@ -380,6 +380,7 @@ export default function App() {
     : goLogin()
   const goTools = () => user ? setShowTeacherTools(true) : goLogin()
   const goVocabPage = () => { setHash('tools/vocab'); setView('vocab-page') }
+  const goImageConvertPage = () => { setHash('tools/image-convert'); setView('image-convert-page') }
 
   // Sảnh chờ thi — không yêu cầu đăng nhập (auth xử lý trong ExamTakePage)
   const goExamLobby = () => {
@@ -480,12 +481,12 @@ export default function App() {
       onGoHistory={goHistory}
       onGoSettings={goSettings}
       onGoVocab={goVocabPage}
+      onGoImageConvert={goImageConvertPage}
     />
   )
 
   const goSolverPage = () => { setHash('tools/solver'); setView('solver-page') }
   const goGeo3dPage = () => { setHash('tools/geo3d'); setView('geo3d-page') }
-  const goImageConvertPage = () => { setHash('tools/image-convert'); setView('image-convert-page') }
   const goWhiteboardPage = () => {
     setHash('tools/whiteboard'); setView('whiteboard-page')
     setClassId(null); setWhiteboardSubject(null); setWhiteboardReturnHash(null)
@@ -494,13 +495,11 @@ export default function App() {
   /* ── Teacher tools modal (hiển thị mọi nơi) ── */
   const teacherToolOverlays = showTeacherTools && (
     <TeacherToolsModal
-      isSuperAdmin={user?.role === ROLES.SUPERADMIN}
       onSelectTool={id => {
         setShowTeacherTools(false)
         if (id === 'solver') goSolverPage()
         if (id === 'geo3d') goGeo3dPage()
         if (id === 'whiteboard') goWhiteboardPage()
-        if (id === 'image-convert') goImageConvertPage()
       }}
       onClose={() => setShowTeacherTools(false)}
     />
