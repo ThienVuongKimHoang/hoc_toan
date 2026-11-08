@@ -263,8 +263,11 @@ async def _event_stream(user_id: str, q: asyncio.Queue) -> AsyncGenerator[str, N
                 evt = await asyncio.wait_for(q.get(), timeout=EVENT_HEARTBEAT)
                 yield f"data: {json.dumps(evt)}\n\n"
             except asyncio.TimeoutError:
-                # Comment giữ nhịp. Thiếu nó, nginx cắt kết nối sau 300s im lặng.
-                yield ": ping\n\n"
+                # Giữ nhịp. Thiếu nó, nginx cắt kết nối sau 300s im lặng.
+                # Phải là message thật, KHÔNG dùng comment SSE (": ping"): EventSource
+                # nuốt comment nên watchdog phía client không được gia hạn và cứ 60s
+                # lại nối lại + bắt mọi trang tải lại dữ liệu.
+                yield 'data: {"type": "ping"}\n\n'
     finally:
         streams = STREAMS.get(user_id)
         if streams is not None:

@@ -1463,6 +1463,13 @@ function AttendanceTab({ classId, teacherId, members, schedule }) {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // `members` là mảng mới sau mỗi lần trang cha refetch (realtime, poll 120s), nên
+  // không được làm dependency của effect nạp buổi điểm danh: nó sẽ ghi đè các ô
+  // giáo viên đang chấm dở. Chỉ nạp lại khi đổi lớp hoặc đổi ngày.
+  const membersRef = useRef(members)
+  membersRef.current = members
+  const memberKey = members.map(m => m.userId).join(',')
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -1470,13 +1477,24 @@ function AttendanceTab({ classId, teacherId, members, schedule }) {
     getAttendanceSession(classId, date).then(session => {
       if (cancelled) return
       const map = {}
-      members.forEach(m => { map[m.userId] = { status: 'co_mat', note: '' } })
+      membersRef.current.forEach(m => { map[m.userId] = { status: 'co_mat', note: '' } })
       ;(session?.records || []).forEach(r => { map[r.studentId] = { status: r.status, note: r.note || '' } })
       setStatusMap(map)
       setLoading(false)
     })
     return () => { cancelled = true }
-  }, [classId, date, members])
+  }, [classId, date])
+
+  // Có học sinh mới vào lớp giữa chừng → chỉ thêm ô mặc định, giữ nguyên phần đã chấm.
+  useEffect(() => {
+    setStatusMap(prev => {
+      const missing = membersRef.current.filter(m => !prev[m.userId])
+      if (!missing.length) return prev
+      const next = { ...prev }
+      missing.forEach(m => { next[m.userId] = { status: 'co_mat', note: '' } })
+      return next
+    })
+  }, [memberKey])
 
   const setStatus = (studentId, status) =>
     setStatusMap(prev => ({ ...prev, [studentId]: { ...prev[studentId], status } }))

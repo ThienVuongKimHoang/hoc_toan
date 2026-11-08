@@ -82,7 +82,10 @@ async function connect(gen) {
   es.onmessage = (e) => {
     if (gen !== generation) return
     armWatchdog(gen)
-    try { emit(JSON.parse(e.data)) } catch { /* bỏ qua payload hỏng */ }
+    try {
+      const evt = JSON.parse(e.data)
+      if (evt?.type !== 'ping') emit(evt)   // ping chỉ để gia hạn watchdog ở trên
+    } catch { /* bỏ qua payload hỏng */ }
   }
 
   es.onerror = () => {
