@@ -22,6 +22,7 @@ import ExerciseSolver from './components/ExerciseSolver.jsx'
 import GeoViewerPage from './pages/GeoViewerPage.jsx'
 import WhiteboardPage from './pages/WhiteboardPage.jsx'
 import VocabPage from './pages/VocabPage.jsx'
+import ImageConvertPage from './pages/ImageConvertPage.jsx'
 import { startEventStream, stopEventStream } from './realtime/eventStream.js'
 import { startVersionWatch } from './realtime/appVersion.js'
 
@@ -75,6 +76,7 @@ function parseHash() {
   if (hash === 'tools/solver') return { view: 'solver-page', examId: null, classId: null }
   if (hash === 'tools/geo3d') return { view: 'geo3d-page', examId: null, classId: null }
   if (hash === 'tools/vocab') return { view: 'vocab-page', examId: null, classId: null }
+  if (hash === 'tools/image-convert') return { view: 'image-convert-page', examId: null, classId: null }
   if (hash === 'tools/whiteboard') return { view: 'whiteboard-page', examId: null, classId: null }
   if (hash.startsWith('tools/whiteboard/')) {
     // tools/whiteboard/<classId>/<subject>/<returnHash đã encode> — mở bảng trắng từ trong 1 lớp,
@@ -483,6 +485,7 @@ export default function App() {
 
   const goSolverPage = () => { setHash('tools/solver'); setView('solver-page') }
   const goGeo3dPage = () => { setHash('tools/geo3d'); setView('geo3d-page') }
+  const goImageConvertPage = () => { setHash('tools/image-convert'); setView('image-convert-page') }
   const goWhiteboardPage = () => {
     setHash('tools/whiteboard'); setView('whiteboard-page')
     setClassId(null); setWhiteboardSubject(null); setWhiteboardReturnHash(null)
@@ -491,11 +494,13 @@ export default function App() {
   /* ── Teacher tools modal (hiển thị mọi nơi) ── */
   const teacherToolOverlays = showTeacherTools && (
     <TeacherToolsModal
+      isSuperAdmin={user?.role === ROLES.SUPERADMIN}
       onSelectTool={id => {
         setShowTeacherTools(false)
         if (id === 'solver') goSolverPage()
         if (id === 'geo3d') goGeo3dPage()
         if (id === 'whiteboard') goWhiteboardPage()
+        if (id === 'image-convert') goImageConvertPage()
       }}
       onClose={() => setShowTeacherTools(false)}
     />
@@ -650,6 +655,18 @@ export default function App() {
       <>
         {header}
         <ExerciseSolver onBack={() => { setHash(''); setView('home') }} />
+      </>
+    )
+  }
+
+  if (view === 'image-convert-page') {
+    if (!user || user.role !== ROLES.SUPERADMIN) return (
+      <>{header}<AccessDenied message="Công cụ này chỉ dành cho Super Admin." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={!!user} /></>
+    )
+    return (
+      <>
+        {header}
+        <ImageConvertPage onBack={() => { setHash(''); setView('home') }} />
       </>
     )
   }

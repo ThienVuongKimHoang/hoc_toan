@@ -9,6 +9,12 @@ psycopg2-binary==2.9.9            # PostgreSQL driver
 # ─── Trích xuất PDF ───
 pymupdf==1.26.5                   # import fitz
 
+# ─── Chuyển ảnh sang Word/LaTeX ───
+pillow==11.3.0                    # xoay theo EXIF, cắt hình
+opencv-python-headless==5.0.0.93  # dò vị trí hình trong ảnh
+numpy==2.0.2
+pypandoc-binary==1.17             # kèm sẵn pandoc, tạo công thức Word thật
+
 # ─── AI (Groq LLM Vision/Text) ───
 groq==1.0.0
 httpx==0.28.1                     # HTTP client (groq SDK dùng)

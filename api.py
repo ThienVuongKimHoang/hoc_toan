@@ -20,7 +20,7 @@ from typing import AsyncGenerator, Iterable, Optional
 import fitz
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from groq import Groq
 from google.oauth2 import id_token
@@ -60,6 +60,7 @@ FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
 import database as db
 import geo3d as geo3d_ai
 import ielts_grading as ielts
+import image_convert
 import listening_grading as listening
 import speaking_grading as speaking
 import vocab_ai
@@ -3491,7 +3492,7 @@ async def clear_vocab_queue_endpoint(caller: dict = Depends(require_vocab_beta_u
     return {"ok": True}
 
 
-def _groq_chat_with_key_rotation(*, model: str, messages: list, temperature: float, max_tokens: int):
+def _groq_chat_with_key_rotation(*, model: str, messages: list, temperature: float, max_tokens: int, **extra):
     """Xoay vòng key dự phòng khi bị rate-limit (429) — theo đúng convention của
     generate_questions_api, giữ hành vi này khi chạm tới load_api_keys."""
     keys = load_api_keys()
@@ -3499,7 +3500,7 @@ def _groq_chat_with_key_rotation(*, model: str, messages: list, temperature: flo
     for key in keys:
         try:
             return Groq(api_key=key).chat.completions.create(
-                model=model, messages=messages, temperature=temperature, max_tokens=max_tokens,
+                model=model, messages=messages, temperature=temperature, max_tokens=max_tokens, **extra,
             )
         except Exception as e:
             last_err = e
@@ -4399,6 +4400,55 @@ async def solve_exercise(
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # ─── End Exercise Solver ──────────────────────────────────────────────────────
+
+# ─── Chuyển ảnh sang Word / LaTeX (chỉ super admin) ───────────────────────────
+IMAGE_CONVERT_MAX_BYTES = 15 * 1024 * 1024
+IMAGE_CONVERT_MAX_PAGES = 50
+
+
+@app.post("/api/tools/image-convert/recognize")
+async def image_convert_recognize(file: UploadFile = File(...), caller: dict = Depends(require_super_admin)):
+    """Mỗi ảnh một request: nhiều ảnh gộp một request sẽ vượt proxy_read_timeout 300s."""
+    data = await file.read()
+    if len(data) > IMAGE_CONVERT_MAX_BYTES:
+        return JSONResponse({"error": "Ảnh vượt quá 15 MB."}, status_code=413)
+    try:
+        return await asyncio.to_thread(
+            image_convert.recognize, data, _groq_chat_with_key_rotation, _GEN_VISION_MODEL)
+    except image_convert.ImageConvertError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        print(f"[image-convert] recognize error: {e}")
+        return JSONResponse({"error": "Dịch vụ AI đang bận, hãy thử lại sau ít phút."}, status_code=502)
+
+
+@app.post("/api/tools/image-convert/export")
+async def image_convert_export(request: Request, caller: dict = Depends(require_super_admin)):
+    body = await request.json()
+    output = body.get("format")
+    pages = body.get("pages")
+    if output not in ("docx", "latex"):
+        return JSONResponse({"error": "Định dạng không hợp lệ."}, status_code=400)
+    if not isinstance(pages, list) or not 1 <= len(pages) <= IMAGE_CONVERT_MAX_PAGES \
+            or not all(isinstance(p, dict) for p in pages):
+        return JSONResponse({"error": f"Cần từ 1 đến {IMAGE_CONVERT_MAX_PAGES} trang."}, status_code=400)
+    build, media_type, filename = (
+        (image_convert.build_docx,
+         "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "tai-lieu.docx")
+        if output == "docx" else
+        (image_convert.build_latex_zip, "application/zip", "tai-lieu-latex.zip")
+    )
+    try:
+        content = await asyncio.to_thread(build, pages)
+    except image_convert.ImageConvertError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        print(f"[image-convert] export error: {e}")
+        return JSONResponse({"error": "Không tạo được file, hãy thử lại."}, status_code=500)
+    return Response(content, media_type=media_type,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+# ─── End chuyển ảnh ───────────────────────────────────────────────────────────
 
 # ─── Vẽ hình không gian bằng AI (#tools/geo3d) ────────────────────────────────
 # Tách khỏi /api/solve-exercise: route kia gọi Groq HAI lần để sinh thêm lý thuyết và
