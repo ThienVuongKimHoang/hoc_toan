@@ -23,6 +23,9 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 MAX_MODEL_SIDE = 2000      # cạnh dài của bản gửi Groq; hình cắt vẫn lấy từ ảnh gốc
 MAX_FIGURES_PER_PAGE = 20
+MAX_STORED_FIGURES = 60    # gồm cả ảnh người dùng dán thêm
+MAX_MARKDOWN_CHARS = 200_000
+MAX_ORIGINAL_SIDE = 1600   # ảnh gốc lưu trong phiên để đối chiếu
 MAX_DETECT_SIDE = 3000     # ảnh lớn hơn được thu nhỏ khi dò hình rồi quy đổi lại toạ độ
 PNG_LIMIT_BYTES = 2_000_000
 RECOGNIZE_MAX_TOKENS = 8000
@@ -102,6 +105,15 @@ def _encode_for_model(img: Image.Image) -> str:
     buf = io.BytesIO()
     small.save(buf, "JPEG", quality=90)
     return base64.b64encode(buf.getvalue()).decode()
+
+
+def _encode_original(img: Image.Image) -> str:
+    """Bản thu nhỏ của ảnh gốc, lưu trong phiên để đối chiếu khi mở lại."""
+    small = img.copy()
+    small.thumbnail((MAX_ORIGINAL_SIDE, MAX_ORIGINAL_SIDE))
+    buf = io.BytesIO()
+    small.save(buf, "JPEG", quality=80)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
 def _encode_figure(crop: Image.Image) -> str:
@@ -299,7 +311,7 @@ def recognize(image_bytes: bytes, chat, model: str) -> dict:
         raise ImageConvertError("Không nhận dạng được nội dung trong ảnh.")
     if choice.finish_reason == "length":
         warnings.append("Ảnh quá dài nên phần cuối có thể bị thiếu, hãy tách thành ảnh nhỏ hơn.")
-    return {"markdown": markdown, "figures": figures, "warnings": warnings}
+    return {"markdown": markdown, "figures": figures, "warnings": warnings, "original": _encode_original(img)}
 
 
 def _validate_figure(figure: dict) -> tuple[str, str]:
@@ -314,6 +326,19 @@ def _validate_figure(figure: dict) -> tuple[str, str]:
     except (UnidentifiedImageError, OSError, ValueError) as e:
         raise ImageConvertError("Dữ liệu hình không hợp lệ.") from e
     return ("jpg" if match.group(1) == "jpeg" else "png"), match.group(2)
+
+
+def validate_page_edit(markdown, figures) -> None:
+    """Kiểm tra nội dung client gửi lên khi lưu; `figures=None` nghĩa là không đổi hình."""
+    if not isinstance(markdown, str) or len(markdown) > MAX_MARKDOWN_CHARS:
+        raise ImageConvertError("Nội dung không hợp lệ hoặc quá dài.")
+    if figures is None:
+        return
+    if not isinstance(figures, list) or len(figures) > MAX_STORED_FIGURES \
+            or not all(isinstance(f, dict) for f in figures):
+        raise ImageConvertError("Dữ liệu hình không hợp lệ.")
+    for figure in figures:
+        _validate_figure(figure)
 
 
 def _width_pct(figure: dict) -> int:

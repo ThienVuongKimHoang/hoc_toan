@@ -3875,6 +3875,10 @@ async def _report_scanner_loop():
             _scan_pending_attendance_notifs()
         except Exception as e:
             print(f"[attendance-notifier] error: {e}")
+        try:
+            db.purge_expired_image_convert_sessions()
+        except Exception as e:
+            print(f"[image-convert] purge error: {e}")
         await asyncio.sleep(_REPORT_SCAN_INTERVAL)
 
 
@@ -4406,20 +4410,85 @@ IMAGE_CONVERT_MAX_BYTES = 15 * 1024 * 1024
 IMAGE_CONVERT_MAX_PAGES = 50
 
 
+_IMAGE_CONVERT_ID_RE = _re.compile(r"[A-Za-z0-9-]{8,64}")
+_IMAGE_CONVERT_EXPIRED = {"error": "Phiên không tồn tại hoặc đã hết hạn."}
+
+
+def _image_convert_ids_ok(*ids: str) -> bool:
+    return all(_IMAGE_CONVERT_ID_RE.fullmatch(i or "") for i in ids)
+
+
 @app.post("/api/tools/image-convert/recognize")
-async def image_convert_recognize(file: UploadFile = File(...), caller: dict = Depends(require_super_admin)):
-    """Mỗi ảnh một request: nhiều ảnh gộp một request sẽ vượt proxy_read_timeout 300s."""
+async def image_convert_recognize(
+    file: UploadFile = File(...),
+    sessionId: str = Form(...),
+    pageId: str = Form(...),
+    caller: dict = Depends(require_super_admin),
+):
+    """Mỗi ảnh một request: nhiều ảnh gộp một request sẽ vượt proxy_read_timeout 300s.
+    Kết quả được lưu vào phiên ngay, nên đóng tab giữa chừng không mất phần đã xong."""
+    if not _image_convert_ids_ok(sessionId, pageId):
+        return JSONResponse({"error": "Mã phiên không hợp lệ."}, status_code=400)
     data = await file.read()
     if len(data) > IMAGE_CONVERT_MAX_BYTES:
         return JSONResponse({"error": "Ảnh vượt quá 15 MB."}, status_code=413)
     try:
-        return await asyncio.to_thread(
+        result = await asyncio.to_thread(
             image_convert.recognize, data, _groq_chat_with_key_rotation, _GEN_VISION_MODEL)
     except image_convert.ImageConvertError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception as e:
         print(f"[image-convert] recognize error: {e}")
         return JSONResponse({"error": "Dịch vụ AI đang bận, hãy thử lại sau ít phút."}, status_code=502)
+    original = result.pop("original")
+    try:
+        saved = await asyncio.to_thread(
+            db.save_image_convert_page, str(caller["id"]), sessionId, pageId,
+            (file.filename or "anh")[:200], original, result)
+    except Exception as e:
+        print(f"[image-convert] save error: {e}")
+        return JSONResponse({"error": "Không lưu được vào phiên, hãy thử lại."}, status_code=500)
+    if not saved:
+        return JSONResponse(_IMAGE_CONVERT_EXPIRED, status_code=404)
+    return result
+
+
+@app.get("/api/tools/image-convert/sessions")
+async def image_convert_sessions(caller: dict = Depends(require_super_admin)):
+    return await asyncio.to_thread(db.list_image_convert_sessions, str(caller["id"]))
+
+
+@app.get("/api/tools/image-convert/sessions/{session_id}")
+async def image_convert_session(session_id: str, caller: dict = Depends(require_super_admin)):
+    session = await asyncio.to_thread(db.get_image_convert_session, str(caller["id"]), session_id)
+    return session if session else JSONResponse(_IMAGE_CONVERT_EXPIRED, status_code=404)
+
+
+@app.put("/api/tools/image-convert/sessions/{session_id}/pages/{page_id}")
+async def image_convert_update_page(
+    session_id: str, page_id: str, request: Request, caller: dict = Depends(require_super_admin),
+):
+    body = await request.json()
+    markdown, figures = body.get("markdown"), body.get("figures")
+    try:
+        await asyncio.to_thread(image_convert.validate_page_edit, markdown, figures)
+    except image_convert.ImageConvertError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    saved = await asyncio.to_thread(
+        db.update_image_convert_page, str(caller["id"]), session_id, page_id, markdown, figures)
+    return {"ok": True} if saved else JSONResponse(_IMAGE_CONVERT_EXPIRED, status_code=404)
+
+
+@app.delete("/api/tools/image-convert/sessions/{session_id}/pages/{page_id}")
+async def image_convert_delete_page(session_id: str, page_id: str, caller: dict = Depends(require_super_admin)):
+    deleted = await asyncio.to_thread(db.delete_image_convert_page, str(caller["id"]), session_id, page_id)
+    return {"ok": True} if deleted else JSONResponse(_IMAGE_CONVERT_EXPIRED, status_code=404)
+
+
+@app.delete("/api/tools/image-convert/sessions/{session_id}")
+async def image_convert_delete_session(session_id: str, caller: dict = Depends(require_super_admin)):
+    deleted = await asyncio.to_thread(db.delete_image_convert_session, str(caller["id"]), session_id)
+    return {"ok": True} if deleted else JSONResponse(_IMAGE_CONVERT_EXPIRED, status_code=404)
 
 
 @app.post("/api/tools/image-convert/export")

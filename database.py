@@ -196,6 +196,27 @@ ALTER TABLE classes ADD COLUMN IF NOT EXISTS schedule JSONB DEFAULT '[]';
 -- Cấu hình riêng của lớp, vd ngưỡng điểm thấp để cảnh báo: {"lowScoreThreshold": 50}
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}';
 
+-- Phiên của công cụ chuyển ảnh sang Word/LaTeX: giữ 24 giờ kể từ lần sửa gần nhất.
+CREATE TABLE IF NOT EXISTS image_convert_sessions (
+    id         VARCHAR(64)  PRIMARY KEY,
+    owner_id   VARCHAR(100) NOT NULL,
+    title      VARCHAR(255) DEFAULT '',
+    created_at TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at TIMESTAMPTZ  DEFAULT NOW(),
+    expires_at TIMESTAMPTZ  NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_image_convert_owner ON image_convert_sessions(owner_id, expires_at);
+CREATE TABLE IF NOT EXISTS image_convert_pages (
+    session_id VARCHAR(64)  NOT NULL REFERENCES image_convert_sessions(id) ON DELETE CASCADE,
+    page_id    VARCHAR(64)  NOT NULL,
+    file_name  VARCHAR(255) DEFAULT '',
+    original   TEXT         NOT NULL,
+    markdown   TEXT         NOT NULL,
+    figures    JSONB        DEFAULT '[]',
+    warnings   JSONB        DEFAULT '[]',
+    PRIMARY KEY (session_id, page_id)
+);
+
 CREATE TABLE IF NOT EXISTS attendance_sessions (
     id           VARCHAR(50)  PRIMARY KEY,
     class_id     VARCHAR(50)  NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
@@ -2488,3 +2509,150 @@ def save_config(cfg: dict) -> None:
                     ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value
                 """, (k, json.dumps(v, ensure_ascii=False)))
         conn.commit()
+
+
+# ── Phiên chuyển ảnh sang Word/LaTeX ─────────────────────────────────────────
+
+_IMAGE_CONVERT_TTL = "24 hours"
+
+
+def _touch_image_convert_session(cur, owner_id: str, session_id: str) -> bool:
+    """Gia hạn phiên; False nếu phiên không tồn tại, đã hết hạn hoặc thuộc người khác."""
+    cur.execute(
+        f"""UPDATE image_convert_sessions
+               SET updated_at = NOW(), expires_at = NOW() + INTERVAL '{_IMAGE_CONVERT_TTL}'
+             WHERE id = %s AND owner_id = %s AND expires_at > NOW()
+         RETURNING id""",
+        (session_id, owner_id),
+    )
+    return cur.fetchone() is not None
+
+
+def save_image_convert_page(owner_id: str, session_id: str, page_id: str, file_name: str,
+                            original: str, result: dict) -> bool:
+    """Lưu một trang vừa nhận dạng, tạo phiên nếu chưa có. Tên phiên là tên ảnh đầu tiên."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""INSERT INTO image_convert_sessions(id, owner_id, title, expires_at)
+                    VALUES (%s, %s, %s, NOW() + INTERVAL '{_IMAGE_CONVERT_TTL}')
+                    ON CONFLICT (id) DO UPDATE
+                       SET updated_at = NOW(), expires_at = EXCLUDED.expires_at
+                     WHERE image_convert_sessions.owner_id = EXCLUDED.owner_id
+                       AND image_convert_sessions.expires_at > NOW()
+                 RETURNING id""",
+                (session_id, owner_id, file_name),
+            )
+            if cur.fetchone() is None:
+                conn.rollback()
+                return False
+            cur.execute(
+                """INSERT INTO image_convert_pages(session_id, page_id, file_name, original, markdown, figures, warnings)
+                   VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb)
+                   ON CONFLICT (session_id, page_id) DO UPDATE
+                      SET file_name = EXCLUDED.file_name, original = EXCLUDED.original,
+                          markdown = EXCLUDED.markdown, figures = EXCLUDED.figures, warnings = EXCLUDED.warnings""",
+                (session_id, page_id, file_name, original, result["markdown"],
+                 json.dumps(result["figures"], ensure_ascii=False),
+                 json.dumps(result["warnings"], ensure_ascii=False)),
+            )
+        conn.commit()
+    return True
+
+
+def update_image_convert_page(owner_id: str, session_id: str, page_id: str,
+                              markdown: str, figures: Optional[list] = None) -> bool:
+    """`figures=None` giữ nguyên hình: lưu tự động khi gõ không cần gửi lại ảnh."""
+    figures_json = None if figures is None else json.dumps(figures, ensure_ascii=False)
+    with _C() as conn:
+        with conn.cursor() as cur:
+            if not _touch_image_convert_session(cur, owner_id, session_id):
+                conn.rollback()
+                return False
+            cur.execute(
+                """UPDATE image_convert_pages
+                      SET markdown = %s, figures = COALESCE(%s::jsonb, figures)
+                    WHERE session_id = %s AND page_id = %s""",
+                (markdown, figures_json, session_id, page_id),
+            )
+            found = cur.rowcount > 0
+        conn.commit()
+    return found
+
+
+def list_image_convert_sessions(owner_id: str) -> list:
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """SELECT s.id, s.title, s.updated_at, s.expires_at, COUNT(p.page_id) AS page_count
+                     FROM image_convert_sessions s
+                     LEFT JOIN image_convert_pages p ON p.session_id = s.id
+                    WHERE s.owner_id = %s AND s.expires_at > NOW()
+                    GROUP BY s.id
+                    ORDER BY s.updated_at DESC""",
+                (owner_id,),
+            )
+            rows = cur.fetchall()
+        conn.commit()
+    return [{"id": r["id"], "title": r["title"], "pageCount": r["page_count"],
+             "updatedAt": r["updated_at"].isoformat(), "expiresAt": r["expires_at"].isoformat()} for r in rows]
+
+
+def get_image_convert_session(owner_id: str, session_id: str) -> Optional[dict]:
+    with _C() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """SELECT id, title, expires_at FROM image_convert_sessions
+                    WHERE id = %s AND owner_id = %s AND expires_at > NOW()""",
+                (session_id, owner_id),
+            )
+            session = cur.fetchone()
+            pages = []
+            if session:
+                cur.execute(
+                    """SELECT page_id, file_name, original, markdown, figures, warnings
+                         FROM image_convert_pages WHERE session_id = %s""",
+                    (session_id,),
+                )
+                pages = cur.fetchall()
+        conn.commit()
+    if not session:
+        return None
+    return {"id": session["id"], "title": session["title"], "expiresAt": session["expires_at"].isoformat(),
+            "pages": [{"id": p["page_id"], "fileName": p["file_name"], "original": p["original"],
+                       "markdown": p["markdown"], "figures": p["figures"], "warnings": p["warnings"]} for p in pages]}
+
+
+def delete_image_convert_page(owner_id: str, session_id: str, page_id: str) -> bool:
+    """Xoá một trang; trang cuối cùng bị xoá thì xoá luôn phiên."""
+    with _C() as conn:
+        with conn.cursor() as cur:
+            if not _touch_image_convert_session(cur, owner_id, session_id):
+                conn.rollback()
+                return False
+            cur.execute("DELETE FROM image_convert_pages WHERE session_id = %s AND page_id = %s", (session_id, page_id))
+            cur.execute(
+                """DELETE FROM image_convert_sessions s WHERE s.id = %s
+                     AND NOT EXISTS (SELECT 1 FROM image_convert_pages p WHERE p.session_id = s.id)""",
+                (session_id,),
+            )
+        conn.commit()
+    return True
+
+
+def delete_image_convert_session(owner_id: str, session_id: str) -> bool:
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM image_convert_sessions WHERE id = %s AND owner_id = %s", (session_id, owner_id))
+            found = cur.rowcount > 0
+        conn.commit()
+    return found
+
+
+def purge_expired_image_convert_sessions() -> int:
+    with _C() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM image_convert_sessions WHERE expires_at <= NOW()")
+            removed = cur.rowcount
+        conn.commit()
+    return removed
