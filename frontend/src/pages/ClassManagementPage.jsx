@@ -1775,7 +1775,7 @@ function ExamBankPanel({ classId, teacherId, user, subject, grade, onAssign }) {
   const handleChoice = (choice) => {
     setShowChoice(false)
     if (choice === 'mix') { setShowMix(true); return }
-    setEditor({ editingExam: null, manualMode: choice === 'manual', mixResult: null })
+    setEditor({ editingExam: null, manualMode: choice === 'manual', mixResult: null, fromImages: choice === 'images' })
   }
 
   const handleMixComplete = (questions) => {
@@ -1812,7 +1812,7 @@ function ExamBankPanel({ classId, teacherId, user, subject, grade, onAssign }) {
         <CreateExamPage
           key={editor.editingExam?.id || 'new'}
           user={user} classId={classId} subject={subject}
-          editingExam={editor.editingExam} manualMode={editor.manualMode} mixResult={editor.mixResult}
+          editingExam={editor.editingExam} manualMode={editor.manualMode} mixResult={editor.mixResult} fromImages={!!editor.fromImages}
           onDone={() => { setEditor(null); load() }}
         />
       </div>

@@ -12,11 +12,14 @@ import base64
 import io
 import re
 import subprocess
+import tempfile
 import time
 import unicodedata
 import zipfile
+from pathlib import Path
 
 import cv2
+import fitz
 import numpy as np
 import pypandoc
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -30,6 +33,8 @@ MAX_DETECT_SIDE = 3000     # ảnh lớn hơn được thu nhỏ khi dò hình r
 PNG_LIMIT_BYTES = 2_000_000
 RECOGNIZE_MAX_TOKENS = 8000
 OVERLOAD_RETRIES = 3
+HIDDEN_TEXT_SIZE = 3
+EXAM_PAGE_MARGIN = 0.13    # tỉ lệ chiều cao ảnh, xem images_to_exam_pdf
 PANDOC_TIMEOUT = 120
 
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
@@ -39,6 +44,7 @@ PROMPT = r"""Transcribe this document image into Markdown, exactly as printed.
 Rules:
 - Keep the original language, wording and reading order. Do not solve, translate, summarise, correct or add anything.
 - Write EVERY mathematical expression in LaTeX, even a single variable or number with a unit in a formula: $...$ for inline, $$...$$ for display. Never use Unicode math symbols, \( \) or \[ \].
+- Chemistry is written in LaTeX too, with upright symbols: $\mathrm{H_2SO_4}$, $\mathrm{Fe^{3+}}$, $\mathrm{SO_4^{2-}}$, $\mathrm{N_2 + 3H_2 \xrightarrow{t^\circ} 2NH_3}$, $\mathrm{H_2 + I_2 \rightleftharpoons 2HI}$. Physics units go inside the formula as $5\,\text{m/s}$.
 - Join lines that are only wrapped by the page width into one line. Start a new line for each new paragraph and question.
 - Answer options (A., B., C., D. or a), b), c), d)) must keep the row arrangement printed in the image. Options printed side by side on the same row go on one line, separated by [[TAB]], for example: A. $1$. [[TAB]] B. $2$. [[TAB]] C. $3$. [[TAB]] D. $4$. Options printed on separate rows go on separate lines: two rows of two options are two lines with one [[TAB]] each, and four rows of one option are four lines with no [[TAB]].
 - Write tables as Markdown pipe tables, with formulas inside cells.
@@ -321,6 +327,47 @@ def recognize(image_bytes: bytes, chat, model: str) -> dict:
     return {"markdown": markdown, "figures": figures, "warnings": warnings, "original": _encode_original(img)}
 
 
+def _insert_hidden_text(page: "fitz.Page", markdown: str) -> None:
+    """Chép nội dung vào lớp chữ ẩn: pipeline dò PHẦN I/II/III, số câu và trang đáp án bằng
+    page.get_text(), ảnh thuần không có chữ thì các phần bị gộp nhầm."""
+    plain = _FIG_REF_RE.sub("", _COLUMN_RE.sub("    ", markdown)).replace("**", "")
+    writer = fitz.TextWriter(page.rect)
+    font = fitz.Font("helv")
+    y = HIDDEN_TEXT_SIZE
+    for line in filter(None, (raw.strip() for raw in plain.split("\n"))):
+        if y > page.rect.height:
+            break
+        writer.append((1, y), line, font=font, fontsize=HIDDEN_TEXT_SIZE)
+        y += HIDDEN_TEXT_SIZE * 1.2
+    writer.write_text(page, render_mode=3)     # 3 = không hiển thị
+
+
+def images_to_exam_pdf(images: list[bytes], chat, model: str) -> bytes:
+    """Dựng PDF từ ảnh các trang đề để đưa vào đúng pipeline tạo đề từ PDF.
+
+    Mỗi hình dò được đặt thành ảnh riêng đè lên đúng vị trí (nhìn vẫn như trang gốc), vì
+    pipeline lấy hình của câu hỏi từ các ảnh nhúng trong PDF. Lề trên/dưới để hình sát mép
+    ảnh không rơi vào vùng header/footer mà extract_embedded_images bỏ qua.
+    """
+    doc = fitz.open()
+    for data in images:
+        img = _load_image(data)
+        margin = img.height * EXAM_PAGE_MARGIN
+        page = doc.new_page(width=img.width, height=img.height + 2 * margin)
+        buf = io.BytesIO()
+        img.save(buf, "JPEG", quality=88)
+        page.insert_image(fitz.Rect(0, margin, img.width, img.height + margin), stream=buf.getvalue())
+        boxes, _tables = _detect_figures(img)
+        for box in boxes:
+            crop = io.BytesIO()
+            img.crop(box).save(crop, "PNG")
+            page.insert_image(fitz.Rect(box[0], box[1] + margin, box[2], box[3] + margin), stream=crop.getvalue())
+        _insert_hidden_text(page, recognize(data, chat, model)["markdown"])
+    pdf = doc.tobytes(deflate=True)
+    doc.close()
+    return pdf
+
+
 def _validate_figure(figure: dict) -> tuple[str, str]:
     """Trả (đuôi file, base64). Client gửi lại dữ liệu nên phải kiểm tra lại ở đây."""
     match = re.fullmatch(r"data:image/(png|jpeg);base64,([A-Za-z0-9+/=]+)", str(figure.get("data") or ""))
@@ -368,7 +415,61 @@ def _substitute_figures(pages: list[dict], render) -> str:
         # Làm sạch lại vì người dùng có thể đã sửa: "$ x $" hay dòng thụt đầu sẽ bị
         # pandoc hiểu khác hẳn phần xem trước trên trình duyệt.
         parts.append(_FIG_REF_RE.sub(replace, _clean_output(str(page.get("markdown") or ""))))
-    return _mark_columns("\n\n".join(parts))
+    return _mark_columns(_expand_chemistry("\n\n".join(parts)))
+
+
+_CE_ARROWS = [("<=>", r"\rightleftharpoons"), ("<->", r"\leftrightarrow"), ("->", r"\rightarrow"), ("<-", r"\leftarrow")]
+
+
+def _ce_species(token: str) -> str:
+    """Một chất trong \ce: H2SO4 → H_{2}SO_{4}, Fe^3+ hay Fe3+ → Fe^{3+}, 2H2 giữ hệ số 2."""
+    if token == "^":
+        return r"\uparrow"
+    if token == "v":
+        return r"\downarrow"
+    match = re.match(r"\d*(?=[A-Z(\[])", token)
+    coefficient, rest = match.group(0), token[match.end():]
+    charge = ""
+    tail = re.search(r"\^(\{[^}]*\}|\d*[+-])$|(?<=[A-Za-z)\]])(\d*[+-])$", rest)
+    if tail:
+        charge = "^{" + (tail.group(1) or tail.group(2)).strip("{}") + "}"
+        rest = rest[:tail.start()]
+    return coefficient + re.sub(r"(?<=[A-Za-z)\]])(\d+)", r"_{\1}", rest) + charge
+
+
+def _ce_to_latex(body: str) -> str:
+    parts = []
+    for token in body.split():
+        arrow = re.fullmatch(r"(<=>|<->|->|<-)(?:\[([^\]]*)\])?(?:\[([^\]]*)\])?", token)
+        if arrow:
+            symbol = dict(_CE_ARROWS)[arrow.group(1)]
+            if arrow.group(2) and arrow.group(1) == "->":
+                below = f"[{arrow.group(3)}]" if arrow.group(3) else ""
+                symbol = rf"\xrightarrow{below}{{{arrow.group(2)}}}"
+            parts.append(symbol)
+        else:
+            parts.append(token if token in ("+", "-") else _ce_species(token))
+    return r"\mathrm{" + " ".join(parts) + "}"
+
+
+def _expand_chemistry(text: str) -> str:
+    """Pandoc không hiểu \ce của mhchem nên cả công thức thành chữ thô trong Word; khung xem
+    trước (KaTeX) thì hiểu, nên đổi lúc xuất file để ô soạn vẫn giữ nguyên chữ người dùng gõ."""
+    out, position = [], 0
+    while True:
+        start = text.find(r"\ce{", position)
+        if start < 0:
+            return "".join(out) + text[position:]
+        depth, end = 0, start + 3
+        while end < len(text):
+            depth += {"{": 1, "}": -1}.get(text[end], 0)
+            if depth == 0:
+                break
+            end += 1
+        if depth:                     # thiếu ngoặc đóng: để nguyên
+            return "".join(out) + text[position:]
+        out.append(text[position:start] + _ce_to_latex(text[start + 4:end]))
+        position = end + 1
 
 
 def _mark_columns(markdown: str) -> str:
@@ -460,6 +561,20 @@ def build_docx(pages: list[dict]) -> bytes:
         return f"![](data:image/{mime};base64,{b64}){{width={_width_pct(figure)}%}}"
 
     return _apply_docx_columns(_pandoc(_substitute_figures(pages, render), "docx"))
+
+
+def build_docx_mathtype(pages: list[dict]) -> bytes:
+    """Word có công thức là đối tượng MathType (Equation.DSMT6). Công thức nào không đổi
+    được thì giữ nguyên dạng công thức Word, nên file vẫn đủ nội dung."""
+    from omml_converter import convert    # import muộn: gói phụ, lỗi ở đây không được làm hỏng cả backend
+
+    with tempfile.TemporaryDirectory() as folder:
+        source, target = Path(folder, "vao.docx"), Path(folder, "ra.docx")
+        source.write_bytes(build_docx(pages))
+        summary = convert(str(source), str(target))
+        if summary.errors:
+            print(f"[image-convert] MathType: {summary.errors}/{summary.found} công thức giữ dạng Word")
+        return target.read_bytes()
 
 
 def build_latex_zip(pages: list[dict]) -> bytes:

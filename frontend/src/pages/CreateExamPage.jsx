@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { blockReload } from '../realtime/reloadGuard.js'
 import UploadStep       from '../components/create-exam/UploadStep.jsx'
+import ImageUploadStep  from '../components/create-exam/ImageUploadStep.jsx'
 import ProcessingStep   from '../components/create-exam/ProcessingStep.jsx'
 import ReviewStep       from '../components/create-exam/ReviewStep.jsx'
 import ExamPreviewModal from '../components/ExamPreviewModal.jsx'
@@ -73,7 +74,7 @@ const EMPTY_RESULT = {
  *   manualMode    — bắt đầu ở bước soạn thảo với đề trống (optional)
  *   mixResult     — pre-filled result từ Phối đề ngẫu nhiên (optional)
  */
-export default function CreateExamPage({ user, classId, onDone, editingExam, manualMode, mixResult, subject = 'toan' }) {
+export default function CreateExamPage({ user, classId, onDone, editingExam, manualMode, mixResult, fromImages = false, subject = 'toan' }) {
   // Suốt cả màn hình soạn đề: đang trích xuất PDF hoặc đang sửa câu hỏi mà reload
   // là mất sạch công sức — chỉ hiện banner, nạp bản mới sau khi lưu xong.
   useEffect(() => blockReload('dang-soan-de'), [])
@@ -100,18 +101,25 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
   const [previewEditTarget, setPreviewEditTarget] = useState(null)
 
   /* ── Upload & AI extraction ── */
-  const handleUpload = useCallback(async (file) => {
+  const handleUpload = useCallback(async (source) => {
     setPhase('processing')
     setEvents([])
     setResult(null)
 
     const form = new FormData()
-    form.append('file', file)
+    const isImages = Array.isArray(source)
+    if (isImages) source.forEach(file => form.append('files', file))
+    else form.append('file', source)
     form.append('subject', examSubject)
     let taskId
     try {
-      const res  = await fetch('/api/extract', { method: 'POST', body: form })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const res = await fetch(isImages ? '/api/extract-images' : '/api/extract', {
+        method: 'POST', body: form, headers: isImages ? authHeaders() : undefined,
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || data.detail || `HTTP ${res.status}`)
+      }
       taskId = (await res.json()).task_id
     } catch (e) {
       setPhase('upload')
@@ -127,7 +135,7 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
         sse.close()
         fetch(`/api/result/${taskId}`)
           .then(r => { if (!r.ok) throw new Error(); return r.json() })
-          .then(data => { setResult(data); setTitle(data.source.replace(/\.pdf$/i, '')); setPhase('review') })
+          .then(data => { setResult(data); setTitle(data.source.replace(/\.(pdf|jpe?g|png|webp)$/i, '')); setPhase('review') })
           .catch(() => { setPhase('upload'); setEvents(prev => [...prev, { type: 'error', message: 'Lấy kết quả thất bại.' }]) })
       }
       if (evt.type === 'error') { sse.close(); setPhase('upload') }
@@ -186,7 +194,7 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
               {isEditing ? `Đang sửa: ${editingExam.title}`
                 : isMix   ? `${mixResult.total_questions} câu đã được phối — Chỉnh sửa và Lưu`
                 : isManual ? 'Thêm câu hỏi rồi Lưu lại'
-                : 'Upload PDF — AI trích xuất — Chỉnh sửa — Lưu'}
+                : (fromImages ? 'Tải ảnh' : 'Upload PDF') + ' — AI trích xuất — Chỉnh sửa — Lưu'}
             </p>
           </div>
           <StepIndicator current={stepId} manual={isManual || isEditing || isMix} />
@@ -195,7 +203,9 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
 
       <div className="ce-body">
         {phase === 'upload' && (
-          <UploadStep onUpload={handleUpload} errorFromPrev={events.find(e => e.type === 'error')} />
+          fromImages
+            ? <ImageUploadStep onUpload={handleUpload} errorFromPrev={events.find(e => e.type === 'error')} />
+            : <UploadStep onUpload={handleUpload} errorFromPrev={events.find(e => e.type === 'error')} />
         )}
         {phase === 'processing' && (
           <ProcessingStep events={events} source={title} />

@@ -12679,3 +12679,8 @@ button { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .update-banner { animation: none; }
 }
+
+/* Khung xem trước chuyển ảnh: cột đáp án hẹp hơn khổ giấy thật, không để công thức bị ngắt dòng sau dấu "=". */
+.ic-preview-col { font-size: 14px; }
+.ic-preview-col .katex { white-space: nowrap; }
+.ic-preview-col--nowrap { white-space: nowrap; }

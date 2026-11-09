@@ -10,6 +10,7 @@ const ACCEPT = 'image/jpeg,image/png,image/webp'
 
 const FORMATS = [
   { value: 'docx', title: 'Word (.docx)', desc: 'Công thức là công thức Word, sửa trực tiếp được' },
+  { value: 'mathtype', title: 'Word + MathType (.docx)', desc: 'Công thức là đối tượng MathType, cần có MathType để sửa' },
   { value: 'latex', title: 'LaTeX (.zip)', desc: 'Gồm main.tex và thư mục hình, mở được trên Overleaf' },
 ]
 
@@ -365,7 +366,7 @@ export default function ImageConvertPage({ onBack }) {
               : doneCount > 0 && remaining > 0 ? `Nhận dạng ${remaining} ảnh còn lại` : 'Bắt đầu nhận dạng'}
           </button>
           <button className="btn-primary" onClick={download} disabled={busy || doneCount === 0}>
-            {exporting ? 'Đang tạo file…' : `Tải ${format === 'docx' ? 'file Word' : 'file LaTeX'}`}
+            {exporting ? 'Đang tạo file…' : `Tải ${format === 'latex' ? 'file LaTeX' : 'file Word'}`}
           </button>
         </div>
         <p style={{ fontSize: 13, color: '#64748b', marginTop: 12 }}>

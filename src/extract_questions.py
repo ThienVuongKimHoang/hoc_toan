@@ -139,7 +139,12 @@ def extract_embedded_images(doc: fitz.Document, page_idx: int, out_dir: Path) ->
         base_image = doc.extract_image(xref)
         w, h = base_image.get("width", 0), base_image.get("height", 0)
 
+        # Ảnh nền phủ gần hết trang (đề chụp/scan) không phải hình minh hoạ của câu hỏi.
+        is_page_background = bool(rects) and (
+            rects[0].width >= page.rect.width * 0.98 and rects[0].height >= page_h * 0.7
+        )
         is_content = (
+            not is_page_background and
             y0 >= header_cutoff and
             y0 <= footer_cutoff and
             w >= MIN_PX and h >= MIN_PX

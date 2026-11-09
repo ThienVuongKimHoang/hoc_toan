@@ -16,11 +16,11 @@ const SUBJECT_CHOICES = ['toan', 'ly', 'hoa', 'anh', 'toeic', 'ielts', 'thieunhi
 
 const CHOICES = [
   {
-    id:    'upload',
+    id:    'ai',
     icon:  '🤖',
-    title: 'Tạo từ file PDF',
-    desc:  'Upload file đề thi PDF, AI tự động trích xuất toàn bộ câu hỏi và đáp án.',
-    tags:  ['AI tự động', 'PDF', 'Nhanh chóng'],
+    title: 'Tạo đề với AI',
+    desc:  'Tải lên file PDF hoặc ảnh đề thi, AI tự động trích xuất toàn bộ câu hỏi và đáp án.',
+    tags:  ['AI tự động', 'PDF', 'Ảnh'],
     color: '#2563eb',
     bg:    '#eff6ff',
     border:'#93c5fd',
@@ -47,8 +47,37 @@ const CHOICES = [
   },
 ]
 
+const AI_SOURCES = [
+  {
+    id:    'upload',
+    icon:  '📄',
+    title: 'Từ file PDF',
+    desc:  'Tải lên một file đề thi PDF.',
+    tags:  ['Một file', 'PDF'],
+    color: '#2563eb',
+    bg:    '#eff6ff',
+    border:'#93c5fd',
+  },
+  {
+    id:    'images',
+    icon:  '🖼️',
+    title: 'Từ ảnh',
+    desc:  'Tải lên ảnh chụp hoặc ảnh quét các trang đề, xếp theo tên file.',
+    tags:  ['Nhiều ảnh', 'JPG', 'PNG', 'WEBP'],
+    color: '#15803d',
+    bg:    '#f0fdf4',
+    border:'#86efac',
+  },
+]
+
 export default function CreateExamChoiceModal({ onChoice, onClose, initialSubject = null }) {
   const [subject, setSubject] = useState(initialSubject)
+  const [choosingAiSource, setChoosingAiSource] = useState(false)
+  const pick = (id) => {
+    if (id === 'ai') setChoosingAiSource(true)
+    else onChoice(id, subject)
+  }
+  const cards = choosingAiSource ? AI_SOURCES : CHOICES
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -80,22 +109,28 @@ export default function CreateExamChoiceModal({ onChoice, onClose, initialSubjec
           <>
             {/* Bước 2 — chọn cách tạo */}
             <div className="cec-step2-head">
-              <button className="cec-back-btn" type="button" onClick={() => setSubject(null)}>
-                ← Đổi môn
-              </button>
+              {choosingAiSource ? (
+                <button className="cec-back-btn" type="button" onClick={() => setChoosingAiSource(false)}>
+                  ← Quay lại
+                </button>
+              ) : (
+                <button className="cec-back-btn" type="button" onClick={() => setSubject(null)}>
+                  ← Đổi môn
+                </button>
+              )}
               <span className={`rs-subject-pill subject-badge--${subject}`}>
                 {SUBJECTS[subject].icon} {SUBJECTS[subject].label}
               </span>
             </div>
-            <p className="cec-subtitle">Chọn cách bạn muốn tạo đề thi</p>
+            <p className="cec-subtitle">{choosingAiSource ? 'Đề thi của bạn ở dạng nào?' : 'Chọn cách bạn muốn tạo đề thi'}</p>
 
             <div className="cec-choices">
-              {CHOICES.map(c => (
+              {cards.map(c => (
                 <button
                   key={c.id}
                   className="cec-card"
                   style={{ '--cec-color': c.color, '--cec-bg': c.bg, '--cec-border': c.border }}
-                  onClick={() => onChoice(c.id, subject)}
+                  onClick={() => pick(c.id)}
                 >
                   <div className="cec-card-icon">{c.icon}</div>
                   <div className="cec-card-body">

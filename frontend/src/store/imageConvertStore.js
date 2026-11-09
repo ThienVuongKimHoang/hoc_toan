@@ -56,7 +56,7 @@ export async function exportDocument(format, pages) {
   const url = URL.createObjectURL(await res.blob())
   const a = document.createElement('a')
   a.href = url
-  a.download = format === 'docx' ? 'tai-lieu.docx' : 'tai-lieu-latex.zip'
+  a.download = { docx: 'tai-lieu.docx', mathtype: 'tai-lieu-mathtype.docx', latex: 'tai-lieu-latex.zip' }[format]
   document.body.appendChild(a)
   a.click()
   a.remove()

@@ -49,13 +49,18 @@ function BoldText({ text }) {
   ))
 }
 
+/* Đáp án ngắn (chủ yếu là công thức) giữ trên một dòng, câu chữ dài vẫn được xuống dòng. */
+const isShortCell = (cell) => cell.replace(/\$[^$]*\$/g, '').trim().length <= 24
+
 /* Dòng có [[TAB]] chia đều thành các cột, giống tab stop trong file Word. */
 function PreviewLine({ line }) {
   const cells = line.split(TAB_RE)
   if (cells.length === 1) return <div><BoldText text={line} /></div>
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cells.length}, minmax(0, 1fr))`, gap: 8 }}>
-      {cells.map((cell, i) => <div key={i}><BoldText text={cell} /></div>)}
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cells.length}, minmax(min-content, 1fr))`, gap: 4 }}>
+      {cells.map((cell, i) => (
+        <div key={i} className={`ic-preview-col${isShortCell(cell) ? ' ic-preview-col--nowrap' : ''}`}><BoldText text={cell} /></div>
+      ))}
     </div>
   )
 }

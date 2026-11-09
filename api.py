@@ -651,6 +651,54 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "", exam_
         pdf_path.unlink(missing_ok=True)
 
 
+EXAM_IMAGE_MAX_FILES = 40
+EXAM_IMAGE_MAX_BYTES = 15 * 1024 * 1024
+
+
+def _run_image_extraction(task_id: str, images: list[bytes], source_name: str, exam_subject: str) -> None:
+    """Dựng PDF từ ảnh rồi chạy đúng pipeline tạo đề từ PDF, để hai nguồn cho cùng một cấu trúc đề."""
+    task = TASKS[task_id]
+    tmp_path = None
+    try:
+        task["progress"].append({"type": "start", "total_pages": len(images), "source": source_name})
+        pdf = image_convert.images_to_exam_pdf(images, _groq_chat_with_key_rotation, _GEN_VISION_MODEL)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(pdf)
+            tmp_path = Path(tmp.name)
+    except Exception as exc:
+        if tmp_path:
+            tmp_path.unlink(missing_ok=True)
+        message = str(exc) if isinstance(exc, image_convert.ImageConvertError) else "Không đọc được ảnh, AI có thể đang bận. Hãy thử lại sau ít phút."
+        print(f"[extract-images] error: {exc}")
+        task["status"] = "error"
+        task["error"] = message
+        task["progress"].append({"type": "error", "message": message})
+        return
+    _run_extraction(task_id, tmp_path, source_name, exam_subject)
+
+
+@app.post("/api/extract-images")
+async def extract_images(
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    subject: str = Form("toan"),
+    caller: dict = Depends(require_teacher),
+):
+    """Nhận ảnh các trang đề (đã xếp theo thứ tự trang), trích xuất nền, trả về task_id."""
+    if not 1 <= len(files) <= EXAM_IMAGE_MAX_FILES:
+        return JSONResponse({"error": f"Cần từ 1 đến {EXAM_IMAGE_MAX_FILES} ảnh."}, status_code=400)
+    images = [await f.read() for f in files]
+    if any(len(data) > EXAM_IMAGE_MAX_BYTES for data in images):
+        return JSONResponse({"error": "Mỗi ảnh tối đa 15 MB."}, status_code=413)
+    task_id = str(uuid.uuid4())
+    TASKS[task_id] = {
+        "status": "pending", "progress": [], "result": None,
+        "error": None, "created": time.time(),
+    }
+    background_tasks.add_task(_run_image_extraction, task_id, images, files[0].filename or "de-thi", subject)
+    return {"task_id": task_id}
+
+
 @app.post("/api/extract")
 async def extract(
     background_tasks: BackgroundTasks,
@@ -4496,17 +4544,17 @@ async def image_convert_export(request: Request, caller: dict = Depends(require_
     body = await request.json()
     output = body.get("format")
     pages = body.get("pages")
-    if output not in ("docx", "latex"):
+    if output not in ("docx", "mathtype", "latex"):
         return JSONResponse({"error": "Định dạng không hợp lệ."}, status_code=400)
     if not isinstance(pages, list) or not 1 <= len(pages) <= IMAGE_CONVERT_MAX_PAGES \
             or not all(isinstance(p, dict) for p in pages):
         return JSONResponse({"error": f"Cần từ 1 đến {IMAGE_CONVERT_MAX_PAGES} trang."}, status_code=400)
-    build, media_type, filename = (
-        (image_convert.build_docx,
-         "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "tai-lieu.docx")
-        if output == "docx" else
-        (image_convert.build_latex_zip, "application/zip", "tai-lieu-latex.zip")
-    )
+    docx_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    build, media_type, filename = {
+        "docx": (image_convert.build_docx, docx_type, "tai-lieu.docx"),
+        "mathtype": (image_convert.build_docx_mathtype, docx_type, "tai-lieu-mathtype.docx"),
+        "latex": (image_convert.build_latex_zip, "application/zip", "tai-lieu-latex.zip"),
+    }[output]
     try:
         content = await asyncio.to_thread(build, pages)
     except image_convert.ImageConvertError as e:
