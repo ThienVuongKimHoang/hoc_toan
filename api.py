@@ -61,6 +61,7 @@ import database as db
 import geo3d as geo3d_ai
 import ielts_grading as ielts
 import image_convert
+import markdown_exam
 import listening_grading as listening
 import speaking_grading as speaking
 import vocab_ai
@@ -653,17 +654,15 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "", exam_
 
 EXAM_IMAGE_MAX_FILES = 40
 EXAM_IMAGE_MAX_BYTES = 15 * 1024 * 1024
-EXAM_IMAGE_MAX_TEXT = 100_000
 
 
-def _run_image_extraction(task_id: str, images: list[bytes], source_name: str, exam_subject: str,
-                          texts: Optional[list[str]] = None) -> None:
+def _run_image_extraction(task_id: str, images: list[bytes], source_name: str, exam_subject: str) -> None:
     """Dựng PDF từ ảnh rồi chạy đúng pipeline tạo đề từ PDF, để hai nguồn cho cùng một cấu trúc đề."""
     task = TASKS[task_id]
     tmp_path = None
     try:
         task["progress"].append({"type": "start", "total_pages": len(images), "source": source_name})
-        pdf = image_convert.images_to_exam_pdf(images, _groq_chat_with_key_rotation, _GEN_VISION_MODEL, texts)
+        pdf = image_convert.images_to_exam_pdf(images, _groq_chat_with_key_rotation, _GEN_VISION_MODEL)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             tmp.write(pdf)
             tmp_path = Path(tmp.name)
@@ -684,22 +683,11 @@ async def extract_images(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     subject: str = Form("toan"),
-    texts: Optional[str] = Form(None),
     caller: dict = Depends(require_teacher),
 ):
-    """Nhận ảnh các trang đề (đã xếp theo thứ tự trang), trích xuất nền, trả về task_id.
-    `texts` (JSON, tuỳ chọn): nội dung từng trang đã nhận dạng ở bước File Word."""
+    """Nhận ảnh các trang đề (đã xếp theo thứ tự trang), trích xuất nền, trả về task_id."""
     if not 1 <= len(files) <= EXAM_IMAGE_MAX_FILES:
         return JSONResponse({"error": f"Cần từ 1 đến {EXAM_IMAGE_MAX_FILES} ảnh."}, status_code=400)
-    page_texts = None
-    if texts:
-        try:
-            page_texts = json.loads(texts)
-        except ValueError:
-            page_texts = None
-        if not (isinstance(page_texts, list) and len(page_texts) == len(files)
-                and all(isinstance(t, str) and len(t) <= EXAM_IMAGE_MAX_TEXT for t in page_texts)):
-            return JSONResponse({"error": "Nội dung các trang không hợp lệ."}, status_code=400)
     images = [await f.read() for f in files]
     if any(len(data) > EXAM_IMAGE_MAX_BYTES for data in images):
         return JSONResponse({"error": "Mỗi ảnh tối đa 15 MB."}, status_code=413)
@@ -708,8 +696,38 @@ async def extract_images(
         "status": "pending", "progress": [], "result": None,
         "error": None, "created": time.time(),
     }
-    background_tasks.add_task(_run_image_extraction, task_id, images, files[0].filename or "de-thi", subject, page_texts)
+    background_tasks.add_task(_run_image_extraction, task_id, images, files[0].filename or "de-thi", subject)
     return {"task_id": task_id}
+
+
+def _save_markdown_figure(figure: dict) -> str:
+    ext, data = image_convert._validate_figure(figure)
+    name = f"md_{uuid.uuid4().hex}.{ext}"
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    (IMAGES_DIR / name).write_bytes(_base64.b64decode(data))
+    return f"images/{name}"
+
+
+@app.post("/api/exam-from-pages")
+async def exam_from_pages(request: Request, caller: dict = Depends(require_teacher)):
+    """Dựng đề từ nội dung các trang đã nhận dạng và sửa ở bước File Word, KHÔNG gọi AI:
+    người dùng sửa thế nào thì đề đúng như thế. Trả thẳng `result` như /api/result."""
+    body = await request.json()
+    pages = body.get("pages")
+    source = str(body.get("source") or "de-thi")[:200]
+    if not isinstance(pages, list) or not 1 <= len(pages) <= EXAM_IMAGE_MAX_FILES \
+            or not all(isinstance(p, dict) for p in pages):
+        return JSONResponse({"error": f"Cần từ 1 đến {EXAM_IMAGE_MAX_FILES} trang."}, status_code=400)
+    try:
+        for page in pages:
+            image_convert.validate_page_edit(page.get("markdown"), page.get("figures") or [])
+        result = await asyncio.to_thread(markdown_exam.parse_exam, pages, _save_markdown_figure, source)
+    except image_convert.ImageConvertError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    if not result["total_questions"]:
+        return JSONResponse({"error": "Không tìm thấy câu hỏi nào. Mỗi câu cần bắt đầu bằng \"Câu 1.\", \"Câu 2.\"…"},
+                            status_code=422)
+    return result
 
 
 @app.post("/api/extract")

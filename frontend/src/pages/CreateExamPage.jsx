@@ -43,7 +43,7 @@ function stepsFor(manual, outputs) {
   if (manual) return MANUAL_STEPS
   if (!outputs?.word) return [STEP.upload, STEP.processing, STEP.review]
   if (!outputs.exam) return [STEP.upload, STEP.word]
-  return [STEP.upload, STEP.word, STEP.processing, STEP.review]
+  return [STEP.upload, STEP.word, STEP.review]
 }
 
 function StepIndicator({ current, manual, outputs }) {
@@ -118,9 +118,7 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
   const [wordFiles,         setWordFiles]         = useState(null)
 
   /* ── Upload & AI extraction ── */
-  // texts: nội dung từng trang đã sửa ở bước File Word; lỗi thì quay lại đúng bước đó
-  const handleUpload = useCallback(async (source, texts) => {
-    const backPhase = texts ? 'word' : 'upload'
+  const handleUpload = useCallback(async (source) => {
     setPhase('processing')
     setEvents([])
     setResult(null)
@@ -129,7 +127,6 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
     const isImages = Array.isArray(source)
     if (isImages) source.forEach(file => form.append('files', file))
     else form.append('file', source)
-    if (texts) form.append('texts', JSON.stringify(texts))
     form.append('subject', examSubject)
     let taskId
     try {
@@ -142,7 +139,7 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
       }
       taskId = (await res.json()).task_id
     } catch (e) {
-      setPhase(backPhase)
+      setPhase('upload')
       setEvents([{ type: 'error', message: `Upload thất bại: ${e.message}` }])
       return
     }
@@ -156,12 +153,12 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
         fetch(`/api/result/${taskId}`)
           .then(r => { if (!r.ok) throw new Error(); return r.json() })
           .then(data => { setResult(data); setTitle(data.source.replace(/\.(pdf|jpe?g|png|webp)$/i, '')); setPhase('review') })
-          .catch(() => { setPhase(backPhase); setEvents(prev => [...prev, { type: 'error', message: 'Lấy kết quả thất bại.' }]) })
+          .catch(() => { setPhase('upload'); setEvents(prev => [...prev, { type: 'error', message: 'Lấy kết quả thất bại.' }]) })
       }
-      if (evt.type === 'error') { sse.close(); setPhase(backPhase) }
+      if (evt.type === 'error') { sse.close(); setPhase('upload') }
     }
     sse.onerror = () => {
-      sse.close(); setPhase(backPhase)
+      sse.close(); setPhase('upload')
       setEvents(prev => [...prev, { type: 'error', message: 'Mất kết nối với server.' }])
     }
   }, [examSubject])
@@ -204,6 +201,21 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
     setPhase('word')
   }
 
+  /* Cả đề thi và File Word: dựng đề thẳng từ nội dung đã sửa, không gọi AI. Lỗi thì ném ra
+     để bước File Word báo tại chỗ, phần đã sửa vẫn còn. */
+  const handleCreateFromPages = async (pages, source) => {
+    const res = await fetch('/api/exam-from-pages', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ pages, source }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+    setResult(data)
+    setTitle(source.replace(/\.(jpe?g|png|webp)$/i, ''))
+    setPhase('review')
+  }
+
   const stepId = phase
 
   return (
@@ -223,7 +235,7 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
                 : isManual ? 'Thêm câu hỏi rồi Lưu lại'
                 : fromImages
                   ? (imageOutputs?.word && !imageOutputs.exam ? 'Tải ảnh — AI nhận dạng — Sửa — Tải file Word'
-                    : imageOutputs?.word ? 'Tải ảnh — Sửa & tải file Word — AI tách câu hỏi — Lưu đề'
+                    : imageOutputs?.word ? 'Tải ảnh — Sửa & tải file Word — Tạo đề từ nội dung đã sửa — Lưu'
                     : 'Tải ảnh — AI trích xuất — Chỉnh sửa — Lưu')
                   : 'Upload PDF — AI trích xuất — Chỉnh sửa — Lưu'}
             </p>
@@ -239,14 +251,13 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
             : <UploadStep onUpload={handleUpload} errorFromPrev={events.find(e => e.type === 'error')} />
         )}
         {wordFiles && (
-          /* Giữ nguyên khi sang bước tạo đề, để tạo đề lỗi thì quay lại vẫn còn phần đã sửa */
+          /* Giữ nguyên khi sang bước review, để file Word vẫn tải lại được nếu quay lại */
           <div style={{ display: phase === 'word' ? undefined : 'none' }}>
             <ImageWordStep
               files={wordFiles}
               makeExam={imageOutputs.exam}
-              onCreateExam={handleUpload}
+              onCreateExam={handleCreateFromPages}
               onFinish={onDone}
-              errorFromPrev={phase === 'word' ? events.find(e => e.type === 'error') : null}
             />
           </div>
         )}

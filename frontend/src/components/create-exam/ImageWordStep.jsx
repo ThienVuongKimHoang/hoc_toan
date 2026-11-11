@@ -7,9 +7,8 @@ import { FORMATS, FormatPicker, PageList } from '../ImageConvertParts.jsx'
 const WORD_FORMATS = FORMATS.filter(f => f.value !== 'latex')
 
 /* Bước "File Word" khi tạo đề từ ảnh: nhận dạng từng trang, sửa trong khung 3 cột, tải Word.
-   Nếu cũng chọn lưu thành đề thì nội dung đã sửa ở đây được dùng để tách câu hỏi,
-   khỏi gọi AI đọc ảnh thêm lần nữa. */
-export default function ImageWordStep({ files, makeExam, onCreateExam, onFinish, errorFromPrev }) {
+   Nếu cũng chọn lưu thành đề thì đề được dựng thẳng từ nội dung đã sửa ở đây, không gọi AI. */
+export default function ImageWordStep({ files, makeExam, onCreateExam, onFinish }) {
   const {
     items, converting, saveState, flushSaves, updateMarkdown, convert,
   } = useImageConvertSession({ initialItems: () => files.map(itemFromFile) })
@@ -17,6 +16,7 @@ export default function ImageWordStep({ files, makeExam, onCreateExam, onFinish,
   const [exporting, setExporting] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [error, setError] = useState('')
+  const [creating, setCreating] = useState(false)
 
   // Vào bước này là nhận dạng luôn, người dùng đã bấm Bắt đầu ở bước trước.
   const startedRef = useRef(false)
@@ -29,7 +29,7 @@ export default function ImageWordStep({ files, makeExam, onCreateExam, onFinish,
   const doneCount = items.filter(it => it.status === 'done').length
   const failed = items.filter(it => it.status === 'error').length
   const allDone = doneCount === items.length
-  const busy = converting || exporting
+  const busy = converting || exporting || creating
 
   const download = async () => {
     setExporting(true)
@@ -45,11 +45,22 @@ export default function ImageWordStep({ files, makeExam, onCreateExam, onFinish,
   }
 
   const createExam = async () => {
-    await flushSaves()
-    onCreateExam(items.map(it => it.file), items.map(it => it.result.markdown))
+    setCreating(true)
+    setError('')
+    try {
+      await flushSaves()
+      await onCreateExam(
+        items.map(({ result }) => ({ markdown: result.markdown, figures: result.figures })),
+        items[0]?.name || 'de-thi',
+      )
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setCreating(false)
+    }
   }
 
-  const shownError = error || errorFromPrev?.message
+  const shownError = error
 
   return (
     <div style={{ maxWidth: 820, margin: '0 auto', padding: '16px 0' }}>
@@ -77,7 +88,7 @@ export default function ImageWordStep({ files, makeExam, onCreateExam, onFinish,
         {makeExam ? (
           <button className="btn-primary" onClick={createExam} disabled={busy || !allDone}
             title={allDone ? undefined : 'Cần nhận dạng xong tất cả các trang'}>
-            Tiếp tục tạo đề từ nội dung này
+            {creating ? 'Đang tạo đề…' : 'Tạo đề từ nội dung này'}
           </button>
         ) : (
           <button type="button" className="cm-tab" onClick={onFinish} disabled={busy}>Xong, quay lại lớp</button>
@@ -85,7 +96,7 @@ export default function ImageWordStep({ files, makeExam, onCreateExam, onFinish,
       </div>
       <p style={{ fontSize: 13, color: '#64748b', marginTop: 12, textAlign: 'center' }}>
         Nội dung do AI đọc từ ảnh nên có thể sai sót.
-        {makeExam && ' Phần bạn sửa ở đây cũng được dùng để tạo đề.'}
+        {makeExam && ' Đề được tạo đúng theo nội dung ở đây (không qua AI), mỗi câu cần bắt đầu bằng "Câu 1.", phương án "A." "B."…, ý Đúng/Sai "a)" "b)"…'}
         {SAVE_LABEL[saveState] && ` ${SAVE_LABEL[saveState]}.`}
       </p>
 
