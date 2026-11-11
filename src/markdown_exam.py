@@ -31,6 +31,12 @@ _SUB_RE = re.compile(r"^\s*([a-d])\s*\)\s*(.*)$", re.S)
 _STOP_RE = re.compile(r"^[\s#*_\-–—.]*(?:ĐÁP\s*ÁN|HƯỚNG\s*DẪN|LỜI\s*GIẢI|HẾT)\b")
 _FIG_TOKEN_RE = re.compile(r"\[\[FIGPATH:([^\]]+)\]\]")
 _NUMERALS = {"I": 1, "II": 2, "III": 3, "IV": 4}
+# Tiêu đề kiểu đề kiểm tra thường: "I. TRẮC NGHIỆM", "B. TỰ LUẬN", "TỰ LUẬN (3 điểm)".
+# Từ khoá phải VIẾT HOA để không nhầm với câu chữ trong đề bài.
+_KEYWORD_HEADER_RE = re.compile(
+    r"^\s*(?:#+\s*)?(?:(?:IV|III|II|I|[A-D1-4])\s*[.):\-–]\s*)?"
+    r"(TRẮC\s*NGHIỆM|TỰ\s*LUẬN|ĐÚNG\s*[-/]?\s*SAI|TRẢ\s*LỜI\s*NGẮN)")
+_AUTO = "auto"     # phần chung chung ("TRẮC NGHIỆM"): đoán theo nội dung từng câu
 
 
 def _is_stop(line: str) -> bool:
@@ -56,6 +62,21 @@ def _section_from_header(number: str, rest: str) -> str:
         return "PHẦN I"
     n = _NUMERALS.get(number.upper()) or int(number)
     return {1: "PHẦN I", 2: "PHẦN II", 3: "PHẦN III"}.get(n, ESSAY)
+
+
+def _section_from_keyword(line: str) -> str | None:
+    """Trả phần theo tiêu đề có từ khoá, _AUTO nếu chỉ ghi "TRẮC NGHIỆM", None nếu không phải tiêu đề."""
+    match = _KEYWORD_HEADER_RE.match(unicodedata.normalize("NFC", line))
+    if not match:
+        return None
+    keyword = re.sub(r"\s+", " ", match.group(1))
+    if keyword.startswith("TỰ"):
+        return ESSAY
+    if keyword.startswith("ĐÚNG"):
+        return "PHẦN II"
+    if keyword.startswith("TRẢ"):
+        return "PHẦN III"
+    return _AUTO
 
 
 class _Question:
@@ -164,6 +185,11 @@ def parse_exam(pages: list[dict], save_figure, source: str) -> dict:
             current = None
             continue
         start = _QUESTION_RE.match(line)
+        keyword_section = None if start else _section_from_keyword(line)
+        if keyword_section:
+            section = None if keyword_section == _AUTO else keyword_section
+            current = None
+            continue
         if start:
             current = _Question(int(start.group(1)), section, "")
             current.add_line(start.group(2))
