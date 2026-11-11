@@ -653,15 +653,17 @@ def _run_extraction(task_id: str, pdf_path: Path, original_name: str = "", exam_
 
 EXAM_IMAGE_MAX_FILES = 40
 EXAM_IMAGE_MAX_BYTES = 15 * 1024 * 1024
+EXAM_IMAGE_MAX_TEXT = 100_000
 
 
-def _run_image_extraction(task_id: str, images: list[bytes], source_name: str, exam_subject: str) -> None:
+def _run_image_extraction(task_id: str, images: list[bytes], source_name: str, exam_subject: str,
+                          texts: Optional[list[str]] = None) -> None:
     """Dựng PDF từ ảnh rồi chạy đúng pipeline tạo đề từ PDF, để hai nguồn cho cùng một cấu trúc đề."""
     task = TASKS[task_id]
     tmp_path = None
     try:
         task["progress"].append({"type": "start", "total_pages": len(images), "source": source_name})
-        pdf = image_convert.images_to_exam_pdf(images, _groq_chat_with_key_rotation, _GEN_VISION_MODEL)
+        pdf = image_convert.images_to_exam_pdf(images, _groq_chat_with_key_rotation, _GEN_VISION_MODEL, texts)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             tmp.write(pdf)
             tmp_path = Path(tmp.name)
@@ -682,11 +684,22 @@ async def extract_images(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     subject: str = Form("toan"),
+    texts: Optional[str] = Form(None),
     caller: dict = Depends(require_teacher),
 ):
-    """Nhận ảnh các trang đề (đã xếp theo thứ tự trang), trích xuất nền, trả về task_id."""
+    """Nhận ảnh các trang đề (đã xếp theo thứ tự trang), trích xuất nền, trả về task_id.
+    `texts` (JSON, tuỳ chọn): nội dung từng trang đã nhận dạng ở bước File Word."""
     if not 1 <= len(files) <= EXAM_IMAGE_MAX_FILES:
         return JSONResponse({"error": f"Cần từ 1 đến {EXAM_IMAGE_MAX_FILES} ảnh."}, status_code=400)
+    page_texts = None
+    if texts:
+        try:
+            page_texts = json.loads(texts)
+        except ValueError:
+            page_texts = None
+        if not (isinstance(page_texts, list) and len(page_texts) == len(files)
+                and all(isinstance(t, str) and len(t) <= EXAM_IMAGE_MAX_TEXT for t in page_texts)):
+            return JSONResponse({"error": "Nội dung các trang không hợp lệ."}, status_code=400)
     images = [await f.read() for f in files]
     if any(len(data) > EXAM_IMAGE_MAX_BYTES for data in images):
         return JSONResponse({"error": "Mỗi ảnh tối đa 15 MB."}, status_code=413)
@@ -695,7 +708,7 @@ async def extract_images(
         "status": "pending", "progress": [], "result": None,
         "error": None, "created": time.time(),
     }
-    background_tasks.add_task(_run_image_extraction, task_id, images, files[0].filename or "de-thi", subject)
+    background_tasks.add_task(_run_image_extraction, task_id, images, files[0].filename or "de-thi", subject, page_texts)
     return {"task_id": task_id}
 
 
@@ -4453,7 +4466,7 @@ async def solve_exercise(
 
 # ─── End Exercise Solver ──────────────────────────────────────────────────────
 
-# ─── Chuyển ảnh sang Word / LaTeX (chỉ super admin) ───────────────────────────
+# ─── Chuyển ảnh sang Word / LaTeX (giáo viên trở lên, phiên riêng từng người) ──
 IMAGE_CONVERT_MAX_BYTES = 15 * 1024 * 1024
 IMAGE_CONVERT_MAX_PAGES = 50
 
@@ -4471,7 +4484,7 @@ async def image_convert_recognize(
     file: UploadFile = File(...),
     sessionId: str = Form(...),
     pageId: str = Form(...),
-    caller: dict = Depends(require_super_admin),
+    caller: dict = Depends(require_teacher),
 ):
     """Mỗi ảnh một request: nhiều ảnh gộp một request sẽ vượt proxy_read_timeout 300s.
     Kết quả được lưu vào phiên ngay, nên đóng tab giữa chừng không mất phần đã xong."""
@@ -4502,19 +4515,19 @@ async def image_convert_recognize(
 
 
 @app.get("/api/tools/image-convert/sessions")
-async def image_convert_sessions(caller: dict = Depends(require_super_admin)):
+async def image_convert_sessions(caller: dict = Depends(require_teacher)):
     return await asyncio.to_thread(db.list_image_convert_sessions, str(caller["id"]))
 
 
 @app.get("/api/tools/image-convert/sessions/{session_id}")
-async def image_convert_session(session_id: str, caller: dict = Depends(require_super_admin)):
+async def image_convert_session(session_id: str, caller: dict = Depends(require_teacher)):
     session = await asyncio.to_thread(db.get_image_convert_session, str(caller["id"]), session_id)
     return session if session else JSONResponse(_IMAGE_CONVERT_EXPIRED, status_code=404)
 
 
 @app.put("/api/tools/image-convert/sessions/{session_id}/pages/{page_id}")
 async def image_convert_update_page(
-    session_id: str, page_id: str, request: Request, caller: dict = Depends(require_super_admin),
+    session_id: str, page_id: str, request: Request, caller: dict = Depends(require_teacher),
 ):
     body = await request.json()
     markdown, figures = body.get("markdown"), body.get("figures")
@@ -4528,19 +4541,19 @@ async def image_convert_update_page(
 
 
 @app.delete("/api/tools/image-convert/sessions/{session_id}/pages/{page_id}")
-async def image_convert_delete_page(session_id: str, page_id: str, caller: dict = Depends(require_super_admin)):
+async def image_convert_delete_page(session_id: str, page_id: str, caller: dict = Depends(require_teacher)):
     deleted = await asyncio.to_thread(db.delete_image_convert_page, str(caller["id"]), session_id, page_id)
     return {"ok": True} if deleted else JSONResponse(_IMAGE_CONVERT_EXPIRED, status_code=404)
 
 
 @app.delete("/api/tools/image-convert/sessions/{session_id}")
-async def image_convert_delete_session(session_id: str, caller: dict = Depends(require_super_admin)):
+async def image_convert_delete_session(session_id: str, caller: dict = Depends(require_teacher)):
     deleted = await asyncio.to_thread(db.delete_image_convert_session, str(caller["id"]), session_id)
     return {"ok": True} if deleted else JSONResponse(_IMAGE_CONVERT_EXPIRED, status_code=404)
 
 
 @app.post("/api/tools/image-convert/export")
-async def image_convert_export(request: Request, caller: dict = Depends(require_super_admin)):
+async def image_convert_export(request: Request, caller: dict = Depends(require_teacher)):
     body = await request.json()
     output = body.get("format")
     pages = body.get("pages")

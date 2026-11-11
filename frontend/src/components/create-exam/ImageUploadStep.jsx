@@ -6,12 +6,31 @@ const MAX_BYTES = 15 * 1024 * 1024
 
 const byName = (a, b) => a.file.name.localeCompare(b.file.name, undefined, { numeric: true })
 
-/* Chọn nhiều ảnh các trang đề. Thứ tự trang theo tên file vì AI đọc đề từ trên xuống
+const OUTPUTS = [
+  { key: 'exam', title: 'Lưu thành đề thi', desc: 'AI tách câu hỏi, đáp án để giao cho học sinh làm online' },
+  { key: 'word', title: 'File Word', desc: 'Sửa nội dung trong khung 3 cột rồi tải file .docx, công thức giữ dạng công thức' },
+]
+
+const CheckIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 6L9 17l-5-5"/>
+  </svg>
+)
+
+function startLabel({ exam, word }, count) {
+  const n = count || ''
+  if (exam && word) return `Bắt đầu với ${n} ảnh: File Word trước, rồi tạo đề`
+  if (word) return `Chuyển ${n} ảnh sang Word`
+  return `Bắt đầu tạo đề từ ${n} ảnh`
+}
+
+/* Chọn đầu ra (đề thi, file Word hoặc cả hai) và nhiều ảnh các trang đề. Thứ tự trang theo tên file vì AI đọc đề từ trên xuống
    qua từng trang, xếp sai trang là đánh số câu sai. */
 export default function ImageUploadStep({ onUpload, errorFromPrev }) {
   const [items, setItems] = useState([])
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [outputs, setOutputs] = useState({ exam: true, word: false })
   const inputRef = useRef(null)
   const itemsRef = useRef(items)
   itemsRef.current = items
@@ -41,6 +60,29 @@ export default function ImageUploadStep({ onUpload, errorFromPrev }) {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '16px 0' }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Bạn muốn nhận kết quả dạng nào? Có thể chọn cả hai.</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, marginBottom: 16 }}>
+        {OUTPUTS.map(o => {
+          const on = outputs[o.key]
+          return (
+            <label key={o.key} style={{
+              position: 'relative', display: 'block', padding: '12px 40px 12px 12px', borderRadius: 10, cursor: 'pointer',
+              border: `2px solid ${on ? '#15803d' : '#e2e8f0'}`, background: on ? '#f0fdf4' : '#fff',
+            }}>
+              <input type="checkbox" checked={on} style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
+                onChange={e => setOutputs(prev => ({ ...prev, [o.key]: e.target.checked }))} />
+              <span aria-hidden="true" style={{
+                position: 'absolute', top: 12, right: 12, width: 20, height: 20, borderRadius: 6,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff',
+                border: `2px solid ${on ? '#15803d' : '#cbd5e1'}`, background: on ? '#15803d' : '#fff',
+              }}>{on && <CheckIcon />}</span>
+              <span style={{ display: 'block', fontWeight: 600 }}>{o.title}</span>
+              <span style={{ display: 'block', fontSize: 13, color: '#64748b', marginTop: 2 }}>{o.desc}</span>
+            </label>
+          )
+        })}
+      </div>
+
       <div
         role="button"
         tabIndex={0}
@@ -79,9 +121,13 @@ export default function ImageUploadStep({ onUpload, errorFromPrev }) {
       {shownError && <div role="alert" style={{ marginTop: 12, color: '#b91c1c', fontSize: 14 }}>{shownError}</div>}
 
       <div style={{ marginTop: 16, textAlign: 'center' }}>
-        <button className="btn-primary" disabled={items.length === 0} onClick={() => onUpload(items.map(it => it.file))}>
-          Bắt đầu tạo đề từ {items.length || ''} ảnh
+        <button className="btn-primary" disabled={items.length === 0 || !(outputs.exam || outputs.word)}
+          onClick={() => onUpload(items.map(it => it.file), outputs)}>
+          {startLabel(outputs, items.length)}
         </button>
+        {!(outputs.exam || outputs.word) && (
+          <div style={{ marginTop: 8, fontSize: 13, color: '#b45309' }}>Hãy chọn ít nhất một dạng kết quả ở trên.</div>
+        )}
       </div>
     </div>
   )

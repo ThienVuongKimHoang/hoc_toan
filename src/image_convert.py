@@ -342,15 +342,17 @@ def _insert_hidden_text(page: "fitz.Page", markdown: str) -> None:
     writer.write_text(page, render_mode=3)     # 3 = không hiển thị
 
 
-def images_to_exam_pdf(images: list[bytes], chat, model: str) -> bytes:
+def images_to_exam_pdf(images: list[bytes], chat, model: str, texts: "list[str] | None" = None) -> bytes:
     """Dựng PDF từ ảnh các trang đề để đưa vào đúng pipeline tạo đề từ PDF.
 
     Mỗi hình dò được đặt thành ảnh riêng đè lên đúng vị trí (nhìn vẫn như trang gốc), vì
     pipeline lấy hình của câu hỏi từ các ảnh nhúng trong PDF. Lề trên/dưới để hình sát mép
     ảnh không rơi vào vùng header/footer mà extract_embedded_images bỏ qua.
+    `texts` là nội dung từng trang đã nhận dạng (và người dùng đã sửa) ở bước File Word,
+    có thì dùng luôn, khỏi gọi Vision đọc lại ảnh.
     """
     doc = fitz.open()
-    for data in images:
+    for index, data in enumerate(images):
         img = _load_image(data)
         margin = img.height * EXAM_PAGE_MARGIN
         page = doc.new_page(width=img.width, height=img.height + 2 * margin)
@@ -362,7 +364,8 @@ def images_to_exam_pdf(images: list[bytes], chat, model: str) -> bytes:
             crop = io.BytesIO()
             img.crop(box).save(crop, "PNG")
             page.insert_image(fitz.Rect(box[0], box[1] + margin, box[2], box[3] + margin), stream=crop.getvalue())
-        _insert_hidden_text(page, recognize(data, chat, model)["markdown"])
+        text = texts[index] if texts else recognize(data, chat, model)["markdown"]
+        _insert_hidden_text(page, text)
     pdf = doc.tobytes(deflate=True)
     doc.close()
     return pdf

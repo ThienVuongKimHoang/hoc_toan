@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { blockReload } from '../realtime/reloadGuard.js'
 import UploadStep       from '../components/create-exam/UploadStep.jsx'
 import ImageUploadStep  from '../components/create-exam/ImageUploadStep.jsx'
+import ImageWordStep    from '../components/create-exam/ImageWordStep.jsx'
 import ProcessingStep   from '../components/create-exam/ProcessingStep.jsx'
 import ReviewStep       from '../components/create-exam/ReviewStep.jsx'
 import ExamPreviewModal from '../components/ExamPreviewModal.jsx'
@@ -18,23 +19,36 @@ function PencilIcon({ size = 16 }) {
   )
 }
 
+function FileWordIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+    </svg>
+  )
+}
+
 /* ── Step configs ── */
-const UPLOAD_STEPS = [
-  { id: 'upload',     label: 'Upload',          icon: '📤' },
-  { id: 'processing', label: 'AI xử lý',        icon: '🤖' },
-  { id: 'review',     label: 'Xem & Chỉnh sửa', icon: <PencilIcon size={14} /> },
-]
-const UPLOAD_ORDER = ['upload', 'processing', 'review']
+const STEP = {
+  upload:     { id: 'upload',     label: 'Upload',          icon: '📤' },
+  word:       { id: 'word',       label: 'File Word',       icon: <FileWordIcon /> },
+  processing: { id: 'processing', label: 'AI xử lý',        icon: '🤖' },
+  review:     { id: 'review',     label: 'Xem & Chỉnh sửa', icon: <PencilIcon size={14} /> },
+}
+const MANUAL_STEPS = [{ id: 'review', label: 'Soạn thảo', icon: '✍️' }]
 
-const MANUAL_STEPS = [
-  { id: 'review', label: 'Soạn thảo', icon: '✍️' },
-]
-const MANUAL_ORDER = ['review']
+/* outputs: lựa chọn ở bước tải ảnh (đề thi / File Word), null với PDF */
+function stepsFor(manual, outputs) {
+  if (manual) return MANUAL_STEPS
+  if (!outputs?.word) return [STEP.upload, STEP.processing, STEP.review]
+  if (!outputs.exam) return [STEP.upload, STEP.word]
+  return [STEP.upload, STEP.word, STEP.processing, STEP.review]
+}
 
-function StepIndicator({ current, manual }) {
-  const steps = manual ? MANUAL_STEPS : UPLOAD_STEPS
-  const order = manual ? MANUAL_ORDER : UPLOAD_ORDER
-  const currentIdx = order.indexOf(current)
+function StepIndicator({ current, manual, outputs }) {
+  const steps = stepsFor(manual, outputs)
+  const currentIdx = steps.findIndex(s => s.id === current)
   return (
     <div className="ce-steps">
       {steps.map((s, i) => {
@@ -99,9 +113,14 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
   const [editedResult,      setEditedResult]      = useState(null)
   const [showPreview,       setShowPreview]       = useState(false)
   const [previewEditTarget, setPreviewEditTarget] = useState(null)
+  // Tạo đề từ ảnh: chọn đầu ra và các ảnh, giữ lại để bước File Word không mất khi tạo đề lỗi
+  const [imageOutputs,      setImageOutputs]      = useState(null)
+  const [wordFiles,         setWordFiles]         = useState(null)
 
   /* ── Upload & AI extraction ── */
-  const handleUpload = useCallback(async (source) => {
+  // texts: nội dung từng trang đã sửa ở bước File Word; lỗi thì quay lại đúng bước đó
+  const handleUpload = useCallback(async (source, texts) => {
+    const backPhase = texts ? 'word' : 'upload'
     setPhase('processing')
     setEvents([])
     setResult(null)
@@ -110,6 +129,7 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
     const isImages = Array.isArray(source)
     if (isImages) source.forEach(file => form.append('files', file))
     else form.append('file', source)
+    if (texts) form.append('texts', JSON.stringify(texts))
     form.append('subject', examSubject)
     let taskId
     try {
@@ -122,7 +142,7 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
       }
       taskId = (await res.json()).task_id
     } catch (e) {
-      setPhase('upload')
+      setPhase(backPhase)
       setEvents([{ type: 'error', message: `Upload thất bại: ${e.message}` }])
       return
     }
@@ -136,12 +156,12 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
         fetch(`/api/result/${taskId}`)
           .then(r => { if (!r.ok) throw new Error(); return r.json() })
           .then(data => { setResult(data); setTitle(data.source.replace(/\.(pdf|jpe?g|png|webp)$/i, '')); setPhase('review') })
-          .catch(() => { setPhase('upload'); setEvents(prev => [...prev, { type: 'error', message: 'Lấy kết quả thất bại.' }]) })
+          .catch(() => { setPhase(backPhase); setEvents(prev => [...prev, { type: 'error', message: 'Lấy kết quả thất bại.' }]) })
       }
-      if (evt.type === 'error') { sse.close(); setPhase('upload') }
+      if (evt.type === 'error') { sse.close(); setPhase(backPhase) }
     }
     sse.onerror = () => {
-      sse.close(); setPhase('upload')
+      sse.close(); setPhase(backPhase)
       setEvents(prev => [...prev, { type: 'error', message: 'Mất kết nối với server.' }])
     }
   }, [examSubject])
@@ -175,9 +195,16 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
   const handlePreview      = (edited) => { setEditedResult(edited); setShowPreview(true) }
   const handleEditFromPreview = ()    => { setShowPreview(false); setPreviewEditTarget(null) }
 
-  const stepId = phase === 'processing' ? 'processing'
-               : phase === 'review'     ? 'review'
-               : 'upload'
+  /* Bước tải ảnh: chỉ tạo đề thì gửi thẳng đi, có File Word thì nhận dạng và sửa trước */
+  const handleImagesChosen = (files, outputs) => {
+    setImageOutputs(outputs)
+    if (!outputs.word) { handleUpload(files); return }
+    setEvents([])
+    setWordFiles(files)
+    setPhase('word')
+  }
+
+  const stepId = phase
 
   return (
     <div className="create-exam-page">
@@ -194,18 +221,34 @@ export default function CreateExamPage({ user, classId, onDone, editingExam, man
               {isEditing ? `Đang sửa: ${editingExam.title}`
                 : isMix   ? `${mixResult.total_questions} câu đã được phối — Chỉnh sửa và Lưu`
                 : isManual ? 'Thêm câu hỏi rồi Lưu lại'
-                : (fromImages ? 'Tải ảnh' : 'Upload PDF') + ' — AI trích xuất — Chỉnh sửa — Lưu'}
+                : fromImages
+                  ? (imageOutputs?.word && !imageOutputs.exam ? 'Tải ảnh — AI nhận dạng — Sửa — Tải file Word'
+                    : imageOutputs?.word ? 'Tải ảnh — Sửa & tải file Word — AI tách câu hỏi — Lưu đề'
+                    : 'Tải ảnh — AI trích xuất — Chỉnh sửa — Lưu')
+                  : 'Upload PDF — AI trích xuất — Chỉnh sửa — Lưu'}
             </p>
           </div>
-          <StepIndicator current={stepId} manual={isManual || isEditing || isMix} />
+          <StepIndicator current={stepId} manual={isManual || isEditing || isMix} outputs={fromImages ? imageOutputs : null} />
         </div>
       </div>
 
       <div className="ce-body">
         {phase === 'upload' && (
           fromImages
-            ? <ImageUploadStep onUpload={handleUpload} errorFromPrev={events.find(e => e.type === 'error')} />
+            ? <ImageUploadStep onUpload={handleImagesChosen} errorFromPrev={events.find(e => e.type === 'error')} />
             : <UploadStep onUpload={handleUpload} errorFromPrev={events.find(e => e.type === 'error')} />
+        )}
+        {wordFiles && (
+          /* Giữ nguyên khi sang bước tạo đề, để tạo đề lỗi thì quay lại vẫn còn phần đã sửa */
+          <div style={{ display: phase === 'word' ? undefined : 'none' }}>
+            <ImageWordStep
+              files={wordFiles}
+              makeExam={imageOutputs.exam}
+              onCreateExam={handleUpload}
+              onFinish={onDone}
+              errorFromPrev={phase === 'word' ? events.find(e => e.type === 'error') : null}
+            />
+          </div>
         )}
         {phase === 'processing' && (
           <ProcessingStep events={events} source={title} />
