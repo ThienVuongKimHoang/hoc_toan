@@ -20,6 +20,7 @@ import QuestionCard from './components/QuestionCard.jsx'
 import TeacherToolsModal from './components/TeacherToolsModal.jsx'
 import ExerciseSolver from './components/ExerciseSolver.jsx'
 import GeoViewerPage from './pages/GeoViewerPage.jsx'
+import InclinePlanePage from './pages/InclinePlanePage.jsx'
 import WhiteboardPage from './pages/WhiteboardPage.jsx'
 import VocabPage from './pages/VocabPage.jsx'
 import ImageConvertPage from './pages/ImageConvertPage.jsx'
@@ -75,6 +76,13 @@ function parseHash() {
   if (hash === 'settings') return { view: 'settings', examId: null, classId: null }
   if (hash === 'tools/solver') return { view: 'solver-page', examId: null, classId: null }
   if (hash === 'tools/geo3d') return { view: 'geo3d-page', examId: null, classId: null }
+  // Thí nghiệm ảo: lab/<id>[/<returnHash đã encode>] — mở từ tab "Thí nghiệm" của lớp,
+  // returnHash đưa nút "Quay lại" về đúng tab đó. 'tools/incline' là link cũ, giữ để không gãy.
+  if (hash === 'tools/incline') return { view: 'lab-page', examId: null, classId: null, labId: 'incline', labReturnHash: null }
+  if (hash.startsWith('lab/')) {
+    const [lid, retEnc] = hash.slice(4).split('/')
+    return { view: 'lab-page', examId: null, classId: null, labId: lid || null, labReturnHash: retEnc ? decodeURIComponent(retEnc) : null }
+  }
   if (hash === 'tools/vocab') return { view: 'vocab-page', examId: null, classId: null }
   if (hash === 'tools/image-convert') return { view: 'image-convert-page', examId: null, classId: null }
   if (hash === 'tools/whiteboard') return { view: 'whiteboard-page', examId: null, classId: null }
@@ -259,6 +267,8 @@ export default function App() {
   const [whiteboardSubject, setWhiteboardSubject] = useState(() => parseHash().whiteboardSubject ?? null)
   const [whiteboardReturnHash, setWhiteboardReturnHash] = useState(() => parseHash().whiteboardReturnHash ?? null)
   const [adminTab, setAdminTab] = useState(() => parseHash().adminTab ?? null)
+  const [labId, setLabId] = useState(() => parseHash().labId ?? null)
+  const [labReturnHash, setLabReturnHash] = useState(() => parseHash().labReturnHash ?? null)
   const [adminNavNonce, setAdminNavNonce] = useState(0)
   const [showTeacherTools, setShowTeacherTools] = useState(false)
 
@@ -269,9 +279,10 @@ export default function App() {
 
   useEffect(() => {
     const applyHash = () => {
-      const { view: v, examId: id, classId: cid, assignmentId: aid, subId: sid, openClassId: ocid, openAsgnTab: oat, whiteboardSubject: wbs, whiteboardReturnHash: wbr, adminTab: at } = parseHash()
+      const { view: v, examId: id, classId: cid, assignmentId: aid, subId: sid, openClassId: ocid, openAsgnTab: oat, whiteboardSubject: wbs, whiteboardReturnHash: wbr, adminTab: at, labId: lid, labReturnHash: lrh } = parseHash()
       setView(v); setExamId(id); setClassId(cid ?? null); setAssignmentId(aid ?? null); setSubId(sid ?? null); setOpenClassId(ocid ?? null); setOpenAsgnTab(oat ?? null)
       setWhiteboardSubject(wbs ?? null); setWhiteboardReturnHash(wbr ?? null)
+      setLabId(lid ?? null); setLabReturnHash(lrh ?? null)
       setAdminTab(at ?? null); setAdminNavNonce(n => n + 1)
     }
     // Bấm Back/Forward mà đích đến là đúng lượt thi VỪA nộp (cùng tab) → đề đã nộp rồi,
@@ -682,6 +693,27 @@ export default function App() {
         {header}
         <GeoViewerPage user={user} onBack={() => { setHash(''); setView('home') }} />
       </>
+    )
+  }
+
+  if (view === 'lab-page') {
+    // Thí nghiệm ảo chạy hoàn toàn ở trình duyệt, nhưng vẫn yêu cầu đăng nhập như các công cụ khác.
+    if (!user) return (
+      <>{header}<AccessDenied message="Bạn cần đăng nhập để làm thí nghiệm." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={false} /></>
+    )
+    // Quay lại: về đúng tab "Thí nghiệm" của lớp (đổi location.hash → hashchange → applyHash đặt lại view)
+    const leaveLab = () => {
+      if (labReturnHash) window.location.hash = labReturnHash
+      else { setHash(''); setView('home') }
+    }
+    if (labId === 'incline') return (
+      <>
+        {header}
+        <InclinePlanePage onBack={leaveLab} />
+      </>
+    )
+    return (
+      <>{header}<AccessDenied message="Không tìm thấy thí nghiệm này." onGoHome={goHome} onGoLogin={goLogin} isLoggedIn={true} /></>
     )
   }
 

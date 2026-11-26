@@ -10,6 +10,8 @@ import ExerciseFolderView from '../components/ExerciseFolderView.jsx'
 import Geo3DWorkbench from '../components/Geo3DWorkbench.jsx'
 import { isExerciseDoc, sortDocsByOrder } from '../utils/exerciseDocs.js'
 import { youtubeEmbedUrl, youtubeThumbnail } from '../utils/youtube.js'
+import ExperimentGallery from '../components/ExperimentGallery.jsx'
+import { hasLab, labHash } from '../experiments/registry.js'
 
 /* Môn "chính" của lớp (fallback dữ liệu cũ chưa gắn môn) */
 const primarySubject = (cls) => cls?.subject || cls?.subjects?.[0] || null
@@ -779,8 +781,10 @@ function ClassView({ cls, user, pendingCount = 0, onBack, initialAsgnTab }) {
   )
 
   const subject = primarySubject(localCls)             // mỗi lớp = 1 môn
-  const [tab, setTab] = useState('assignments')       // 'assignments' | 'documents' | 'geo3d'
   const canDrawGeo3d = hasGeo3dAccess(localCls, subject)
+  const canLab = hasLab(subject)
+  // 'assignments' | 'documents' | 'geo3d' | 'lab' — quay về từ thí nghiệm (#class/<id>/lab) thì mở sẵn tab Thí nghiệm
+  const [tab, setTab] = useState(() => (canLab && initialAsgnTab === 'lab' ? 'lab' : 'assignments'))
   const [asgnTab, setAsgnTab] = useState(initialAsgnTab === 'exam' ? 'exam' : 'homework')  // 'homework' | 'exam'
   const [viewingFile, setViewingFile] = useState(null)
   const [openFolder, setOpenFolder] = useState(null)
@@ -812,6 +816,9 @@ function ClassView({ cls, user, pendingCount = 0, onBack, initialAsgnTab }) {
         <button className={`cm-tab ${tab==='documents' ? 'cm-tab--active' : ''}`} onClick={() => setTab('documents')}>📎 Tài liệu</button>
         {canDrawGeo3d && (
           <button className={`cm-tab ${tab==='geo3d' ? 'cm-tab--active' : ''}`} onClick={() => setTab('geo3d')}>📐 Vẽ hình</button>
+        )}
+        {canLab && (
+          <button className={`cm-tab ${tab==='lab' ? 'cm-tab--active' : ''}`} onClick={() => setTab('lab')}>🧪 Thí nghiệm</button>
         )}
       </div>
 
@@ -915,6 +922,11 @@ function ClassView({ cls, user, pendingCount = 0, onBack, initialAsgnTab }) {
         })()}
 
         {/* ── Vẽ hình không gian (Toán 11-12) — cùng khung với tab của giáo viên ── */}
+        {tab === 'lab' && canLab && (
+          <ExperimentGallery subject={subject} grade={localCls.grade}
+            onOpen={exp => { window.location.hash = labHash(exp.id, `class/${localCls.id}/lab`) }} />
+        )}
+
         {tab === 'geo3d' && canDrawGeo3d && (
           <div style={{ height: '84vh', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', display: 'flex' }}>
             <Geo3DWorkbench user={user} />

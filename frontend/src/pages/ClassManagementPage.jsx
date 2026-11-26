@@ -77,6 +77,8 @@ import { BandChip, GradeButton, IeltsGradeModal, IeltsStatsTable } from '../comp
 import { ListeningGradeModal, ListeningStatsTable } from '../components/ListeningGrade.jsx'
 import { SpeakingGradeModal, SpeakingStatsTable } from '../components/SpeakingGrade.jsx'
 import GradeEssayModal from '../components/GradeEssayModal.jsx'
+import ExperimentGallery from '../components/ExperimentGallery.jsx'
+import { hasLab, labHash } from '../experiments/registry.js'
 
 /* ─── SVG icons ─── */
 function Svg({ size = 16, children }) {
@@ -1904,7 +1906,9 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
   // Người đang thao tác thật sự (có thể là giáo viên chính, co-teacher, hoặc admin) —
   // KHÔNG dùng cls.teacherId vì điều đó luôn gán mọi hành động cho giáo viên chính.
   const teacherId = user.id
-  const [tab, setTab] = useState('assignments')
+  // Quay về từ một thí nghiệm (#classes/<khối>/<id>/lab) → mở sẵn tab "Thí nghiệm"
+  const [tab, setTab] = useState(() =>
+    hasLab(subject) && window.location.hash.endsWith(`/${cls.id}/lab`) ? 'lab' : 'assignments')
   const [asgnTab, setAsgnTab] = useState('homework')  // 'homework' | 'exam' (Đề thi)
   const [showAddStudent, setShowAddStudent] = useState(false)
   const [showAddTeacher, setShowAddTeacher] = useState(false)
@@ -2187,6 +2191,7 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
     ['whiteboard', '🖊️ Bảng trắng'],
     ...(hasSolverAccess(subject) ? [['solver', '✨ Giải bài']] : []),
     ...(isMathSubject(subject) ? [['geo3d', '📐 Vẽ hình']] : []),
+    ...(hasLab(subject) ? [['lab', '🧪 Thí nghiệm']] : []),
     ['attendance', '🗓️ Điểm danh'],
     ['progress', '📈 Tiến độ'],
     ['members', '👤 Học sinh'],
@@ -2514,6 +2519,12 @@ function ClassDetail({ cls, subject, isSuperAdmin, user, onBack, onUpdated }) {
         {/* ── Giải bài (Toán, Lý, Hóa) ── */}
         {tab === 'solver' && hasSolverAccess(subject) && (
           <ExerciseSolver subject={subject} />
+        )}
+
+        {/* ── Thí nghiệm ảo (Lý, Hoá) — thẻ lọc theo môn + khối của lớp ── */}
+        {tab === 'lab' && hasLab(subject) && (
+          <ExperimentGallery subject={subject} grade={cls.grade}
+            onOpen={exp => { window.location.hash = labHash(exp.id, `classes/${cls.grade || 'none'}/${cls.id}/lab`) }} />
         )}
 
         {/* ── Vẽ hình (Toán) ── */}
