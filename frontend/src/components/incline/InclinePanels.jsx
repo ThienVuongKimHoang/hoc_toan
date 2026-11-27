@@ -74,7 +74,7 @@ function fieldText(value, dec) {
 }
 
 /* Ô nhập số: gõ chính xác (chấp nhận dấu phẩy), Enter hoặc rời ô để áp dụng, kẹp vào [min, max] */
-function NumField({ value, min, max, dec, unit, onCommit, label }) {
+export function NumField({ value, min, max, dec, unit, onCommit, label }) {
   const [txt, setTxt] = useState(fieldText(value, dec))
   const [focus, setFocus] = useState(false)
   useEffect(() => { if (!focus) setTxt(fieldText(value, dec)) }, [value, dec, focus])

@@ -21,6 +21,7 @@ import TeacherToolsModal from './components/TeacherToolsModal.jsx'
 import ExerciseSolver from './components/ExerciseSolver.jsx'
 import GeoViewerPage from './pages/GeoViewerPage.jsx'
 import InclinePlanePage from './pages/InclinePlanePage.jsx'
+import YoungInterferencePage from './pages/YoungInterferencePage.jsx'
 import WhiteboardPage from './pages/WhiteboardPage.jsx'
 import VocabPage from './pages/VocabPage.jsx'
 import ImageConvertPage from './pages/ImageConvertPage.jsx'
@@ -710,6 +711,12 @@ export default function App() {
       <>
         {header}
         <InclinePlanePage onBack={leaveLab} />
+      </>
+    )
+    if (labId === 'young') return (
+      <>
+        {header}
+        <YoungInterferencePage onBack={leaveLab} />
       </>
     )
     return (

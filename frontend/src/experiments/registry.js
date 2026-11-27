@@ -17,6 +17,15 @@ export const EXPERIMENTS = [
     desc: 'Vật trượt trên dốc: phân tích lực, ma sát, đồ thị v–t. Kéo – ném vật trực tiếp trên hình.',
     accent: '#991b1b',
   },
+  {
+    id: 'young',
+    subject: 'ly',
+    grades: ['11'],
+    title: 'Giao thoa ánh sáng (khe Young)',
+    topic: 'Sóng ánh sáng',
+    desc: 'Chỉnh λ, a, D, môi trường; xem sóng từ hai khe, đo khoảng vân trên màn, ánh sáng trắng và hai bức xạ.',
+    accent: '#4338ca',
+  },
 ]
 
 export const hasLab = subject => LAB_SUBJECTS.includes(subject)

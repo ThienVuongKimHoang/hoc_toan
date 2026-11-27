@@ -73,7 +73,7 @@ const Tail = ({ wag = 0 }) => (
 
 const Paw = ({ x, y }) => <circle cx={x} cy={y} r="2.6" fill={FUR_DARK} {...LINE} strokeWidth="1.2" />
 
-/* Tư thế: 'push' (gồng đẩy) | 'relax' (đứng nghỉ) */
+/* Tư thế: 'push' (gồng đẩy) | 'relax' (đứng nghỉ) | 'carry' (giơ tay bê đồ trên đầu) */
 export function Squirrel({ pose = 'push', mood = 'strain', className = '' }) {
   const push = pose === 'push'
   const lean = push ? -18 : 3
@@ -121,6 +121,18 @@ export function Squirrel({ pose = 'push', mood = 'strain', className = '' }) {
           </g>
           <Paw x={-HAND_REACH + 1.5} y={-21} />
           <Paw x={-HAND_REACH + 1.5} y={-15.5} />
+        </>
+      ) : pose === 'carry' ? (
+        /* Giơ hai tay lên quá đầu (bê đồ) — bàn tay ở (−8,−55) và (2,−56) */
+        <>
+          <g stroke={INK} strokeWidth="4.6" strokeLinecap="round" fill="none">
+            <path d="M-5 -19 L -8 -54" /><path d="M2 -19 L 2 -55" />
+          </g>
+          <g stroke={FUR_DARK} strokeWidth="2.4" strokeLinecap="round" fill="none">
+            <path d="M-5 -19 L -8 -54" /><path d="M2 -19 L 2 -55" />
+          </g>
+          <Paw x={-8} y={-55} />
+          <Paw x={2} y={-56} />
         </>
       ) : (
         <>

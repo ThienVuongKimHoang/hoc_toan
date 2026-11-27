@@ -1,5 +1,5 @@
 import React from 'react'
-import { experimentsFor } from '../experiments/registry.js'
+import { EXPERIMENTS, experimentsFor } from '../experiments/registry.js'
 import { SUBJECTS } from './SubjectBadge.jsx'
 import './ExperimentGallery.css'
 
@@ -30,6 +30,35 @@ const THUMBS = {
       <path d="M176 112 A 24 24 0 0 0 178.2 102.3" fill="none" stroke="#334155" strokeWidth="1.6" />
     </svg>
   ),
+  young: () => (
+    <svg viewBox="0 0 240 130" aria-hidden="true">
+      <defs>
+        <linearGradient id="eg-fringe" x1="0" y1="0" x2="0" y2="1">
+          {Array.from({ length: 13 }, (_, j) => {
+            const o = j / 12
+            const on = j % 2 === 0
+            return <stop key={j} offset={o} stopColor={on ? '#ffb000' : '#140c00'} />
+          })}
+        </linearGradient>
+        <clipPath id="eg-young-clip"><rect x="80" y="0" width="114" height="130" /></clipPath>
+      </defs>
+      <rect width="240" height="130" fill="#0b1020" />
+      <circle cx="22" cy="65" r="12" fill="#ffb000" opacity="0.35" />
+      <circle cx="22" cy="65" r="5" fill="#fff" />
+      <g fill="none" stroke="#ffb000" strokeWidth="1.4" opacity="0.5" clipPath="url(#eg-young-clip)">
+        {[14, 28, 42, 56, 70, 84, 98].map(r => (
+          <React.Fragment key={r}>
+            <path d={`M78 ${50 - r} A${r} ${r} 0 0 1 78 ${50 + r}`} />
+            <path d={`M78 ${80 - r} A${r} ${r} 0 0 1 78 ${80 + r}`} />
+          </React.Fragment>
+        ))}
+      </g>
+      <rect x="74" y="0" width="7" height="46" fill="#475569" />
+      <rect x="74" y="54" width="7" height="22" fill="#475569" />
+      <rect x="74" y="84" width="7" height="46" fill="#475569" />
+      <rect x="196" y="6" width="18" height="118" rx="2" fill="url(#eg-fringe)" stroke="#cbd5e1" strokeWidth="1" />
+    </svg>
+  ),
 }
 
 const FlaskIcon = () => (
@@ -51,7 +80,7 @@ export default function ExperimentGallery({ subject, grade, onOpen }) {
       <div className="eg-empty">
         <span className="eg-empty-ico"><FlaskIcon /></span>
         <div className="eg-empty-title">Chưa có thí nghiệm cho {subjectLabel}{grade ? ` lớp ${grade}` : ''}</div>
-        <p>Các thí nghiệm ảo đang được xây dựng dần theo chương trình. Hiện có: Mặt phẳng nghiêng (Vật lý 10).</p>
+        <p>Các thí nghiệm ảo đang được xây dựng dần theo chương trình. Hiện có: {EXPERIMENTS.map(e => `${e.title} (${SUBJECTS[e.subject]?.label || e.subject} ${e.grades.join(', ')})`).join('; ')}.</p>
       </div>
     )
   }
